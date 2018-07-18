@@ -3,4 +3,7 @@
 void url_test();
 
 void gumbo_test(int argc, char **argv);
+
+int http_test();
+
 #endif

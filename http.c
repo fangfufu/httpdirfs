@@ -55,37 +55,9 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include <curl/curl.h>
+#include "http.h"
 
-enum fcurl_type_e {
-  CFTYPE_NONE = 0,
-  CFTYPE_FILE = 1,
-  CFTYPE_CURL = 2
-};
 
-struct fcurl_data
-{
-  enum fcurl_type_e type;     /* type of handle */
-  union {
-    CURL *curl;
-    FILE *file;
-  } handle;                   /* handle */
-
-  char *buffer;               /* buffer to store cached data*/
-  size_t buffer_len;          /* currently allocated buffers length */
-  size_t buffer_pos;          /* end of data in buffer*/
-  int still_running;          /* Is background url fetch still in progress */
-};
-
-typedef struct fcurl_data URL_FILE;
-
-/* exported functions */
-URL_FILE *url_fopen(const char *url, const char *operation);
-int url_fclose(URL_FILE *file);
-int url_feof(URL_FILE *file);
-size_t url_fread(void *ptr, size_t size, size_t nmemb, URL_FILE *file);
-char *url_fgets(char *ptr, size_t size, URL_FILE *file);
-void url_rewind(URL_FILE *file);
 
 /* we use a global one for convenience */
 static CURLM *multi_handle;
@@ -229,6 +201,26 @@ static int use_buffer(URL_FILE *file, size_t want)
   return 0;
 }
 
+static void http_curl_start_fetching(URL_FILE *file)
+{
+    /* lets start the fetch */
+    curl_multi_perform(multi_handle, &file->still_running);
+
+    if((file->buffer_pos == 0) && (!file->still_running)) {
+        /* if still_running is 0 now, we should return NULL */
+
+        /* make sure the easy handle is not in the multi handle anymore */
+        curl_multi_remove_handle(multi_handle, file->handle.curl);
+
+        /* cleanup */
+        curl_easy_cleanup(file->handle.curl);
+
+        free(file);
+
+        file = NULL;
+    }
+}
+
 URL_FILE *url_fopen(const char *url, const char *operation)
 {
   /* this code could check for URLs or types in the 'url' and
@@ -259,22 +251,7 @@ URL_FILE *url_fopen(const char *url, const char *operation)
 
     curl_multi_add_handle(multi_handle, file->handle.curl);
 
-    /* lets start the fetch */
-    curl_multi_perform(multi_handle, &file->still_running);
-
-    if((file->buffer_pos == 0) && (!file->still_running)) {
-      /* if still_running is 0 now, we should return NULL */
-
-      /* make sure the easy handle is not in the multi handle anymore */
-      curl_multi_remove_handle(multi_handle, file->handle.curl);
-
-      /* cleanup */
-      curl_easy_cleanup(file->handle.curl);
-
-      free(file);
-
-      file = NULL;
-    }
+    http_curl_start_fetching(file);
   }
   return file;
 }
@@ -438,6 +415,8 @@ void url_rewind(URL_FILE *file)
     file->buffer_pos = 0;
     file->buffer_len = 0;
 
+    http_curl_start_fetching(file);
+
     break;
 
   default: /* unknown or supported type - oh dear */
@@ -445,102 +424,3 @@ void url_rewind(URL_FILE *file)
   }
 }
 
-#define FGETSFILE "fgets.test"
-#define FREADFILE "fread.test"
-#define REWINDFILE "rewind.test"
-
-/* Small main program to retrieve from a url using fgets and fread saving the
- * output to two test files (note the fgets method will corrupt binary files if
- * they contain 0 chars */
-int main(int argc, char *argv[])
-{
-  URL_FILE *handle;
-  FILE *outf;
-
-  size_t nread;
-  char buffer[256];
-  const char *url;
-
-  if(argc < 2)
-    url = "http://192.168.7.3/testfile";/* default to testurl */
-  else
-    url = argv[1];/* use passed url */
-
-  /* copy from url line by line with fgets */
-  outf = fopen(FGETSFILE, "wb+");
-  if(!outf) {
-    perror("couldn't open fgets output file\n");
-    return 1;
-  }
-
-  handle = url_fopen(url, "r");
-  if(!handle) {
-    printf("couldn't url_fopen() %s\n", url);
-    fclose(outf);
-    return 2;
-  }
-
-  while(!url_feof(handle)) {
-    url_fgets(buffer, sizeof(buffer), handle);
-    fwrite(buffer, 1, strlen(buffer), outf);
-  }
-
-  url_fclose(handle);
-
-  fclose(outf);
-
-
-  /* Copy from url with fread */
-  outf = fopen(FREADFILE, "wb+");
-  if(!outf) {
-    perror("couldn't open fread output file\n");
-    return 1;
-  }
-
-  handle = url_fopen("testfile", "r");
-  if(!handle) {
-    printf("couldn't url_fopen() testfile\n");
-    fclose(outf);
-    return 2;
-  }
-
-  do {
-    nread = url_fread(buffer, 1, sizeof(buffer), handle);
-    fwrite(buffer, 1, nread, outf);
-  } while(nread);
-
-  url_fclose(handle);
-
-  fclose(outf);
-
-
-  /* Test rewind */
-  outf = fopen(REWINDFILE, "wb+");
-  if(!outf) {
-    perror("couldn't open fread output file\n");
-    return 1;
-  }
-
-  handle = url_fopen("testfile", "r");
-  if(!handle) {
-    printf("couldn't url_fopen() testfile\n");
-    fclose(outf);
-    return 2;
-  }
-
-  nread = url_fread(buffer, 1, sizeof(buffer), handle);
-  fwrite(buffer, 1, nread, outf);
-  url_rewind(handle);
-
-  buffer[0]='\n';
-  fwrite(buffer, 1, 1, outf);
-
-  nread = url_fread(buffer, 1, sizeof(buffer), handle);
-  fwrite(buffer, 1, nread, outf);
-
-  url_fclose(handle);
-
-  fclose(outf);
-
-  return 0;/* all done */
-}

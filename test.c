@@ -5,7 +5,118 @@
 
 #include "link.h"
 #include "test.h"
+#include "http.h"
 
+
+int http_test()
+{
+    URL_FILE *handle;
+    FILE *outf;
+
+    size_t nread;
+    char buffer[256];
+    const char *url;
+
+    url = "http://127.0.0.1/~fangfufu/test.txt";
+
+    /* ---------------------------Test fgets ----------------------------*/
+
+    /* open the input file */
+    handle = url_fopen(url, "r");
+    if(!handle) {
+        printf("couldn't url_fopen() %s\n", url);
+        return 2;
+    }
+
+    /* create the output file for fgets*/
+    outf = fopen("fgets_test.txt", "wb");
+    if(!outf) {
+        perror("couldn't open output file\n");
+        return 1;
+    }
+
+    /* copy from url line by line with fgets */
+    while(!url_feof(handle)) {
+        url_fgets(buffer, sizeof(buffer), handle);
+        fwrite(buffer, 1, strlen(buffer), outf);
+    }
+
+    /* close the handles for the fgets test*/
+    url_fclose(handle);
+    fclose(outf);
+
+    /* ---------------------------Test fread ----------------------------*/
+
+
+    /* open the input file again */
+    handle = url_fopen(url, "r");
+    if(!handle) {
+        printf("couldn't url_fopen() testfile\n");
+        return 2;
+    }
+
+    /* create the output file for fread test*/
+    outf = fopen("fread_test.txt", "wb");
+    if(!outf) {
+        perror("couldn't open fread output file\n");
+        return 1;
+    }
+
+    /* Copy from url with fread */
+    do {
+        nread = url_fread(buffer, 1, sizeof(buffer), handle);
+        fwrite(buffer, 1, nread, outf);
+    } while(nread);
+
+    /* close the handles for the fgets test*/
+    url_fclose(handle);
+    fclose(outf);
+
+    /* ---------------------------Test rewind ----------------------------*/
+    /* open the input file again */
+    handle = url_fopen(url, "r");
+    if(!handle) {
+        printf("couldn't url_fopen() testfile\n");
+        return 2;
+    }
+
+    /* create the output file for rewind test*/
+    outf = fopen("rewind_test.txt", "wb");
+    if(!outf) {
+        perror("couldn't open fread output file\n");
+        return 1;
+    }
+
+    /* Copy from url with fread */
+    do {
+        nread = url_fread(buffer, 1, sizeof(buffer), handle);
+        fwrite(buffer, 1, nread, outf);
+    } while(nread);
+
+    url_rewind(handle);
+    fprintf(outf, "\n-------------------\n");
+
+    /*
+     * read the URL again after rewind:
+     *  - copy from url line by line with fgets
+     */
+    while(!url_feof(handle)) {
+        url_fgets(buffer, sizeof(buffer), handle);
+        fwrite(buffer, 1, strlen(buffer), outf);
+    }
+
+    buffer[0]='\n';
+    fwrite(buffer, 1, 1, outf);
+
+    nread = url_fread(buffer, 1, sizeof(buffer), handle);
+    fwrite(buffer, 1, nread, outf);
+
+    url_fclose(handle);
+
+    fclose(outf);
+
+    return 0;/* all done */
+}
 void url_test()
 {
     printf("--- start of url_test ---\n");

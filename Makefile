@@ -1,7 +1,7 @@
 CC=gcc
-CFLAGS=-I. -Wall -Wextra -lgumbo -g
+CFLAGS=-I. -Wall -Wextra -lgumbo -lcurl -g
 DEPS =
-OBJ = main.o link.o test.o
+OBJ = main.o link.o test.o http.o
 
 %.o: %.c $(DEPS)
 	$(CC) -c -o $@ $< $(CFLAGS)

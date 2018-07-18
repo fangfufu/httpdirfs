@@ -1,3 +1,4 @@
 tmp
 *.o
 mount-http-dir
+*_test.txt

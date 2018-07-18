@@ -7,7 +7,8 @@
 
 
 int main(int argc, char** argv) {
-    gumbo_test(argc, argv);
-    url_test();
+//     gumbo_test(argc, argv);
+//     url_test();
+    http_test();
     return 0;
 }
