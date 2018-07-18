@@ -1,0 +1,3 @@
+tmp
+*.o
+mount-http-dir
