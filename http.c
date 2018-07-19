@@ -46,9 +46,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#ifndef WIN32
-#  include <sys/time.h>
-#endif
 #include <stdlib.h>
 #include <errno.h>
 
@@ -187,16 +184,11 @@ static int fill_buffer(URL_FILE *file, size_t want)
        curl_multi_fdset() doc. */
 
     if(maxfd == -1) {
-#ifdef _WIN32
-      Sleep(100);
-      rc = 0;
-#else
       /* Portable sleep for platforms other than Windows. */
       struct timeval wait = { 0, 100 * 1000 }; /* 100ms */
       rc = select(0, NULL, NULL, NULL, &wait);
-#endif
-    }
-    else {
+
+    } else {
       /* Note that on some platforms 'timeout' may be modified by select().
          If you need access to the original value save a copy beforehand. */
       rc = select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout);
