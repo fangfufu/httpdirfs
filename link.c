@@ -71,14 +71,8 @@ void html_to_linklist(GumboNode *node, ll_t *links)
         /* if it is valid, copy the link onto the heap */
         if (is_valid_link(href->value)) {
             links->num++;
-            if (!links->link) {
-                links->link = malloc(sizeof(char *));
-                links->type = malloc(sizeof(linktype *));
-            } else {
-                links->link = realloc(links->link, links->num * sizeof(char *));
-                links->type = realloc(links->type,
-                                      links->num * sizeof(linktype *));
-            }
+            links->link = realloc(links->link, links->num * sizeof(char *));
+            links->type = realloc(links->type, links->num * sizeof(linktype *));
             int i = links->num - 1;
             links->link[i] = malloc(strlen(href->value) * sizeof(char *));
             strcpy(links->link[i], href->value);
