@@ -10,9 +10,6 @@
  * instead of (only) local files. Local files (ie those that can be directly
  * fopened) will drop back to using the underlying clib implementations
  *
- * See the main() function at the bottom that shows an app that retrieves from
- * a specified url using fgets() and fread() and saves as two output files.
- *
  * Copyright (c) 2003, 2017 Simtec Electronics
  *
  * Re-implemented by Vincent Sanders <vince@kyllikki.org> with extensive
@@ -118,6 +115,22 @@ static size_t header_callback(char *buffer, size_t size,
     memcpy(&url->header[url->header_pos], buffer, size);
     url->header_pos += size;
 
+    char *hf;
+    hf = "Accept-Ranges:";
+    if (!strncasecmp(buffer, hf, strlen(hf))) {
+        url->accept_range = 1;
+    }
+    hf = "Content-Length: ";
+    if (!strncasecmp(buffer, hf, strlen(hf))) {
+        /*
+         * We are doing this, because libcurl documentation says
+         *"Do not assume that the header line is zero terminated!"
+         */
+        char *tmp = malloc((nitems) * sizeof(char));
+        tmp[nitems] = '\0';
+        strncpy(tmp, buffer, nitems);
+        url->content_length = atoi(strchr(tmp, ' ')+1);
+    }
     return size;
 }
 

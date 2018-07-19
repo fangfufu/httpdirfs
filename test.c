@@ -22,7 +22,7 @@ int http_test()
     /* ---------------------------Test fgets ----------------------------*/
 
     /* open the input file */
-    handle = url_fopen(url, "rh");
+    handle = url_fopen(url, "hr");
     if(!handle) {
         printf("couldn't url_fopen() %s\n", url);
         return 2;
@@ -40,7 +40,12 @@ int http_test()
         url_fgets(buffer, sizeof(buffer), handle);
         fwrite(buffer, 1, strlen(buffer), outf);
     }
+
+    /* Print the header */
     printf(handle->header);
+    printf("\n");
+    printf("accept-range: %d\n", handle->accept_range);
+    printf("filesize: %d\n", handle->content_length);
 
     /* close the handles for the fgets test*/
     url_fclose(handle);
