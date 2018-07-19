@@ -18,11 +18,31 @@ int http_test()
     const char *url;
 
     url = "http://127.0.0.1/~fangfufu/test.txt";
+//     url = "https://www.fangfufu.co.uk/~fangfufu/Unison-Windows-2.48.4.zip";
+    /* ------------------------Test header-only--------------------------*/
+    /* open the input file */
+    handle = url_fopen(url, "h");
+    if(!handle) {
+        printf("couldn't url_fopen() %s\n", url);
+        return 2;
+    }
+
+    /* Read 2 character seem to be enough to get the header*/
+    url_fgets(buffer, 2, handle);
+
+    /* Print the header */
+    printf(handle->header);
+    printf("\n");
+    printf("accept-range: %d\n", handle->accept_range);
+    printf("filesize: %d\n", handle->content_length);
+
+    /* close the URL handle */
+    url_fclose(handle);
 
     /* ---------------------------Test fgets ----------------------------*/
 
     /* open the input file */
-    handle = url_fopen(url, "hr");
+    handle = url_fopen(url, "h");
     if(!handle) {
         printf("couldn't url_fopen() %s\n", url);
         return 2;
@@ -40,12 +60,6 @@ int http_test()
         url_fgets(buffer, sizeof(buffer), handle);
         fwrite(buffer, 1, strlen(buffer), outf);
     }
-
-    /* Print the header */
-    printf(handle->header);
-    printf("\n");
-    printf("accept-range: %d\n", handle->accept_range);
-    printf("filesize: %d\n", handle->content_length);
 
     /* close the handles for the fgets test*/
     url_fclose(handle);

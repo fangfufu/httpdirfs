@@ -286,6 +286,8 @@ URL_FILE *url_fopen(const char *url, const char *operation)
                                  CURLOPT_HEADERDATA, file);
                 curl_easy_setopt(file->handle,
                                  CURLOPT_HEADERFUNCTION, header_callback);
+                curl_easy_setopt(file->handle,
+                                 CURLOPT_NOBODY, 1L);
                 break;
             default:
                 fprintf(stderr, "url_fopen: invalid operation %c", *c);
