@@ -236,18 +236,9 @@ static void start_fetching(URL_FILE *file)
     /* lets start the fetch */
     curl_multi_perform(multi_handle, &file->still_running);
 
+    /* if still_running is 0 now, we should close the file descriptor */
     if (url_feof(file)) {
-        /* if still_running is 0 now, we should return NULL */
-
-        /* make sure the easy handle is not in the multi handle anymore */
-        curl_multi_remove_handle(multi_handle, file->handle);
-
-        /* cleanup */
-        curl_easy_cleanup(file->handle);
-
-        free(file);
-
-        file = NULL;
+        url_fclose(file);
     }
 }
 
@@ -309,6 +300,7 @@ CURLMcode url_fclose(URL_FILE *file)
     free(file->buffer);/* free any allocated buffer space */
     free(file->header);
     free(file);
+    file = NULL;
 
     return ret;
 }
