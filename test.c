@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 
 #include "link.h"
 #include "test.h"
@@ -17,31 +18,37 @@ int http_test()
     char buffer[256];
     const char *url;
 
-    url = "http://127.0.0.1/~fangfufu/test.txt";
 //     url = "https://www.fangfufu.co.uk/~fangfufu/Unison-Windows-2.48.4.zip";
     /* ------------------------Test header-only--------------------------*/
     /* open the input file */
-    handle = url_fopen(url, "h");
-    if(!handle) {
-        printf("couldn't url_fopen() %s\n", url);
+    URL_FILE *header_handle = url_fopen(
+        "http://ipv4.download.thinkbroadband.com/1GB.zip",
+        "rh");
+    if(!header_handle) {
+        printf("couldn't url_fopen() \n");
         return 2;
     }
 
+//     printf("start fgets\n");
     /* Read 2 character seem to be enough to get the header*/
-    url_fgets(buffer, 2, handle);
+    url_fgets(buffer, 256, header_handle);
+//     printf("end fgets\n");
+
 
     /* Print the header */
-    printf(handle->header);
-    printf("\n");
-    printf("accept-range: %d\n", handle->accept_range);
-    printf("filesize: %d\n", handle->content_length);
+//     printf(header_handle->header);
+
+//     printf("accept-range: %d\n", header_handle->accept_range);
+//     printf("filesize: %d\n", header_handle->content_length);
+    printf("test fgets");
+
 
     /* close the URL handle */
-    url_fclose(handle);
+//     url_fclose(header_handle);
 
     /* ---------------------------Test fgets ----------------------------*/
-
     /* open the input file */
+    url = "http://127.0.0.1/~fangfufu/test.txt";
     handle = url_fopen(url, "h");
     if(!handle) {
         printf("couldn't url_fopen() %s\n", url);

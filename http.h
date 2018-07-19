@@ -6,8 +6,6 @@
 typedef struct {
     CURL *handle;               /* handle */
 
-    int still_running;          /* Is background url fetch still in progress */
-
     char *buffer;               /* buffer to store cached data*/
     size_t buffer_len;          /* currently allocated buffers length */
     size_t buffer_pos;          /* end of data in buffer*/

@@ -1,49 +1,7 @@
-/*****************************************************************************
- *
- * This example source code introduces a c library buffered I/O interface to
- * URL reads it supports fopen(), fread(), fgets(), feof(), fclose(),
- * rewind(). Supported functions have identical prototypes to their normal c
- * lib namesakes and are preceaded by url_ .
- *
- * Using this code you can replace your program's fopen() with url_fopen()
- * and fread() with url_fread() and it become possible to read remote streams
- * instead of (only) local files. Local files (ie those that can be directly
- * fopened) will drop back to using the underlying clib implementations
- *
- * Copyright (c) 2003, 2017 Simtec Electronics
- *
- * Re-implemented by Vincent Sanders <vince@kyllikki.org> with extensive
- * reference to original curl example code
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
- * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
- * OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.
- * IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT,
- * INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
- * NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
- * DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
- * THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
- * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- *
- * This example requires libcurl 7.9.7 or later.
+/**
+ * \file http.c
+ * \todo WARNING please fix url_feof
  */
-/* <DESC>
- * implements an fopen() abstraction allowing reading from URLs
- * </DESC>
- */
-
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -53,6 +11,8 @@
 
 /* we use a global one for convenience */
 static CURLM *multi_handle;
+
+static int num_transfers = 0;
 
 /* curl calls this routine to get more data */
 static size_t write_callback(char *buffer, size_t size,
@@ -106,6 +66,7 @@ static size_t header_callback(char *buffer, size_t size,
             /* realloc succeeded increase buffer size*/
             url->header_len += size - rembuff;
             url->header = newbuff;
+            url->header[url->header_len] = '\0';
         }
     }
 
@@ -248,6 +209,7 @@ URL_FILE *url_fopen(const char *url, const char *operation)
 
     file = calloc(1, sizeof(URL_FILE));
     if (!file) {
+        fprintf(stderr, "url_fopen: URL_FILE memory allocation failure.");
         return NULL;
     }
 
@@ -255,6 +217,9 @@ URL_FILE *url_fopen(const char *url, const char *operation)
 
     curl_easy_setopt(file->handle, CURLOPT_URL, url);
     curl_easy_setopt(file->handle, CURLOPT_VERBOSE, 0L);
+    curl_easy_setopt(file->handle, CURLOPT_TCP_KEEPALIVE, 1L);
+    /* By default we don't want to download anything */
+    curl_easy_setopt(file->handle, CURLOPT_NOBODY, 1L);
 
     for (const char *c = operation; *c; c++) {
         switch (*c) {
@@ -263,14 +228,14 @@ URL_FILE *url_fopen(const char *url, const char *operation)
                                  CURLOPT_WRITEDATA, file);
                 curl_easy_setopt(file->handle,
                                  CURLOPT_WRITEFUNCTION, write_callback);
+                curl_easy_setopt(file->handle,
+                                 CURLOPT_NOBODY, 0L);
                 break;
             case 'h':
                 curl_easy_setopt(file->handle,
                                  CURLOPT_HEADERDATA, file);
                 curl_easy_setopt(file->handle,
                                  CURLOPT_HEADERFUNCTION, header_callback);
-                curl_easy_setopt(file->handle,
-                                 CURLOPT_NOBODY, 1L);
                 break;
             default:
                 fprintf(stderr, "url_fopen: invalid operation %c", *c);
@@ -283,8 +248,6 @@ URL_FILE *url_fopen(const char *url, const char *operation)
     }
 
     curl_multi_add_handle(multi_handle, file->handle);
-
-    start_fetching(file);
 
     return file;
 }
@@ -383,6 +346,9 @@ void url_rewind(URL_FILE *file)
     file->buffer_pos = 0;
     file->buffer_len = 0;
 
-    start_fetching(file);
+    free(file->header);
+    file->header = NULL;
+    file->header_len = 0;
+    file->header_pos = 0;
 }
 
