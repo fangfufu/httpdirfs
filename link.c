@@ -3,37 +3,67 @@
 #include "link.h"
 #include "string.h"
 
-static char linktype_to_char(linktype t)
+Link *Link_new(const char *p_url)
 {
-    switch (t) {
-        case LINK_DIR :
-            return 'D';
-        case LINK_FILE :
-            return 'F';
-        case LINK_UNKNOWN :
-            return 'U';
-        default :
-            return 'E';
-    }
+    Link *link = calloc(1, sizeof(Link));
+
+    size_t p_url_len = strnlen(p_url, LINK_LEN_MAX) + 1;
+    link->p_url = malloc(p_url_len);
+    link->p_url = strncpy(link->p_url, p_url, p_url_len);
+
+    link->type = LINK_UNKNOWN;
+    link->curl_h = curl_easy_init();
+    link->res = -1;
+    link->data = NULL;
+    link->data_sz = 0;
+
+    return link;
 }
 
-void linklist_print(ll_t *links)
+void Link_free(Link *link)
 {
-    for (int i = 0; i < links->num; i++) {
-        fprintf(stderr, "%d %c %s\n",
-                i,
-                linktype_to_char(links->type[i]),
-                links->link[i]);
-    }
+    free(link->p_url);
+    curl_easy_cleanup(link->curl_h);
+    free(link->data);
+    free(link);
+    link = NULL;
 }
 
-ll_t *linklist_new()
+LinkTable *LinkTable_new()
 {
-    ll_t *links = malloc(sizeof(ll_t));
-    links->num = 0;
-    links->link = NULL;
-    links->type = NULL;
-    return links;
+    LinkTable *linktbl = calloc(1, sizeof(LinkTable));
+    linktbl->num = 0;
+    linktbl->links = NULL;
+    return linktbl;
+}
+
+void LinkTable_free(LinkTable *linktbl)
+{
+    for (int i = 0; i < linktbl->num; i++) {
+        Link_free(linktbl->links[i]);
+    }
+    free(linktbl->links);
+    free(linktbl);
+    linktbl = NULL;
+}
+
+void LinkTable_add(LinkTable *linktbl, Link *link)
+{
+    linktbl->num++;
+    linktbl->links = realloc(
+        linktbl->links,
+        linktbl->num * sizeof(Link *));
+    linktbl->links[linktbl->num - 1] = link;
+}
+
+void LinkTable_print(LinkTable *linktbl)
+{
+    for (int i = 0; i < linktbl->num; i++) {
+        printf("%d %c %s\n",
+               i,
+               linktbl->links[i]->type,
+               linktbl->links[i]->p_url);
+    }
 }
 
 static int is_valid_link(const char *n)
@@ -42,8 +72,9 @@ static int is_valid_link(const char *n)
     if (!isalnum(n[0])) {
         return 0;
     }
+
     /* check for http:// and https:// */
-    int c = strlen(n);
+    int c = strnlen(n, LINK_LEN_MAX);
     if (c > 5) {
         if (n[0] == 'h' && n[1] == 't' && n[2] == 't' && n[3] == 'p') {
             if ((n[4] == ':' && n[5] == '/' && n[6] == '/') ||
@@ -59,7 +90,7 @@ static int is_valid_link(const char *n)
  * Shamelessly copied and pasted from:
  * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
  */
-void html_to_linklist(GumboNode *node, ll_t *links)
+void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
 {
     if (node->type != GUMBO_NODE_ELEMENT) {
         return;
@@ -70,31 +101,16 @@ void html_to_linklist(GumboNode *node, ll_t *links)
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         if (is_valid_link(href->value)) {
-            links->num++;
-            links->link = realloc(links->link, links->num * sizeof(char *));
-            links->type = realloc(links->type, links->num * sizeof(linktype *));
-            int i = links->num - 1;
-            links->link[i] = malloc(strlen(href->value) * sizeof(char *));
-            strcpy(links->link[i], href->value);
-            links->type[i] = LINK_UNKNOWN;
+            LinkTable_add(linktbl, Link_new(href->value));
         }
     }
 
     /* Note the recursive call, lol. */
     GumboVector *children = &node->v.element.children;
     for (size_t i = 0; i < children->length; ++i) {
-        html_to_linklist((GumboNode*)children->data[i], links);
+        HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
     }
     return;
-}
-
-void linklist_free(ll_t *links)
-{
-    for (int i = 0; i < links->num; i++) {
-        free(links->link[i]);
-    }
-    free(links->type);
-    free(links);
 }
 
 /* the upper level */

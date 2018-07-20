@@ -4,37 +4,35 @@
 #include <stdlib.h>
 
 #include <gumbo.h>
-/* \brief the link type */
-typedef enum {
-    LINK_DIR,
-    LINK_FILE,
-    LINK_UNKNOWN
-} linktype;
 
-/* \brief link list data type */
-typedef struct {
-    int num;
-    char **link;
-    linktype *type;
-} ll_t;
+#include "data.h"
 
-/* \brief make a new link list */
-ll_t *linklist_new();
+/** \brief make a new Link */
+Link *Link_new();
 
-/* \brief print a link list */
-void linklist_print(ll_t *links);
+/** \brief free a Link */
+void Link_free(Link *link);
 
-/* \brief convert a html page to a link list */
-void html_to_linklist(GumboNode *node, ll_t *links);
+/** \brief make a new LinkTable */
+LinkTable *LinkTable_new();
 
-/* \brief free a link list */
-void linklist_free(ll_t *links);
+/** \brief free a LinkTable */
+void LinkTable_free(LinkTable *linktbl);
 
-/* \brief the upper level */
+/** \brief add a link to the link table */
+void LinkTable_add(LinkTable *linktbl, Link *link);
+
+/** \brief print a LinkTable */
+void LinkTable_print(LinkTable *linktbl);
+
+/** \brief convert a html page to a LinkTable */
+void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
+
+/** \brief the upper level */
 /* \warning does not check if you have reached the base level! */
 char *url_upper(const char *url);
 
-/* \brief append url */
+/** \brief append url */
 char *url_append(const char *url, const char *sublink);
 
 #endif

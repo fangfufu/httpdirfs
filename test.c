@@ -11,138 +11,7 @@
 
 int http_test()
 {
-    URL_FILE *handle;
-    FILE *outf;
-
-    size_t nread;
-    char buffer[256];
-    const char *url;
-
-//     url = "https://www.fangfufu.co.uk/~fangfufu/Unison-Windows-2.48.4.zip";
-    /* ------------------------Test header-only--------------------------*/
-    /* open the input file */
-    URL_FILE *header_handle = url_fopen(
-        "http://ipv4.download.thinkbroadband.com/1GB.zip",
-        "rh");
-    if(!header_handle) {
-        printf("couldn't url_fopen() \n");
-        return 2;
-    }
-
-//     printf("start fgets\n");
-    /* Read 2 character seem to be enough to get the header*/
-    url_fgets(buffer, 256, header_handle);
-//     printf("end fgets\n");
-
-
-    /* Print the header */
-//     printf(header_handle->header);
-
-//     printf("accept-range: %d\n", header_handle->accept_range);
-//     printf("filesize: %d\n", header_handle->content_length);
-    printf("test fgets");
-
-
-    /* close the URL handle */
-//     url_fclose(header_handle);
-
-    /* ---------------------------Test fgets ----------------------------*/
-    /* open the input file */
-    url = "http://127.0.0.1/~fangfufu/test.txt";
-    handle = url_fopen(url, "h");
-    if(!handle) {
-        printf("couldn't url_fopen() %s\n", url);
-        return 2;
-    }
-
-    /* create the output file for fgets*/
-    outf = fopen("fgets_test.txt", "wb");
-    if(!outf) {
-        perror("couldn't open output file\n");
-        return 1;
-    }
-
-    /* copy from url line by line with fgets */
-    while(!url_feof(handle)) {
-        url_fgets(buffer, sizeof(buffer), handle);
-        fwrite(buffer, 1, strlen(buffer), outf);
-    }
-
-    /* close the handles for the fgets test*/
-    url_fclose(handle);
-    fclose(outf);
-
-    /* ---------------------------Test fread ----------------------------*/
-
-
-    /* open the input file again */
-    handle = url_fopen(url, "r");
-    if(!handle) {
-        printf("couldn't url_fopen() testfile\n");
-        return 2;
-    }
-
-    /* create the output file for fread test*/
-    outf = fopen("fread_test.txt", "wb");
-    if(!outf) {
-        perror("couldn't open fread output file\n");
-        return 1;
-    }
-
-    /* Copy from url with fread */
-    do {
-        nread = url_fread(buffer, 1, sizeof(buffer), handle);
-        fwrite(buffer, 1, nread, outf);
-    } while(nread);
-
-    /* close the handles for the fgets test*/
-    url_fclose(handle);
-    fclose(outf);
-
-    /* ---------------------------Test rewind ----------------------------*/
-    /* open the input file again */
-    handle = url_fopen(url, "r");
-    if(!handle) {
-        printf("couldn't url_fopen() testfile\n");
-        return 2;
-    }
-
-    /* create the output file for rewind test*/
-    outf = fopen("rewind_test.txt", "wb");
-    if(!outf) {
-        perror("couldn't open fread output file\n");
-        return 1;
-    }
-
-    /* Copy from url with fread */
-    do {
-        nread = url_fread(buffer, 1, sizeof(buffer), handle);
-        fwrite(buffer, 1, nread, outf);
-    } while(nread);
-
-    url_rewind(handle);
-    fprintf(outf, "\n-------------------\n");
-
-    /*
-     * read the URL again after rewind:
-     *  - copy from url line by line with fgets
-     */
-    while(!url_feof(handle)) {
-        url_fgets(buffer, sizeof(buffer), handle);
-        fwrite(buffer, 1, strlen(buffer), outf);
-    }
-
-    buffer[0]='\n';
-    fwrite(buffer, 1, 1, outf);
-
-    nread = url_fread(buffer, 1, sizeof(buffer), handle);
-    fwrite(buffer, 1, nread, outf);
-
-    url_fclose(handle);
-
-    fclose(outf);
-
-    return 0;/* all done */
+    return 0;
 }
 void url_test()
 {
@@ -182,10 +51,10 @@ void gumbo_test(int argc, char **argv)
     fclose(fp);
 
     GumboOutput* output = gumbo_parse(contents);
-    ll_t *links = linklist_new();
-    html_to_linklist(output->root, links);
+    LinkTable *linktbl = LinkTable_new();
+    HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
-    linklist_print(links);
-    linklist_free(links);
+    LinkTable_print(linktbl);
+    LinkTable_free(linktbl);
     printf("--- end of gumbo_test ---\n\n");
 }
