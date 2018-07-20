@@ -14,7 +14,7 @@ Link *Link_new();
 void Link_free(Link *link);
 
 /** \brief make a new LinkTable */
-LinkTable *LinkTable_new();
+LinkTable *LinkTable_new(const char *url);
 
 /** \brief free a LinkTable */
 void LinkTable_free(LinkTable *linktbl);

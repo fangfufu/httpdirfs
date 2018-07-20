@@ -3,37 +3,67 @@
 #include "link.h"
 #include "string.h"
 
+static size_t
+WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    size_t realsize = size * nmemb;
+    Link *mem = (Link *)userp;
+
+    mem->data = realloc(mem->data, mem->data_sz + realsize + 1);
+    if(mem->data == NULL) {
+        /* out of memory! */
+        printf("not enough memory (realloc returned NULL)\n");
+        return 0;
+    }
+
+    memcpy(&(mem->data[mem->data_sz]), contents, realsize);
+    mem->data_sz += realsize;
+    mem->data[mem->data_sz] = 0;
+
+    return realsize;
+}
+
 Link *Link_new(const char *p_url)
 {
     Link *link = calloc(1, sizeof(Link));
 
     size_t p_url_len = strnlen(p_url, LINK_LEN_MAX) + 1;
-    link->p_url = malloc(p_url_len);
-    link->p_url = strncpy(link->p_url, p_url, p_url_len);
+    strncpy(link->p_url, p_url, p_url_len);
 
     link->type = LINK_UNKNOWN;
     link->curl_h = curl_easy_init();
     link->res = -1;
-    link->data = NULL;
-    link->data_sz = 0;
+    link->data = malloc(1);
+
+    /* set up some basic curl stuff */
+    curl_easy_setopt(link->curl_h, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(link->curl_h, CURLOPT_WRITEDATA, (void *)link->data);
+    curl_easy_setopt(link->curl_h, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
 
     return link;
 }
 
 void Link_free(Link *link)
 {
-    free(link->p_url);
     curl_easy_cleanup(link->curl_h);
     free(link->data);
     free(link);
     link = NULL;
 }
 
-LinkTable *LinkTable_new()
+LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
-    linktbl->num = 0;
-    linktbl->links = NULL;
+    /* populate the base URL */
+    LinkTable_add(linktbl, Link_new("/"));
+    Link *this_link = linktbl->links[0];
+    curl_easy_setopt(this_link->curl_h, CURLOPT_URL, url);
+    this_link->res = curl_easy_perform(this_link->curl_h);
+    if (this_link->res != CURLE_OK) {
+        fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL");
+        LinkTable_free(linktbl);
+        linktbl = NULL;
+    };
     return linktbl;
 }
 
