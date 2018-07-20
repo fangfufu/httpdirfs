@@ -21,11 +21,11 @@ typedef enum {
 typedef struct {
     char p_url[255];
     LinkType type;
-    CURL *curl_h;
-    CURLcode res;   /* initialise to -1, because all CURLcode are positive  */
-    char *data;
-    size_t data_sz;
-    curl_off_t content_length;
+    CURL *curl;
+    CURLcode res;   /* initialise to -1, as all valid CURLcode are positive  */
+    char *body;
+    size_t body_sz;
+    size_t content_length;
 } Link;
 
 /**

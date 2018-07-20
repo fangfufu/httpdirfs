@@ -22,6 +22,12 @@ void LinkTable_free(LinkTable *linktbl);
 /** \brief add a link to the link table */
 void LinkTable_add(LinkTable *linktbl, Link *link);
 
+/**
+ * \brief fill the LinkTable
+ * \details fill the LinkTable with link type information
+ */
+void LinkTable_fill(LinkTable *linktbl);
+
 /** \brief print a LinkTable */
 void LinkTable_print(LinkTable *linktbl);
 

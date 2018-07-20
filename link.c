@@ -1,7 +1,7 @@
 #include <ctype.h>
 
-#include "link.h"
 #include "string.h"
+#include "link.h"
 
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -9,16 +9,16 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     size_t realsize = size * nmemb;
     Link *mem = (Link *)userp;
 
-    mem->data = realloc(mem->data, mem->data_sz + realsize + 1);
-    if(mem->data == NULL) {
+    mem->body = realloc(mem->body, mem->body_sz + realsize + 1);
+    if(mem->body == NULL) {
         /* out of memory! */
         printf("not enough memory (realloc returned NULL)\n");
         return 0;
     }
 
-    memcpy(&(mem->data[mem->data_sz]), contents, realsize);
-    mem->data_sz += realsize;
-    mem->data[mem->data_sz] = 0;
+    memcpy(&(mem->body[mem->body_sz]), contents, realsize);
+    mem->body_sz += realsize;
+    mem->body[mem->body_sz] = 0;
 
     return realsize;
 }
@@ -27,26 +27,24 @@ Link *Link_new(const char *p_url)
 {
     Link *link = calloc(1, sizeof(Link));
 
-    size_t p_url_len = strnlen(p_url, LINK_LEN_MAX) + 1;
-    strncpy(link->p_url, p_url, p_url_len);
+    strncpy(link->p_url, p_url, LINK_LEN_MAX);
 
     link->type = LINK_UNKNOWN;
-    link->curl_h = curl_easy_init();
+    link->curl = curl_easy_init();
     link->res = -1;
-    link->data = malloc(1);
 
     /* set up some basic curl stuff */
-    curl_easy_setopt(link->curl_h, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(link->curl_h, CURLOPT_WRITEDATA, (void *)link->data);
-    curl_easy_setopt(link->curl_h, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
+    curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)link);
+    curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
 
     return link;
 }
 
 void Link_free(Link *link)
 {
-    curl_easy_cleanup(link->curl_h);
-    free(link->data);
+    curl_easy_cleanup(link->curl);
+    free(link->body);
     free(link);
     link = NULL;
 }
@@ -54,16 +52,30 @@ void Link_free(Link *link)
 LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
+
     /* populate the base URL */
-    LinkTable_add(linktbl, Link_new("/"));
-    Link *this_link = linktbl->links[0];
-    curl_easy_setopt(this_link->curl_h, CURLOPT_URL, url);
-    this_link->res = curl_easy_perform(this_link->curl_h);
-    if (this_link->res != CURLE_OK) {
+    LinkTable_add(linktbl, Link_new(url));
+    Link *head_link = linktbl->links[0];
+    curl_easy_setopt(head_link->curl, CURLOPT_URL, url);
+
+    /* start downloading the base URL */
+    head_link->res = curl_easy_perform(head_link->curl);
+
+    /* if downloading base URL failed */
+    if (head_link->res != CURLE_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL");
         LinkTable_free(linktbl);
         linktbl = NULL;
+        return linktbl;
     };
+
+    /* Otherwise parsed the received data */
+    GumboOutput* output = gumbo_parse(head_link->body);
+    HTML_to_LinkTable(output->root, linktbl);
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+
+    /* Fill in the link table */
+    LinkTable_fill(linktbl);
     return linktbl;
 }
 
@@ -86,13 +98,42 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links[linktbl->num - 1] = link;
 }
 
+void LinkTable_fill(LinkTable *linktbl)
+{
+    for (int i = 0; i < linktbl->num; i++) {
+        Link *this_link = linktbl->links[i];
+        if (this_link->type == LINK_UNKNOWN) {
+            CURL *curl = this_link->curl;
+            char *url;
+            curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+            url = url_append(linktbl->links[0]->p_url, this_link->p_url);
+            curl_easy_setopt(curl, CURLOPT_URL, url);
+            free(url);
+            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+            curl_easy_perform(curl);
+            double cl;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+            if (cl == -1) {
+                this_link->content_length = 0;
+                this_link->type = LINK_DIR;
+            } else {
+                this_link->content_length = cl;
+                this_link->type = LINK_FILE;
+            }
+        }
+    }
+}
+
+
 void LinkTable_print(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
-        printf("%d %c %s\n",
+        Link *this_link = linktbl->links[i];
+        printf("%d %c %lu %s\n",
                i,
-               linktbl->links[i]->type,
-               linktbl->links[i]->p_url);
+               this_link->type,
+               this_link->content_length,
+               this_link->p_url);
     }
 }
 
@@ -149,8 +190,7 @@ char *url_upper(const char *url)
     const char *pt = strrchr(url, '/');
     /* +1 for the '/' */
     size_t  len = pt - url + 1;
-    char *str = malloc(len* sizeof(char));
-    strncpy(str, url, len);
+    char *str = strndup(url, len);
     str[len] = '\0';
     return str;
 }

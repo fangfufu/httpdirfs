@@ -24,10 +24,8 @@ void gumbo_test()
     printf("--- start of gumbo_test ---\n");
 
     LinkTable *linktbl = LinkTable_new(
-        "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/");
-    GumboOutput* output = gumbo_parse(linktbl->links[0]->data);
-    HTML_to_LinkTable(output->root, linktbl);
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
+        "https://www.fangfufu.co.uk/~fangfufu/test/");
+
     LinkTable_print(linktbl);
     LinkTable_free(linktbl);
     printf("--- end of gumbo_test ---\n\n");
