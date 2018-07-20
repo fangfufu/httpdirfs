@@ -9,12 +9,15 @@
 
 #define URL_LEN_MAX 2048
 #define LINK_LEN_MAX 255
+#define HTTP_OK 200
 
 /** \brief the link type */
 typedef enum {
+    LINK_HEAD = 'H',
     LINK_DIR = 'D',
     LINK_FILE = 'F',
-    LINK_UNKNOWN = 'U'
+    LINK_UNKNOWN = 'U',
+    LINK_INVALID = 'I'
 } LinkType;
 
 /** \brief link data type */

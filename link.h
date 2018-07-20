@@ -13,6 +13,10 @@ Link *Link_new();
 /** \brief free a Link */
 void Link_free(Link *link);
 
+/** \brief download a link */
+int Link_download(Link *link, size_t start, size_t end);
+
+
 /** \brief make a new LinkTable */
 LinkTable *LinkTable_new(const char *url);
 

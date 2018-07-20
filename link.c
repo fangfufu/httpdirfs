@@ -37,6 +37,7 @@ Link *Link_new(const char *p_url)
     curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)link);
     curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
+    curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 1);
 
     return link;
 }
@@ -49,6 +50,22 @@ void Link_free(Link *link)
     link = NULL;
 }
 
+int Link_download(Link *link, size_t start, size_t end)
+{
+    CURL *curl = link->curl;
+    char range_str[64];
+    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
+    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+
+    curl_easy_perform(link->curl);
+
+    long http_resp;
+    curl_easy_getinfo(link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    return http_resp;
+}
+
 LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
@@ -56,6 +73,7 @@ LinkTable *LinkTable_new(const char *url)
     /* populate the base URL */
     LinkTable_add(linktbl, Link_new(url));
     Link *head_link = linktbl->links[0];
+    head_link->type = LINK_HEAD;
     curl_easy_setopt(head_link->curl, CURLOPT_URL, url);
 
     /* start downloading the base URL */
@@ -111,14 +129,20 @@ void LinkTable_fill(LinkTable *linktbl)
             free(url);
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
             curl_easy_perform(curl);
-            double cl;
-            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-            if (cl == -1) {
-                this_link->content_length = 0;
-                this_link->type = LINK_DIR;
+            long http_resp;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+            if (http_resp == HTTP_OK) {
+                double cl;
+                curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+                if (cl == -1) {
+                    this_link->content_length = 0;
+                    this_link->type = LINK_DIR;
+                } else {
+                    this_link->content_length = cl;
+                    this_link->type = LINK_FILE;
+                }
             } else {
-                this_link->content_length = cl;
-                this_link->type = LINK_FILE;
+                this_link->type = LINK_INVALID;
             }
         }
     }

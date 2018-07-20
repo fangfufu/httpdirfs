@@ -19,8 +19,7 @@ int main(int argc, char** argv)
 
     init();
 
-    gumbo_test();
-    url_test();
+    link_test();
 
     return 0;
 }
