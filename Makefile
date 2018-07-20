@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS= -Wall -Wextra -lgumbo -lcurl -g
-OBJ = main.o link.o test.o
+OBJ = main.o network.o test.o
 
 %.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)

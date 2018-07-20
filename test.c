@@ -4,7 +4,7 @@
 #include <errno.h>
 #include <limits.h>
 
-#include "link.h"
+#include "network.h"
 #include "test.h"
 
 

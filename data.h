@@ -25,7 +25,6 @@ typedef struct {
     char p_url[255];
     LinkType type;
     CURL *curl;
-    CURLcode res;   /* initialise to -1, as all valid CURLcode are positive  */
     char *body;
     size_t body_sz;
     size_t content_length;

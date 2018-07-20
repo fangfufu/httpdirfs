@@ -1,8 +1,81 @@
 #include <ctype.h>
+#include <string.h>
+#include <errno.h>
 
-#include "string.h"
-#include "link.h"
+#include "network.h"
 
+#define NETWORK_MAXIMUM_CONNECTION 10
+
+CURLM *curl_multi;
+
+static void do_transfer(CURL *curl)
+{
+    /* Add the transfer handle */
+    curl_multi_add_handle(curl_multi, curl);
+
+    CURLMcode res;
+    int num_transfers, max_fd;
+    long timeout;
+    fd_set read_fd_set, write_fd_set, exc_fd_set;
+    do {
+        res = curl_multi_perform(curl_multi, &num_transfers);
+        if (res) {
+            fprintf(stderr,
+                    "do_transfer(): curl_multi_perform(): %s\n",
+                    curl_multi_strerror(res));
+        }
+        if (!num_transfers) {
+            break;
+        }
+
+        res = curl_multi_fdset(curl_multi, &read_fd_set, &write_fd_set,
+                               &exc_fd_set, &max_fd);
+        if (res) {
+            fprintf(stderr,
+                    "do_transfer(): curl_multi_fdset(): %s\n",
+                    curl_multi_strerror(res));
+        }
+
+        res = curl_multi_timeout(curl_multi, &timeout);
+        if (res) {
+            fprintf(stderr,
+                    "do_transfer(): curl_multi_timeout(): %s\n",
+                    curl_multi_strerror(res));
+        }
+
+        if (max_fd < 0 || timeout < 0) {
+            /*
+             * To find out why, read:
+             * https://curl.haxx.se/libcurl/c/curl_multi_fdset.html
+             */
+            timeout = 100;
+        }
+
+
+        struct timeval t;
+        /* convert timeout (in millisec) to sec */
+        t.tv_sec = timeout/1000;
+        /* convert the remainder to microsec */
+        t.tv_usec = (timeout%1000)*1000;
+
+        /*
+         * The select() system call blocks until one or more of a set of
+         * file descriptors becomes ready.
+         * (The Linux Programming Interface, Michael Kerrisk)
+         *
+         * See also:
+         * https://curl.haxx.se/libcurl/c/curl_multi_timeout.html
+         */
+        if (select(max_fd + 1, &read_fd_set,
+            &write_fd_set, &exc_fd_set, &t) <  0) {
+            fprintf(stderr, "do_transfer(): select(%i, , , , %li): %i: %s\n",
+                    max_fd + 1, timeout, errno, strerror(errno));
+        }
+    } while(num_transfers);
+
+    /* Remove the transfer handle */
+    curl_multi_remove_handle(curl_multi, curl);
+}
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
@@ -23,6 +96,14 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     return realsize;
 }
 
+void Network_init()
+{
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl_multi = curl_multi_init();
+    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+                      (long)NETWORK_MAXIMUM_CONNECTION);
+}
+
 Link *Link_new(const char *p_url)
 {
     Link *link = calloc(1, sizeof(Link));
@@ -30,14 +111,14 @@ Link *Link_new(const char *p_url)
     strncpy(link->p_url, p_url, LINK_LEN_MAX);
 
     link->type = LINK_UNKNOWN;
+
     link->curl = curl_easy_init();
-    link->res = -1;
 
     /* set up some basic curl stuff */
     curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)link);
     curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
-    curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 1);
+    curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 0);
 
     return link;
 }
@@ -58,8 +139,7 @@ int Link_download(Link *link, size_t start, size_t end)
 
     curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
-
-    curl_easy_perform(link->curl);
+    do_transfer(curl);
 
     long http_resp;
     curl_easy_getinfo(link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -77,10 +157,12 @@ LinkTable *LinkTable_new(const char *url)
     curl_easy_setopt(head_link->curl, CURLOPT_URL, url);
 
     /* start downloading the base URL */
-    head_link->res = curl_easy_perform(head_link->curl);
+    do_transfer(head_link->curl);
 
     /* if downloading base URL failed */
-    if (head_link->res != CURLE_OK) {
+    long http_resp;
+    curl_easy_getinfo(head_link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (http_resp != HTTP_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL");
         LinkTable_free(linktbl);
         linktbl = NULL;
@@ -128,7 +210,9 @@ void LinkTable_fill(LinkTable *linktbl)
             curl_easy_setopt(curl, CURLOPT_URL, url);
             free(url);
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-            curl_easy_perform(curl);
+
+            do_transfer(curl);
+
             long http_resp;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
             if (http_resp == HTTP_OK) {
