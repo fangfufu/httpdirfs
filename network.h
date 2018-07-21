@@ -1,5 +1,5 @@
-#ifndef LINK_H
-#define LINK_H
+#ifndef NETWORK_H
+#define NETWORK_H
 #include <stdio.h>
 #include <stdlib.h>
 
