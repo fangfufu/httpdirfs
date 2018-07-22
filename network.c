@@ -13,17 +13,22 @@ LinkTable *ROOT_LINK_TBL;
 
 /* ------------------------ Static variable ------------------------------ */
 static CURLM *curl_multi;
-static char *url_append(const char *url, const char *sublink);
-static size_t
-WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
-static Link *Link_new(const char *p_url);
+static CURLSH *curl_share;
+
+/* Forward declarations */
+
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
+static int is_valid_link_p_url(const char *n);
 static void Link_free(Link *link);
+static Link *Link_new(const char *p_url);
+static void Link_curl_init(Link *link);
 static void LinkTable_free(LinkTable *linktbl);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
 static void LinkTable_fill(LinkTable *linktbl);
-static int is_valid_link_p_url(const char *n);
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
+static char *url_append(const char *url, const char *sublink);
+static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
+                                  void *userp);
 
 /**
  * \brief blocking transfer function
@@ -45,6 +50,40 @@ static void do_transfer(CURL *curl);
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* -------------------------- Functions ---------------------------------- */
+void network_init(const char *url)
+{
+    curl_global_init(CURL_GLOBAL_ALL);
+    curl_multi = curl_multi_init();
+    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+                      (long)NETWORK_MAXIMUM_CONNECTION);
+
+    ROOT_LINK_TBL = LinkTable_new(url);
+
+    curl_share = curl_share_init();
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+
+}
+
+static void Link_curl_init(Link *link)
+{
+    link->curl = curl_easy_init();
+
+    /* set up some basic curl stuff */
+    curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
+    curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 0);
+    curl_easy_setopt(link->curl, CURLOPT_FOLLOWLOCATION, 1);
+    /*
+     * only 1 redirection is really needed
+     * - for following directories without the '/'
+     */
+    curl_easy_setopt(link->curl, CURLOPT_MAXREDIRS, 3);
+    curl_easy_setopt(link->curl, CURLOPT_URL, link->f_url);
+    curl_easy_setopt(link->curl, CURLOPT_SHARE, curl_share);
+}
+
+
 static char *url_append(const char *url, const char *sublink)
 {
     int needs_separator = 0;
@@ -171,15 +210,6 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     return realsize - 1;
 }
 
-void network_init(const char *url)
-{
-    curl_global_init(CURL_GLOBAL_ALL);
-    curl_multi = curl_multi_init();
-    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-                      (long)NETWORK_MAXIMUM_CONNECTION);
-    ROOT_LINK_TBL = LinkTable_new(url);
-}
-
 static Link *Link_new(const char *p_url)
 {
     Link *link = calloc(1, sizeof(Link));
@@ -193,19 +223,6 @@ static Link *Link_new(const char *p_url)
     }
 
     link->type = LINK_UNKNOWN;
-
-    link->curl = curl_easy_init();
-
-    /* set up some basic curl stuff */
-    curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
-    curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 0);
-    curl_easy_setopt(link->curl, CURLOPT_FOLLOWLOCATION, 1);
-    /*
-     * only 1 redirection is really needed
-     * - for following directories without the '/'
-     */
-    curl_easy_setopt(link->curl, CURLOPT_MAXREDIRS, 3);
 
     return link;
 }
@@ -222,30 +239,28 @@ size_t Link_download(Link *link, MemoryStruct *ms, off_t offset,
 {
     size_t start = offset;
     size_t end = start + size;
-    CURL *curl = link->curl;
+    Link_curl_init(link);
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
 
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
-    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+    curl_easy_setopt(link->curl, CURLOPT_RANGE, range_str);
     curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)ms);
 
-    do_transfer(curl);
+    do_transfer(link->curl);
 
     long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    curl_easy_getinfo(link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
         fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
+        fflush(stdout);
         return 0;
     }
 
     double dl;
-    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
+    curl_easy_getinfo(link->curl, CURLINFO_SIZE_DOWNLOAD, &dl);
     size_t s = dl;
-
-    fflush(stdout);
+    curl_easy_cleanup(link->curl);
     return s;
 }
 
@@ -257,9 +272,10 @@ LinkTable *LinkTable_new(const char *url)
     LinkTable_add(linktbl, Link_new("/"));
     Link *head_link = linktbl->links[0];
     head_link->type = LINK_HEAD;
-    curl_easy_setopt(head_link->curl, CURLOPT_URL, url);
+    strncpy(head_link->f_url, url, URL_LEN_MAX);
 
     /* start downloading the base URL */
+    Link_curl_init(head_link);
     MemoryStruct ms;
     curl_easy_setopt(head_link->curl, CURLOPT_WRITEDATA, (void *)&ms);
 
@@ -275,6 +291,7 @@ URL: %s, HTTP %ld\n", url, http_resp);
         linktbl = NULL;
         return linktbl;
     };
+    curl_easy_cleanup(head_link->curl);
 
     /* Otherwise parsed the received data */
     GumboOutput* output = gumbo_parse(ms.memory);
@@ -284,6 +301,7 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
     /* Fill in the link table */
     LinkTable_fill(linktbl);
+
     return linktbl;
 }
 
@@ -312,21 +330,23 @@ void LinkTable_fill(LinkTable *linktbl)
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         if (this_link->type == LINK_UNKNOWN) {
-            CURL *curl = this_link->curl;
             char *url;
-            curl_easy_getinfo(head_link->curl, CURLINFO_EFFECTIVE_URL, &url);
-            url = url_append(url, this_link->p_url);
-            curl_easy_setopt(curl, CURLOPT_URL, url);
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+            url = url_append(head_link->f_url, this_link->p_url);
+            strncpy(this_link->f_url, url, URL_LEN_MAX);
+            free(url);
 
-            do_transfer(curl);
+            Link_curl_init(this_link);
+            curl_easy_setopt(this_link->curl, CURLOPT_NOBODY, 1);
+
+            do_transfer(this_link->curl);
 
             long http_resp;
-            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+            curl_easy_getinfo(this_link->curl, CURLINFO_RESPONSE_CODE,
+                              &http_resp);
             if (http_resp == HTTP_OK) {
-                strncpy(this_link->f_url, url, URL_LEN_MAX);
                 double cl;
-                curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+                curl_easy_getinfo(this_link->curl,
+                                  CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
                 if (cl == -1) {
                     this_link->content_length = 0;
                     this_link->type = LINK_DIR;
@@ -337,8 +357,8 @@ void LinkTable_fill(LinkTable *linktbl)
             } else {
                 this_link->type = LINK_INVALID;
             }
-            free(url);
         }
+        curl_easy_cleanup(this_link->curl);
     }
 }
 
