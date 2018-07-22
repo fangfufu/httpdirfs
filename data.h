@@ -29,6 +29,9 @@ typedef struct LinkTable LinkTable;
 /** \brief link data type */
 typedef struct Link Link;
 
+/** \brief root link table */
+extern LinkTable *ROOT_LINK_TBL;
+
 struct Link {
     char p_url[LINK_LEN_MAX];
     char f_url[URL_LEN_MAX];

@@ -1,5 +1,5 @@
 CC=gcc
-CFLAGS= -Wall -Wextra -lgumbo -lcurl -g
+CFLAGS= -Wall -Wextra -lgumbo -lcurl -lfuse -D_FILE_OFFSET_BITS=64 -g
 OBJ = main.o network.o
 
 %.o: %.c

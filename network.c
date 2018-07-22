@@ -200,8 +200,10 @@ static void Link_free(Link *link)
     link = NULL;
 }
 
-int Link_download(Link *link, size_t start, size_t end)
+size_t Link_download(Link *link, off_t offset, size_t size)
 {
+    size_t start = offset;
+    size_t end = start + size;
     CURL *curl = link->curl;
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
@@ -212,7 +214,16 @@ int Link_download(Link *link, size_t start, size_t end)
 
     long http_resp;
     curl_easy_getinfo(link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    return http_resp;
+    if (http_resp != HTTP_OK) {
+        fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld",
+        link->f_url, http_resp);
+        return 0;
+    }
+
+    double dl;
+    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
+    size_t s = dl;
+    return s;
 }
 
 static LinkTable *LinkTable_new(const char *url)
@@ -233,7 +244,7 @@ static LinkTable *LinkTable_new(const char *url)
     curl_easy_getinfo(head_link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp != HTTP_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
-URL: %s, HTTP response: %ld\n", url, http_resp);
+URL: %s, HTTP %ld\n", url, http_resp);
         LinkTable_free(linktbl);
         linktbl = NULL;
         return linktbl;
@@ -404,7 +415,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                 if (!(next_table)) {
                     next_table = LinkTable_new(linktbl->links[i]->f_url);
                 }
-                return path_to_Link(next_path, next_table);
+                return path_to_Link_recursive(next_path, next_table);
             }
         }
     }
@@ -412,10 +423,10 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     return NULL;
 }
 
-Link *path_to_Link(const char *path, LinkTable *linktbl)
+Link *path_to_Link(const char *path)
 {
     char *new_path = strndup(path, URL_LEN_MAX);
-    return path_to_Link_recursive(new_path, linktbl);
+    return path_to_Link_recursive(new_path, ROOT_LINK_TBL);
 }
 
 
