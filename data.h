@@ -20,23 +20,31 @@ typedef enum {
     LINK_INVALID = 'I'
 } LinkType;
 
+/**
+ * \brief link table type
+ * \details index 0 contains the Link for the base URL
+ */
+typedef struct LinkTable LinkTable;
+
 /** \brief link data type */
-typedef struct {
+typedef struct Link Link;
+
+struct Link {
     char p_url[255];
     LinkType type;
     CURL *curl;
     char *body;
     size_t body_sz;
     size_t content_length;
-} Link;
+    LinkTable *nextTable;
+};
 
-/**
- * \brief link table type
- * \details index 0 contains the Link for the base URL
- */
-typedef struct {
+
+struct LinkTable {
     int num;
     Link **links;
-} LinkTable;
+};
+
+
 
 #endif

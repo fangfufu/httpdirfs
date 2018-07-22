@@ -110,6 +110,12 @@ Link *Link_new(const char *p_url)
 
     strncpy(link->p_url, p_url, LINK_LEN_MAX);
 
+    /* remove the '/' */
+    char *c = &(link->p_url[strnlen(link->p_url, LINK_LEN_MAX) - 1]);
+    if ( *c == '/') {
+        *c = '\0';
+    }
+
     link->type = LINK_UNKNOWN;
 
     link->curl = curl_easy_init();
@@ -119,6 +125,12 @@ Link *Link_new(const char *p_url)
     curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)link);
     curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
     curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 0);
+    curl_easy_setopt(link->curl, CURLOPT_FOLLOWLOCATION, 1);
+    /*
+     * only 1 redirection is really needed
+     * - for following directories without the '/'
+     */
+    curl_easy_setopt(link->curl, CURLOPT_MAXREDIRS, 3);
 
     return link;
 }
@@ -151,7 +163,7 @@ LinkTable *LinkTable_new(const char *url)
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
 
     /* populate the base URL */
-    LinkTable_add(linktbl, Link_new(url));
+    LinkTable_add(linktbl, Link_new("/"));
     Link *head_link = linktbl->links[0];
     head_link->type = LINK_HEAD;
     curl_easy_setopt(head_link->curl, CURLOPT_URL, url);
@@ -200,13 +212,14 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
 
 void LinkTable_fill(LinkTable *linktbl)
 {
+    Link *head_link = linktbl->links[0];
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         if (this_link->type == LINK_UNKNOWN) {
             CURL *curl = this_link->curl;
             char *url;
-            curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
-            url = url_append(linktbl->links[0]->p_url, this_link->p_url);
+            curl_easy_getinfo(head_link->curl, CURLINFO_EFFECTIVE_URL, &url);
+            url = url_append(url, this_link->p_url);
             curl_easy_setopt(curl, CURLOPT_URL, url);
             free(url);
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1);

@@ -1,3 +1,0 @@
-- implement fseek
-- work on linklist again - append it so it includes curl data structure
-- implement function which generates the initial file list.
