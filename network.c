@@ -6,7 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define NETWORK_MAXIMUM_CONNECTION 10
+#define HTTP_OK 200
+#define HTTP_PARTIAL_CONTENT 206
 
 LinkTable *ROOT_LINK_TBL;
 
@@ -17,7 +18,6 @@ static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
 static Link *Link_new(const char *p_url);
 static void Link_free(Link *link);
-static LinkTable *LinkTable_new(const char *url);
 static void LinkTable_free(LinkTable *linktbl);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
 static void LinkTable_fill(LinkTable *linktbl);
@@ -64,7 +64,23 @@ static char *url_append(const char *url, const char *sublink)
     return str;
 }
 
+/* This is the single thread version */
 static void do_transfer(CURL *curl)
+{
+    fprintf(stderr, "do_transfer(): handle %x\n", curl);
+    fflush(stderr);
+    CURLcode res = curl_easy_perform(curl);
+    if (res) {
+        fprintf(stderr, "do_transfer() failed: %u, %s\n", res,
+                curl_easy_strerror(res));
+        fflush(stderr);
+    }
+    fprintf(stderr, "do_transfer(): DONE\n");
+    fflush(stderr);
+}
+
+/* This is the version that uses curl multi handle */
+static void do_transfer_(CURL *curl)
 {
     /* Add the transfer handle */
     curl_multi_add_handle(curl_multi, curl);
@@ -74,6 +90,9 @@ static void do_transfer(CURL *curl)
     long timeout;
     fd_set read_fd_set, write_fd_set, exc_fd_set;
     do {
+        fprintf(stderr, "do_transfer(): num_transfers: %d\n",
+                num_transfers);
+        fflush(stderr);
         res = curl_multi_perform(curl_multi, &num_transfers);
         if (res) {
             fprintf(stderr,
@@ -135,29 +154,26 @@ static void do_transfer(CURL *curl)
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
+    MemoryStruct *mem = (MemoryStruct *)userp;
     size_t realsize = size * nmemb;
-    Link *mem = (Link *)userp;
 
-    mem->body = realloc(mem->body, mem->body_sz + realsize + 1);
-    if(mem->body == NULL) {
+    mem->memory = malloc(realsize + 1);
+    if(!mem->memory) {
         /* out of memory! */
         printf("not enough memory (realloc returned NULL)\n");
         return 0;
     }
 
-    memcpy(&(mem->body[mem->body_sz]), contents, realsize);
-    mem->body_sz += realsize;
-    mem->body[mem->body_sz] = 0;
-
-    return realsize;
+    memcpy(mem->memory, contents, realsize);
+    return realsize - 1;
 }
 
 void network_init(const char *url)
 {
     curl_global_init(CURL_GLOBAL_ALL);
-    curl_multi = curl_multi_init();
-    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-                      (long)NETWORK_MAXIMUM_CONNECTION);
+//     curl_multi = curl_multi_init();
+//     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+//                       (long)NETWORK_MAXIMUM_CONNECTION);
     ROOT_LINK_TBL = LinkTable_new(url);
 }
 
@@ -179,7 +195,6 @@ static Link *Link_new(const char *p_url)
 
     /* set up some basic curl stuff */
     curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)link);
     curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
     curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 0);
     curl_easy_setopt(link->curl, CURLOPT_FOLLOWLOCATION, 1);
@@ -195,12 +210,12 @@ static Link *Link_new(const char *p_url)
 static void Link_free(Link *link)
 {
     curl_easy_cleanup(link->curl);
-    free(link->body);
     free(link);
     link = NULL;
 }
 
-size_t Link_download(Link *link, off_t offset, size_t size)
+size_t Link_download(Link *link, MemoryStruct *ms, off_t offset,
+                     size_t size)
 {
     size_t start = offset;
     size_t end = start + size;
@@ -209,13 +224,16 @@ size_t Link_download(Link *link, off_t offset, size_t size)
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
 
     curl_easy_setopt(curl, CURLOPT_NOBODY, 0);
+    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+    curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)ms);
+
     do_transfer(curl);
 
     long http_resp;
-    curl_easy_getinfo(link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (http_resp != HTTP_OK) {
-        fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld",
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
+        fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
         return 0;
     }
@@ -223,10 +241,12 @@ size_t Link_download(Link *link, off_t offset, size_t size)
     double dl;
     curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
     size_t s = dl;
+
+    fflush(stdout);
     return s;
 }
 
-static LinkTable *LinkTable_new(const char *url)
+LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
 
@@ -237,6 +257,9 @@ static LinkTable *LinkTable_new(const char *url)
     curl_easy_setopt(head_link->curl, CURLOPT_URL, url);
 
     /* start downloading the base URL */
+    MemoryStruct ms;
+    curl_easy_setopt(head_link->curl, CURLOPT_WRITEDATA, (void *)&ms);
+
     do_transfer(head_link->curl);
 
     /* if downloading base URL failed */
@@ -251,7 +274,8 @@ URL: %s, HTTP %ld\n", url, http_resp);
     };
 
     /* Otherwise parsed the received data */
-    GumboOutput* output = gumbo_parse(head_link->body);
+    GumboOutput* output = gumbo_parse(ms.memory);
+    free(ms.memory);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 

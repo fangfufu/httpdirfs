@@ -23,9 +23,13 @@ static struct fuse_operations fs_oper = {
     .read		= fs_read,
 };
 
+
 int main(int argc, char **argv) {
-    network_init(argv[1]);
-    return fuse_main(argc - 1, argv + 1, &fs_oper, NULL);
+    network_init("http://127.0.0.1/~fangfufu/");
+
+//     return fuse_main(argc - 1, argv + 1, &fs_oper, NULL);
+    return fuse_main(argc, argv, &fs_oper, NULL);
+    return 0;
 }
 
 /** \brief return the attributes for a single file indicated by path */
@@ -57,6 +61,7 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         }
     }
 
+    fflush(stderr);
     return res;
 }
 
@@ -80,7 +85,11 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
         }
         linktbl = link->next_table;
         if (!linktbl) {
-            return -ENOENT;
+            fprintf(stderr, "LinkTable_new(): %s\n", link->f_url);
+            linktbl = LinkTable_new(link->f_url);
+            if(!linktbl) {
+                return -ENOENT;
+            }
         }
     }
 
@@ -92,6 +101,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
         dir_add(buf, link->p_url, NULL, 0);
     }
 
+    fflush(stderr);
     return 0;
 }
 
@@ -106,6 +116,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EACCES;
     }
 
+    fflush(stderr);
     return 0;
 }
 
@@ -121,8 +132,22 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
         return -ENOENT;
     }
 
-    int bytes_downloaded = Link_download(link, offset, size);
-    memcpy(buf, link->body, bytes_downloaded);
+    MemoryStruct ms;
+
+    fprintf(stderr, "fs_read(): Link_download(%s, %ld, %lu)\n",
+            link->f_url,
+            offset,
+            size
+    );
+    fflush(stderr);
+    size_t bytes_downloaded = Link_download(link, &ms, offset, size);
+    fprintf(stderr,
+            "fs_read(): returning from Link_download(), with %lu bytes.\n",
+            bytes_downloaded);
+    fflush(stderr);
+
+    memcpy(buf, ms.memory, size);
+//     free(ms.memory);
 
     return bytes_downloaded;
 }
