@@ -1,14 +1,15 @@
 #ifndef NETWORK_H
 #define NETWORK_H
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <gumbo.h>
 
 #include "data.h"
 
+#include <gumbo.h>
+
+/** \brief root link table */
+extern LinkTable *ROOT_LINK_TBL;
+
 /** \brief Initialise the network module */
-void Network_init();
+void network_init(const char *url);
 
 /** \brief make a new Link */
 Link *Link_new();
@@ -40,11 +41,7 @@ void LinkTable_print(LinkTable *linktbl);
 /** \brief convert a html page to a LinkTable */
 void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
-/** \brief the upper level */
-/* \warning does not check if you have reached the base level! */
-char *url_upper(const char *url);
-
-/** \brief append url */
-char *url_append(const char *url, const char *sublink);
+/** \brief find the link associated with a path */
+Link *path_to_Link(const char *path, LinkTable *linktbl);
 
 #endif

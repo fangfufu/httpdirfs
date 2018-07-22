@@ -7,20 +7,16 @@
 void link_test()
 {
     printf("--- start of link_test ---\n");
-
-    LinkTable *linktbl = LinkTable_new(
-        "http://127.0.0.1/~fangfufu/");
-
-    LinkTable_print(linktbl);
-    Link_download(linktbl->links[1], 1, 20);
-    printf(linktbl->links[1]->body);
-    LinkTable_free(linktbl);
+    LinkTable_print(ROOT_LINK_TBL);
+    Link *link = path_to_Link("6/6.txt", ROOT_LINK_TBL);
+    Link_download(link, 1, 20);
+    printf(link->body);
     printf("\n--- end of link_test ---\n\n");
 }
 
 void init()
 {
-    Network_init();
+    network_init("http://127.0.0.1/~fangfufu/");
 }
 
 int main(int argc, char** argv)

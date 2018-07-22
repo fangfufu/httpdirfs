@@ -1,13 +1,48 @@
-#include <ctype.h>
-#include <string.h>
-#include <errno.h>
-
 #include "network.h"
+
+#include <ctype.h>
+#include <errno.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define NETWORK_MAXIMUM_CONNECTION 10
 
-CURLM *curl_multi;
+LinkTable *ROOT_LINK_TBL;
 
+/** \brief curl multi handle */
+static CURLM *curl_multi;
+
+/** \brief append url */
+static char *url_append(const char *url, const char *sublink)
+{
+    int needs_separator = 0;
+    if (url[strlen(url)-1] != '/') {
+        needs_separator = 1;
+    }
+
+    char *str;
+    size_t ul = strlen(url);
+    size_t sl = strlen(sublink);
+    str = calloc(ul + sl + needs_separator, sizeof(char));
+    strncpy(str, url, ul);
+    if (needs_separator) {
+        str[ul] = '/';
+    }
+    strncat(str, sublink, sl);
+    return str;
+}
+
+/**
+ * \brief blocking transfer function
+ * \details
+ * This function does the followings:
+ * - add a curl easy handle to a curl multi handle,
+ * - perform the transfer (This is a blocking operation.)
+ * - return when the transfer is finished.
+ * It is probably unnecessary to use curl multi handle, this is done for future
+ * proofing.
+ */
 static void do_transfer(CURL *curl)
 {
     /* Add the transfer handle */
@@ -51,7 +86,6 @@ static void do_transfer(CURL *curl)
             timeout = 100;
         }
 
-
         struct timeval t;
         /* convert timeout (in millisec) to sec */
         t.tv_sec = timeout/1000;
@@ -76,6 +110,8 @@ static void do_transfer(CURL *curl)
     /* Remove the transfer handle */
     curl_multi_remove_handle(curl_multi, curl);
 }
+
+/** \brief buffer write back function */
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
@@ -96,12 +132,13 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     return realsize;
 }
 
-void Network_init()
+void network_init(const char *url)
 {
     curl_global_init(CURL_GLOBAL_ALL);
     curl_multi = curl_multi_init();
     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
                       (long)NETWORK_MAXIMUM_CONNECTION);
+    ROOT_LINK_TBL = LinkTable_new(url);
 }
 
 Link *Link_new(const char *p_url)
@@ -110,7 +147,7 @@ Link *Link_new(const char *p_url)
 
     strncpy(link->p_url, p_url, LINK_LEN_MAX);
 
-    /* remove the '/' */
+    /* remove the '/' from p_url if it exists */
     char *c = &(link->p_url[strnlen(link->p_url, LINK_LEN_MAX) - 1]);
     if ( *c == '/') {
         *c = '\0';
@@ -175,7 +212,8 @@ LinkTable *LinkTable_new(const char *url)
     long http_resp;
     curl_easy_getinfo(head_link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp != HTTP_OK) {
-        fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL");
+        fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
+URL: %s, HTTP response: %ld\n", url, http_resp);
         LinkTable_free(linktbl);
         linktbl = NULL;
         return linktbl;
@@ -221,7 +259,6 @@ void LinkTable_fill(LinkTable *linktbl)
             curl_easy_getinfo(head_link->curl, CURLINFO_EFFECTIVE_URL, &url);
             url = url_append(url, this_link->p_url);
             curl_easy_setopt(curl, CURLOPT_URL, url);
-            free(url);
             curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
 
             do_transfer(curl);
@@ -229,6 +266,7 @@ void LinkTable_fill(LinkTable *linktbl)
             long http_resp;
             curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
             if (http_resp == HTTP_OK) {
+                strncpy(this_link->f_url, url, URL_LEN_MAX);
                 double cl;
                 curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
                 if (cl == -1) {
@@ -241,6 +279,7 @@ void LinkTable_fill(LinkTable *linktbl)
             } else {
                 this_link->type = LINK_INVALID;
             }
+            free(url);
         }
     }
 }
@@ -250,15 +289,17 @@ void LinkTable_print(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        printf("%d %c %lu %s\n",
+        printf("%d %c %lu %s %s\n",
                i,
                this_link->type,
                this_link->content_length,
-               this_link->p_url);
+               this_link->p_url,
+               this_link->f_url
+              );
     }
 }
 
-static int is_valid_link(const char *n)
+static int is_valid_link_p_url(const char *n)
 {
     /* The link name has to start with alphanumerical character */
     if (!isalnum(n[0])) {
@@ -292,7 +333,7 @@ void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     if (node->v.element.tag == GUMBO_TAG_A &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
-        if (is_valid_link(href->value)) {
+        if (is_valid_link_p_url(href->value)) {
             LinkTable_add(linktbl, Link_new(href->value));
         }
     }
@@ -305,33 +346,70 @@ void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     return;
 }
 
-/* the upper level */
-char *url_upper(const char *url)
+/**
+ * \details Recursively search through the LinkTable until we reach the last
+ * level
+ */
+Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 {
-    const char *pt = strrchr(url, '/');
-    /* +1 for the '/' */
-    size_t  len = pt - url + 1;
-    char *str = strndup(url, len);
-    str[len] = '\0';
-    return str;
-}
-
-/* append url */
-char *url_append(const char *url, const char *sublink)
-{
-    int needs_separator = 0;
-    if (url[strlen(url)-1] != '/') {
-        needs_separator = 1;
+    /* skip the leading '/' if it exists */
+    if (*path == '/') {
+        path++;
     }
 
-    char *str;
-    size_t ul = strlen(url);
-    size_t sl = strlen(sublink);
-    str = calloc(ul + sl + needs_separator, sizeof(char));
-    strncpy(str, url, ul);
-    if (needs_separator) {
-        str[ul] = '/';
+    /* remove the last '/' if it exists */
+    char *slash = &(path[strnlen(path, URL_LEN_MAX) - 1]);
+    if (*slash == '/') {
+        *slash = '\0';
     }
-    strncat(str, sublink, sl);
-    return str;
+
+    printf("currently searching for %s\n", path);
+    slash = strchr(path, '/');
+    if ( slash == NULL ) {
+        printf("in the last layer\n");
+        /* We cannot find another '/', we have reached the last level */
+        for (int i = 1; i < linktbl->num; i++) {
+            if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
+                /* We found our link */
+                return linktbl->links[i];
+            }
+        }
+    } else {
+        printf("traversing the LinkTable\n");
+        /*
+         * We can still find '/', time to consume the path and traverse
+         * the tree structure
+         */
+
+        /*
+         * add termination mark to  the current string,
+         * effective create two substrings
+         */
+        *slash = '\0';
+        /* move the pointer past the '/' */
+        char *next_path = slash + 1;
+        for (int i = 1; i < linktbl->num; i++) {
+            printf("%s\n", linktbl->links[i]->p_url);
+            if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
+                /* The next sub-directory exists */
+                LinkTable *next_table = linktbl->links[i]->next_table;
+                if (!(next_table)) {
+                    printf("creating new link table for %s\n",
+                           linktbl->links[i]->f_url);
+                    next_table = LinkTable_new(linktbl->links[i]->f_url);
+                }
+                return path_to_Link(next_path, next_table);
+            }
+        }
+    }
+    fprintf(stderr, "path_to_Link(): %s does not exist.\n", path);
+    return NULL;
 }
+
+Link *path_to_Link(const char *path, LinkTable *linktbl)
+{
+    char *new_path = strndup(path, URL_LEN_MAX);
+    return path_to_Link_recursive(new_path, linktbl);
+}
+
+

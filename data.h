@@ -30,21 +30,19 @@ typedef struct LinkTable LinkTable;
 typedef struct Link Link;
 
 struct Link {
-    char p_url[255];
+    char p_url[LINK_LEN_MAX];
+    char f_url[URL_LEN_MAX];
     LinkType type;
     CURL *curl;
     char *body;
     size_t body_sz;
     size_t content_length;
-    LinkTable *nextTable;
+    LinkTable *next_table;
 };
-
 
 struct LinkTable {
     int num;
     Link **links;
 };
-
-
 
 #endif
