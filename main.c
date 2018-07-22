@@ -23,13 +23,27 @@ static struct fuse_operations fs_oper = {
     .read		= fs_read,
 };
 
+static void fs_usage()
+{
+    fprintf(stderr,
+            "usage:  mount-http-dir [options] URL mount_point\n");
+    abort();
+}
 
 int main(int argc, char **argv) {
-    network_init("http://127.0.0.1/~fangfufu/");
+    /*
+     * Copied from:
+     * https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/src/bbfs.c
+     */
+    if ((argc < 3) || (argv[argc-2][0] == '-') || (argv[argc-1][0] == '-')) {
+        fs_usage();
+    }
 
-//     return fuse_main(argc - 1, argv + 1, &fs_oper, NULL);
+    network_init(argv[argc-2]);
+    argv[argc-2] = argv[argc-1];
+    argv[argc-1] = NULL;
+    argc--;
     return fuse_main(argc, argv, &fs_oper, NULL);
-    return 0;
 }
 
 /** \brief return the attributes for a single file indicated by path */

@@ -65,8 +65,10 @@ static char *url_append(const char *url, const char *sublink)
 }
 
 /* This is the single thread version */
+#pragma GCC diagnostic ignored "-Wunused-function"
 static void do_transfer(CURL *curl)
 {
+#pragma GCC diagnostic ignored "-Wformat"
     fprintf(stderr, "do_transfer(): handle %x\n", curl);
     fflush(stderr);
     CURLcode res = curl_easy_perform(curl);
@@ -80,6 +82,7 @@ static void do_transfer(CURL *curl)
 }
 
 /* This is the version that uses curl multi handle */
+#pragma GCC diagnostic ignored "-Wunused-function"
 static void do_transfer_(CURL *curl)
 {
     /* Add the transfer handle */
@@ -171,9 +174,9 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 void network_init(const char *url)
 {
     curl_global_init(CURL_GLOBAL_ALL);
-//     curl_multi = curl_multi_init();
-//     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-//                       (long)NETWORK_MAXIMUM_CONNECTION);
+    curl_multi = curl_multi_init();
+    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+                      (long)NETWORK_MAXIMUM_CONNECTION);
     ROOT_LINK_TBL = LinkTable_new(url);
 }
 
