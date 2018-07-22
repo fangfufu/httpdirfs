@@ -10,10 +10,41 @@
 
 LinkTable *ROOT_LINK_TBL;
 
-/** \brief curl multi handle */
+/* ------------------------ Static variable ------------------------------ */
 static CURLM *curl_multi;
+static char *url_append(const char *url, const char *sublink);
+static size_t
+WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
+static Link *Link_new(const char *p_url);
+static void Link_free(Link *link);
+static LinkTable *LinkTable_new(const char *url);
+static void LinkTable_free(LinkTable *linktbl);
+static void LinkTable_add(LinkTable *linktbl, Link *link);
+static void LinkTable_fill(LinkTable *linktbl);
+static int is_valid_link_p_url(const char *n);
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
+static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 
-/** \brief append url */
+/**
+ * \brief blocking transfer function
+ * \details
+ * This function does the followings:
+ * - add a curl easy handle to a curl multi handle,
+ * - perform the transfer (This is a blocking operation.)
+ * - return when the transfer is finished.
+ * It is probably unnecessary to use curl multi handle, this is done for future
+ * proofing.
+ */
+static void do_transfer(CURL *curl);
+
+/**
+ * \brief convert a HTML page to a LinkTable
+ * \details Shamelessly copied and pasted from:
+ * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
+ */
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
+
+/* -------------------------- Functions ---------------------------------- */
 static char *url_append(const char *url, const char *sublink)
 {
     int needs_separator = 0;
@@ -33,16 +64,6 @@ static char *url_append(const char *url, const char *sublink)
     return str;
 }
 
-/**
- * \brief blocking transfer function
- * \details
- * This function does the followings:
- * - add a curl easy handle to a curl multi handle,
- * - perform the transfer (This is a blocking operation.)
- * - return when the transfer is finished.
- * It is probably unnecessary to use curl multi handle, this is done for future
- * proofing.
- */
 static void do_transfer(CURL *curl)
 {
     /* Add the transfer handle */
@@ -111,7 +132,6 @@ static void do_transfer(CURL *curl)
     curl_multi_remove_handle(curl_multi, curl);
 }
 
-/** \brief buffer write back function */
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
@@ -141,7 +161,7 @@ void network_init(const char *url)
     ROOT_LINK_TBL = LinkTable_new(url);
 }
 
-Link *Link_new(const char *p_url)
+static Link *Link_new(const char *p_url)
 {
     Link *link = calloc(1, sizeof(Link));
 
@@ -172,7 +192,7 @@ Link *Link_new(const char *p_url)
     return link;
 }
 
-void Link_free(Link *link)
+static void Link_free(Link *link)
 {
     curl_easy_cleanup(link->curl);
     free(link->body);
@@ -195,7 +215,7 @@ int Link_download(Link *link, size_t start, size_t end)
     return http_resp;
 }
 
-LinkTable *LinkTable_new(const char *url)
+static LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
 
@@ -229,7 +249,7 @@ URL: %s, HTTP response: %ld\n", url, http_resp);
     return linktbl;
 }
 
-void LinkTable_free(LinkTable *linktbl)
+static void LinkTable_free(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
         Link_free(linktbl->links[i]);
@@ -239,7 +259,7 @@ void LinkTable_free(LinkTable *linktbl)
     linktbl = NULL;
 }
 
-void LinkTable_add(LinkTable *linktbl, Link *link)
+static void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
     linktbl->links = realloc(
@@ -319,11 +339,7 @@ static int is_valid_link_p_url(const char *n)
     return 1;
 }
 
-/*
- * Shamelessly copied and pasted from:
- * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
- */
-void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
 {
     if (node->type != GUMBO_NODE_ELEMENT) {
         return;
@@ -346,11 +362,7 @@ void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     return;
 }
 
-/**
- * \details Recursively search through the LinkTable until we reach the last
- * level
- */
-Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
+static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 {
     /* skip the leading '/' if it exists */
     if (*path == '/') {
@@ -363,10 +375,8 @@ Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         *slash = '\0';
     }
 
-    printf("currently searching for %s\n", path);
     slash = strchr(path, '/');
     if ( slash == NULL ) {
-        printf("in the last layer\n");
         /* We cannot find another '/', we have reached the last level */
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
@@ -375,7 +385,6 @@ Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
             }
         }
     } else {
-        printf("traversing the LinkTable\n");
         /*
          * We can still find '/', time to consume the path and traverse
          * the tree structure
@@ -389,13 +398,10 @@ Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         /* move the pointer past the '/' */
         char *next_path = slash + 1;
         for (int i = 1; i < linktbl->num; i++) {
-            printf("%s\n", linktbl->links[i]->p_url);
             if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
                 /* The next sub-directory exists */
                 LinkTable *next_table = linktbl->links[i]->next_table;
                 if (!(next_table)) {
-                    printf("creating new link table for %s\n",
-                           linktbl->links[i]->f_url);
                     next_table = LinkTable_new(linktbl->links[i]->f_url);
                 }
                 return path_to_Link(next_path, next_table);

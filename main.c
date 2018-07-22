@@ -10,6 +10,7 @@ void link_test()
     LinkTable_print(ROOT_LINK_TBL);
     Link *link = path_to_Link("6/6.txt", ROOT_LINK_TBL);
     Link_download(link, 1, 20);
+    printf("downloaded content:\n");
     printf(link->body);
     printf("\n--- end of link_test ---\n\n");
 }
