@@ -8,7 +8,7 @@ An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debi
 ## The Technical Details
 I noticed that most HTTP directory listings don't provide the file size for the web page itself. I suppose this makes perfect sense, as they are generated on the fly. Whereas the actual files have got file sizes. So the listing pages can be treated as folders, and the rest are files. 
 
-This program download the HTML web pages / files using [libcurl](https://curl.haxx.se/libcurl/), then parse the listing pages using [Gumbo](https://github.com/google/gumbo-parser), present them using [libfuse](https://github.com/libfuse/libfuse)
+This program downloads the HTML web pages/files using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using [Gumbo](https://github.com/google/gumbo-parser), and presents them using [libfuse](https://github.com/libfuse/libfuse)
 
 ## Notes
 You might not want to use your actual GUI file browser when using this filesystem, KDE Dolphin caches the browser that you point your mouse at, it really does slow things down a lot! 
