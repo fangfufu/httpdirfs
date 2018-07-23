@@ -8,7 +8,6 @@
 
 #define URL_LEN_MAX 2048
 #define LINK_LEN_MAX 255
-#define NETWORK_MAXIMUM_CONNECTION 10
 
 /** \brief the link type */
 typedef enum {
