@@ -135,6 +135,10 @@ static char *url_append(const char *url, const char *sublink)
     size_t ul = strlen(url);
     size_t sl = strlen(sublink);
     str = calloc(ul + sl + needs_separator + 1, sizeof(char));
+    if (!str) {
+        fprintf(stderr, "url_append(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
     strncpy(str, url, ul);
     if (needs_separator) {
         str[ul] = '/';
@@ -171,8 +175,8 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     mem->memory = realloc(mem->memory, mem->size + realsize + 1);
     if(mem->memory == NULL) {
         /* out of memory! */
-        fprintf(stderr, "WriteMemoryCallback(): cannot realloc!\n");
-        fflush(stderr);
+        fprintf(stderr, "WriteMemoryCallback(): realloc failure!\n");
+        exit(EXIT_FAILURE);
         return 0;
     }
 
@@ -186,6 +190,10 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 static Link *Link_new(const char *p_url, LinkType type)
 {
     Link *link = calloc(1, sizeof(Link));
+    if (!link) {
+        fprintf(stderr, "Link_new(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
     strncpy(link->p_url, p_url, LINK_LEN_MAX);
     link->type = type;
 
@@ -247,6 +255,10 @@ long Link_download(const char *path, char *output_buf, size_t size,
 LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
+    if (!linktbl) {
+        fprintf(stderr, "LinkTable_new(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* populate the base URL */
     LinkTable_add(linktbl, Link_new("/", LINK_HEAD));
@@ -302,9 +314,11 @@ static void LinkTable_free(LinkTable *linktbl)
 static void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
-    linktbl->links = realloc(
-        linktbl->links,
-        linktbl->num * sizeof(Link *));
+    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
+    if (linktbl->links) {
+        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
     linktbl->links[linktbl->num - 1] = link;
 }
 
