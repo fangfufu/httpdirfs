@@ -330,15 +330,10 @@ static int is_valid_link_p_url(const char *n)
     }
 
     /* check for http:// and https:// */
-    int c = strnlen(n, LINK_LEN_MAX);
-    if (c > 5) {
-        if (n[0] == 'h' && n[1] == 't' && n[2] == 't' && n[3] == 'p') {
-            if ((n[4] == ':' && n[5] == '/' && n[6] == '/') ||
-                (n[4] == 's' && n[5] == ':' && n[6] == '/' && n[7] == '/')) {
-                return 0;
-            }
-        }
+    if ( !strncmp(n, "http://", 7) || !strncmp(n, "https://", 8) ) {
+        return 0;
     }
+
     return 1;
 }
 
