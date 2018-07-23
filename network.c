@@ -12,10 +12,6 @@
 LinkTable *ROOT_LINK_TBL;
 
 /* ------------------------ Static variable ------------------------------ */
-#ifdef USE_CURL_MULTI
-/** \brief curl multi interface - does not work */
-static CURLM *curl_multi;
-#endif
 /** \brief curl shared interface - not actually being used. */
 static CURLSH *curl_share;
 
@@ -34,16 +30,6 @@ static char *url_append(const char *url, const char *sublink);
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
 
-/**
- * \brief blocking transfer function
- * \details
- * This function does the followings:
- * - add a curl easy handle to a curl multi handle,
- * - perform the transfer (This is a blocking operation.)
- * - return when the transfer is finished.
- * It is probably unnecessary to use curl multi handle, this is done for future
- * proofing.
- */
 static void do_transfer(CURL *curl);
 
 /**
@@ -58,12 +44,6 @@ void network_init(const char *url)
 {
     curl_global_init(CURL_GLOBAL_ALL);
     ROOT_LINK_TBL = LinkTable_new(url);
-
-#ifdef USE_CURL_MULTI
-    curl_multi = curl_multi_init();
-    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-                      (long)NETWORK_MAXIMUM_CONNECTION);
-#endif
 
     curl_share = curl_share_init();
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
@@ -136,83 +116,6 @@ static void do_transfer(CURL *curl)
     fflush(stderr);
 #endif
 }
-
-#ifdef USE_CURL_MULTI
-/* This is the version that uses curl multi handle */
-static void do_transfer(CURL *curl)
-{
-    /* Add the transfer handle */
-    curl_multi_add_handle(curl_multi, curl);
-
-    CURLMcode res;
-    int num_transfers, max_fd;
-    long timeout;
-    fd_set read_fd_set, write_fd_set, exc_fd_set;
-    do {
-        fprintf(stderr, "do_transfer(): num_transfers: %d\n",
-                num_transfers);
-        fflush(stderr);
-        res = curl_multi_perform(curl_multi, &num_transfers);
-        if (res) {
-            fprintf(stderr,
-                    "do_transfer(): curl_multi_perform(): %s\n",
-                    curl_multi_strerror(res));
-            fflush(stderr);
-        }
-        if (!num_transfers) {
-            break;
-        }
-
-        res = curl_multi_fdset(curl_multi, &read_fd_set, &write_fd_set,
-                               &exc_fd_set, &max_fd);
-        if (res) {
-            fprintf(stderr,
-                    "do_transfer(): curl_multi_fdset(): %s\n",
-                    curl_multi_strerror(res));
-            fflush(stderr);
-        }
-
-        res = curl_multi_timeout(curl_multi, &timeout);
-        if (res) {
-            fprintf(stderr,
-                    "do_transfer(): curl_multi_timeout(): %s\n",
-                    curl_multi_strerror(res));
-            fflush(stderr);
-        }
-
-        if (max_fd < 0 || timeout < 0) {
-            /*
-             * To find out why, read:
-             * https://curl.haxx.se/libcurl/c/curl_multi_fdset.html
-             */
-            timeout = 100;
-        }
-
-        struct timeval t;
-        /* convert timeout (in millisec) to sec */
-        t.tv_sec = timeout/1000;
-        /* convert the remainder to microsec */
-        t.tv_usec = (timeout%1000)*1000;
-
-        /*
-         * The select() system call blocks until one or more of a set of
-         * file descriptors becomes ready.
-         * (The Linux Programming Interface, Michael Kerrisk)
-         *
-         * See also:
-         * https://curl.haxx.se/libcurl/c/curl_multi_timeout.html
-         */
-        if (select(max_fd + 1, &read_fd_set,
-            &write_fd_set, &exc_fd_set, &t) <  0) {
-            fprintf(stderr, "do_transfer(): select(%i, , , , %li): %i: %s\n",
-                    max_fd + 1, timeout, errno, strerror(errno));
-        }
-    } while(num_transfers);
-
-    /* Remove the transfer handle */
-    curl_multi_remove_handle(curl_multi, curl);
-}
-#endif
 
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -299,8 +202,8 @@ long Link_download(const char *path, char *output_buf, size_t size,
     }
 
     memmove(output_buf, buf.memory, recv);
-
     curl_easy_cleanup(curl);
+    free(buf.memory);
     return recv;
 }
 
@@ -338,9 +241,9 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
     /* Otherwise parsed the received data */
     GumboOutput* output = gumbo_parse(buf.memory);
-    free(buf.memory);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
+    free(buf.memory);
 
     /* Fill in the link table */
     LinkTable_fill(linktbl);
