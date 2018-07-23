@@ -33,7 +33,6 @@ struct Link {
     char p_url[LINK_LEN_MAX];
     char f_url[URL_LEN_MAX];
     LinkType type;
-    CURL *curl;
     size_t content_length;
     LinkTable *next_table;
 };
@@ -53,8 +52,8 @@ void network_init(const char *url);
  * \brief download a link */
 /* \return the number of bytes downloaded
  */
-size_t Link_download(Link *link, MemoryStruct *mem, off_t offset,
-                     size_t size);
+long Link_download(const char *path, char *output_buf, size_t size,
+                   off_t offset);
 
 /** \brief create a new LinkTable */
 LinkTable *LinkTable_new(const char *url);

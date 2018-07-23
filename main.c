@@ -9,19 +9,31 @@
 #include <stdio.h>
 #include <string.h>
 
+static char *BASE_URL;
+
 static int fs_getattr(const char *path, struct stat *stbuf);
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                       off_t offset, struct fuse_file_info *fi);
 static int fs_open(const char *path, struct fuse_file_info *fi);
 static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi);
+static void *fs_init(struct fuse_conn_info *conn);
+
 
 static struct fuse_operations fs_oper = {
     .getattr	= fs_getattr,
     .readdir	= fs_readdir,
     .open		= fs_open,
     .read		= fs_read,
+    .init       = fs_init
 };
+
+static void *fs_init(struct fuse_conn_info *conn)
+{
+    (void) conn;
+    network_init(BASE_URL);
+    return NULL;
+}
 
 static void fs_usage()
 {
@@ -39,7 +51,7 @@ int main(int argc, char **argv) {
         fs_usage();
     }
 
-    network_init(argv[argc-2]);
+    BASE_URL = argv[argc-2];
     argv[argc-2] = argv[argc-1];
     argv[argc-1] = NULL;
     argc--;
@@ -139,29 +151,13 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi)
 {
     (void) fi;
-    Link *link;
-    link = path_to_Link(path);
 
-    if (!link) {
-        return -ENOENT;
-    }
-
-    MemoryStruct ms;
-
-    fprintf(stderr, "fs_read(): Link_download(%s, %ld, %lu)\n",
-            link->f_url,
-            offset,
-            size
-    );
+    fprintf(stderr, "fs_read(): path: %s, offset: %ld, size: %lu\n",
+            path, offset, size);
     fflush(stderr);
-    size_t bytes_downloaded = Link_download(link, &ms, offset, size);
-    fprintf(stderr,
-            "fs_read(): returning from Link_download(), with %lu bytes.\n",
-            bytes_downloaded);
+    long received = Link_download(path, buf, size, offset);
+    fprintf(stderr, "fs_read(): received %ld bytes.\n", received);
     fflush(stderr);
 
-    memcpy(buf, ms.memory, size);
-//     free(ms.memory);
-
-    return bytes_downloaded;
+    return received;
 }

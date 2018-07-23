@@ -5,10 +5,10 @@ OBJ = main.o network.o
 %.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-mount-http-dir: $(OBJ)
+httpdirfs: $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
 .PHONY: clean
 
 clean:
-	rm -f *.o mount-http-dir
+	rm -f *.o httpdirfs

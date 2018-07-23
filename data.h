@@ -8,13 +8,11 @@
 #include <stdlib.h>
 
 /** \brief use this data type for buffer */
-typedef struct MemoryStruct MemoryStruct;
+typedef struct BufferStruct BufferStruct;
 
-struct MemoryStruct {
+struct BufferStruct {
     size_t size;
-    char *memory;
+    char *data;
 };
-
-void MemoryStruct_free(MemoryStruct *ms);
 
 #endif

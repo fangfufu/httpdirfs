@@ -21,7 +21,7 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static int is_valid_link_p_url(const char *n);
 static void Link_free(Link *link);
 static Link *Link_new(const char *p_url);
-static void Link_curl_init(Link *link);
+static CURL *Link_to_curl(Link *link);
 static void LinkTable_free(LinkTable *linktbl);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
 static void LinkTable_fill(LinkTable *linktbl);
@@ -65,22 +65,26 @@ void network_init(const char *url)
 
 }
 
-static void Link_curl_init(Link *link)
+static CURL *Link_to_curl(Link *link)
 {
-    link->curl = curl_easy_init();
+    CURL *curl = curl_easy_init();
 
     /* set up some basic curl stuff */
-    curl_easy_setopt(link->curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(link->curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
-    curl_easy_setopt(link->curl, CURLOPT_VERBOSE, 0);
-    curl_easy_setopt(link->curl, CURLOPT_FOLLOWLOCATION, 1);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     /*
      * only 1 redirection is really needed
      * - for following directories without the '/'
      */
-    curl_easy_setopt(link->curl, CURLOPT_MAXREDIRS, 3);
-    curl_easy_setopt(link->curl, CURLOPT_URL, link->f_url);
-    curl_easy_setopt(link->curl, CURLOPT_SHARE, curl_share);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3);
+    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+    fprintf(stderr, "Link_to_curl: %s\n", link->f_url);
+    fflush(stderr);
+    curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
+
+    return curl;
 }
 
 
@@ -196,18 +200,29 @@ static void do_transfer_(CURL *curl)
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
-    MemoryStruct *mem = (MemoryStruct *)userp;
-    size_t realsize = size * nmemb;
+    BufferStruct *buf = (BufferStruct *)userp;
+    size_t recv_size = size * nmemb;
 
-    mem->memory = malloc(realsize + 1);
-    if(!mem->memory) {
-        /* out of memory! */
-        printf("not enough memory (realloc returned NULL)\n");
-        return 0;
+    if ( !(buf->size) ) {
+        buf->data = malloc(recv_size + 1);
+        buf->data[recv_size] = '\0';
+        if(!buf->data) {
+            fprintf(stderr,
+                    "WriteMemoryCallback(): cannot malloc.\n");
+            fflush(stderr);
+            return 0;
+        }
+        memmove(buf->data, contents, recv_size);
+        return recv_size;
+    } else {
+        if(recv_size < buf->size) {
+            memmove(buf->data, contents, recv_size);
+            return recv_size;
+        } else {
+            memmove(buf->data, contents, buf->size);
+            return buf->size;
+        }
     }
-
-    memcpy(mem->memory, contents, realsize);
-    return realsize - 1;
 }
 
 static Link *Link_new(const char *p_url)
@@ -229,39 +244,53 @@ static Link *Link_new(const char *p_url)
 
 static void Link_free(Link *link)
 {
-    curl_easy_cleanup(link->curl);
     free(link);
     link = NULL;
 }
 
-size_t Link_download(Link *link, MemoryStruct *ms, off_t offset,
-                     size_t size)
+long Link_download(const char *path, char *output_buf, size_t size,
+                     off_t offset)
 {
+    Link *link;
+    link = path_to_Link(path);
+    if (!link) {
+        return -ENOENT;
+    }
+
     size_t start = offset;
     size_t end = start + size;
-    Link_curl_init(link);
+    CURL *curl = Link_to_curl(link);
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
 
-    curl_easy_setopt(link->curl, CURLOPT_RANGE, range_str);
-    curl_easy_setopt(link->curl, CURLOPT_WRITEDATA, (void *)ms);
+    BufferStruct buf;
+    buf.size = size;
+    buf.data = output_buf;
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
+    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    do_transfer(link->curl);
+
+    do_transfer(curl);
 
     long http_resp;
-    curl_easy_getinfo(link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
         fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
         fflush(stdout);
-        return 0;
+        return -ENOENT;
     }
 
     double dl;
-    curl_easy_getinfo(link->curl, CURLINFO_SIZE_DOWNLOAD, &dl);
-    size_t s = dl;
-    curl_easy_cleanup(link->curl);
-    return s;
+    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
+
+    size_t recv = dl;
+    if (recv > size) {
+        recv = size;
+    }
+
+    curl_easy_cleanup(curl);
+    return recv;
 }
 
 LinkTable *LinkTable_new(const char *url)
@@ -275,15 +304,17 @@ LinkTable *LinkTable_new(const char *url)
     strncpy(head_link->f_url, url, URL_LEN_MAX);
 
     /* start downloading the base URL */
-    Link_curl_init(head_link);
-    MemoryStruct ms;
-    curl_easy_setopt(head_link->curl, CURLOPT_WRITEDATA, (void *)&ms);
+    CURL *curl = Link_to_curl(head_link);
+    BufferStruct buf;
+    buf.size = 0;
+    buf.data = NULL;
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    do_transfer(head_link->curl);
+    do_transfer(curl);
 
     /* if downloading base URL failed */
     long http_resp;
-    curl_easy_getinfo(head_link->curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp != HTTP_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
 URL: %s, HTTP %ld\n", url, http_resp);
@@ -291,11 +322,11 @@ URL: %s, HTTP %ld\n", url, http_resp);
         linktbl = NULL;
         return linktbl;
     };
-    curl_easy_cleanup(head_link->curl);
+    curl_easy_cleanup(curl);
 
     /* Otherwise parsed the received data */
-    GumboOutput* output = gumbo_parse(ms.memory);
-    free(ms.memory);
+    GumboOutput* output = gumbo_parse(buf.data);
+    free(buf.data);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 
@@ -335,18 +366,16 @@ void LinkTable_fill(LinkTable *linktbl)
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
 
-            Link_curl_init(this_link);
-            curl_easy_setopt(this_link->curl, CURLOPT_NOBODY, 1);
+            CURL *curl = Link_to_curl(this_link);
+            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
 
-            do_transfer(this_link->curl);
+            do_transfer(curl);
 
             long http_resp;
-            curl_easy_getinfo(this_link->curl, CURLINFO_RESPONSE_CODE,
-                              &http_resp);
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
             if (http_resp == HTTP_OK) {
                 double cl;
-                curl_easy_getinfo(this_link->curl,
-                                  CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+                curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
                 if (cl == -1) {
                     this_link->content_length = 0;
                     this_link->type = LINK_DIR;
@@ -357,8 +386,8 @@ void LinkTable_fill(LinkTable *linktbl)
             } else {
                 this_link->type = LINK_INVALID;
             }
+            curl_easy_cleanup(curl);
         }
-        curl_easy_cleanup(this_link->curl);
     }
 }
 
