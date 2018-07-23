@@ -34,6 +34,7 @@ struct Link {
     LinkType type;
     size_t content_length;
     LinkTable *next_table;
+    int downloading;
 };
 
 struct LinkTable {
@@ -43,12 +44,6 @@ struct LinkTable {
 
 /** \brief root link table */
 extern LinkTable *ROOT_LINK_TBL;
-
-/** \brief curl multi interface handle */
-extern CURLM *curl_multi;
-
-/** \brief curl message struct */
-extern CURLMsg *curl_msg;
 
 /** \brief Initialise the network module */
 void network_init(const char *url);

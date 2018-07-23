@@ -10,22 +10,21 @@
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
 
+/* ------------------------ External variables ----------------------------*/
 LinkTable *ROOT_LINK_TBL;
-CURLM *curl_multi;
-CURLMsg *curl_msg;
 
 /* ------------------------ Static variable ------------------------------ */
 /** \brief curl shared interface - not actually being used. */
 static CURLSH *curl_share;
 /** \brief pthread mutex for thread safety */
 static pthread_mutex_t pthread_curl_lock;
+/** \brief curl multi interface handle */
+static CURLM *curl_multi;
 
-
-/* Forward declarations */
+/* -----------Forward declarations for static functions --------------------*/
 
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static LinkType p_url_type(const char *p_url);
-static void Link_free(Link *link);
 static Link *Link_new(const char *p_url, LinkType type);
 static CURL *Link_to_curl(Link *link);
 static void LinkTable_free(LinkTable *linktbl);
@@ -35,7 +34,9 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 static char *url_append(const char *url, const char *sublink);
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
-static void do_transfer(CURL *curl);
+static void blocking_single_transfer(CURL *curl);
+static void transfer_wrapper(CURL *curl);
+static int is_downloading(Link *link);
 
 /**
  * \brief convert a HTML page to a LinkTable
@@ -45,6 +46,15 @@ static void do_transfer(CURL *curl);
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* -------------------------- Functions ---------------------------------- */
+static int is_downloading(Link *link)
+{
+    return link->downloading;
+}
+
+static void transfer_wrapper(CURL *curl)
+{
+    blocking_single_transfer(curl);
+}
 
 static void pthread_lock_cb(CURL *handle, curl_lock_data data,
                     curl_lock_access access, void *userptr)
@@ -134,21 +144,20 @@ static char *url_append(const char *url, const char *sublink)
 }
 
 /* This is the single thread version */
-static void do_transfer(CURL *curl)
+static void blocking_single_transfer(CURL *curl)
 {
 #ifdef HTTPDIRFS_DEBUG
-#pragma GCC diagnostic ignored "-Wformat"
-    fprintf(stderr, "do_transfer(): handle %x\n", curl);
+    fprintf(stderr, "blocking_single_transfer(): handle %p\n", curl);
     fflush(stderr);
 #endif
     CURLcode res = curl_easy_perform(curl);
     if (res) {
-        fprintf(stderr, "do_transfer() failed: %u, %s\n", res,
+        fprintf(stderr, "blocking_single_transfer() failed: %u, %s\n", res,
                 curl_easy_strerror(res));
         fflush(stderr);
     }
 #ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "do_transfer(): DONE\n");
+    fprintf(stderr, "blocking_single_transfer(): DONE\n");
     fflush(stderr);
 #endif
 }
@@ -189,12 +198,6 @@ static Link *Link_new(const char *p_url, LinkType type)
     return link;
 }
 
-static void Link_free(Link *link)
-{
-    free(link);
-    link = NULL;
-}
-
 long Link_download(const char *path, char *output_buf, size_t size,
                      off_t offset)
 {
@@ -216,7 +219,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    do_transfer(curl);
+    transfer_wrapper(curl);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -258,7 +261,7 @@ LinkTable *LinkTable_new(const char *url)
     buf.memory = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    do_transfer(curl);
+    transfer_wrapper(curl);
 
     /* if downloading base URL failed */
     long http_resp;
@@ -290,11 +293,10 @@ URL: %s, HTTP %ld\n", url, http_resp);
 static void LinkTable_free(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
-        Link_free(linktbl->links[i]);
+        free(linktbl->links[i]);
     }
     free(linktbl->links);
     free(linktbl);
-    linktbl = NULL;
 }
 
 static void LinkTable_add(LinkTable *linktbl, Link *link)
@@ -313,7 +315,7 @@ size_t Link_get_size(Link *this_link)
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        do_transfer(curl);
+        transfer_wrapper(curl);
         long http_resp;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (http_resp == HTTP_OK) {
@@ -355,9 +357,8 @@ void LinkTable_fill(LinkTable *linktbl)
 #ifdef HTTPDIRFS_INFO
 void LinkTable_print(LinkTable *linktbl)
 {
-#pragma GCC diagnostic ignored "-Wformat"
     fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, "            LinkTable %x\n", linktbl);
+    fprintf(stderr, "            LinkTable %p\n", linktbl);
     fprintf(stderr, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
