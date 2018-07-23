@@ -1,7 +1,7 @@
 CC=gcc
 CFLAGS= -O2 -Wall -Wextra -lgumbo -lcurl -lfuse -D_FILE_OFFSET_BITS=64 \
 -DHTTPDIRFS_INFO
-OBJ = main.o network.o network_multi.o
+OBJ = main.o network.o
 
 %.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
