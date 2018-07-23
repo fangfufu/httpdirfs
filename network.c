@@ -69,7 +69,7 @@ static CURL *Link_to_curl(Link *link)
      * only 1 redirection is really needed
      * - for following directories without the '/'
      */
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3);
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 1);
     curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
