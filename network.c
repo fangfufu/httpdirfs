@@ -18,9 +18,9 @@ static CURLSH *curl_share;
 /* Forward declarations */
 
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
-static int is_valid_link_p_url(const char *n);
+static LinkType p_url_type(const char *p_url);
 static void Link_free(Link *link);
-static Link *Link_new(const char *p_url);
+static Link *Link_new(const char *p_url, LinkType type);
 static CURL *Link_to_curl(Link *link);
 static void LinkTable_free(LinkTable *linktbl);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
@@ -138,19 +138,17 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     return realsize;
 }
 
-static Link *Link_new(const char *p_url)
+static Link *Link_new(const char *p_url, LinkType type)
 {
     Link *link = calloc(1, sizeof(Link));
-
     strncpy(link->p_url, p_url, LINK_LEN_MAX);
+    link->type = type;
 
     /* remove the '/' from p_url if it exists */
     char *c = &(link->p_url[strnlen(link->p_url, LINK_LEN_MAX) - 1]);
     if ( *c == '/') {
         *c = '\0';
     }
-
-    link->type = LINK_UNKNOWN;
 
     return link;
 }
@@ -212,7 +210,7 @@ LinkTable *LinkTable_new(const char *url)
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
 
     /* populate the base URL */
-    LinkTable_add(linktbl, Link_new("/"));
+    LinkTable_add(linktbl, Link_new("/", LINK_HEAD));
     Link *head_link = linktbl->links[0];
     head_link->type = LINK_HEAD;
     strncpy(head_link->f_url, url, URL_LEN_MAX);
@@ -247,7 +245,9 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
     /* Fill in the link table */
     LinkTable_fill(linktbl);
-
+#ifdef HTTPDIRFS_INFO
+    LinkTable_print(linktbl);
+#endif
     return linktbl;
 }
 
@@ -270,71 +270,86 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links[linktbl->num - 1] = link;
 }
 
+size_t Link_get_size(Link *this_link)
+{
+    double cl = 0;
+
+    if (this_link->type == LINK_FILE) {
+        CURL *curl = Link_to_curl(this_link);
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+        do_transfer(curl);
+        long http_resp;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (http_resp == HTTP_OK) {
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+            if (cl == -1) {
+                /* Turns out not to be a file after all */
+                this_link->content_length = 0;
+                this_link->type = LINK_DIR;
+            } else {
+                this_link->content_length = cl;
+                this_link->type = LINK_FILE;
+            }
+        } else {
+            this_link->type = LINK_INVALID;
+        }
+        curl_easy_cleanup(curl);
+    }
+
+    return cl;
+}
+
 void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        if (this_link->type == LINK_UNKNOWN) {
+        if (this_link->type) {
             char *url;
             url = url_append(head_link->f_url, this_link->p_url);
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
-
-            CURL *curl = Link_to_curl(this_link);
-            curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-
-            do_transfer(curl);
-
-            long http_resp;
-            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-            if (http_resp == HTTP_OK) {
-                double cl;
-                curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-                if (cl == -1) {
-                    this_link->content_length = 0;
-                    this_link->type = LINK_DIR;
-                } else {
-                    this_link->content_length = cl;
-                    this_link->type = LINK_FILE;
-                }
-            } else {
-                this_link->type = LINK_INVALID;
+            if (this_link->type == LINK_FILE) {
+                this_link->content_length = Link_get_size(this_link);
             }
-            curl_easy_cleanup(curl);
         }
     }
 }
 
-#ifdef HTTPDIRFS_DEBUG
+#ifdef HTTPDIRFS_INFO
 void LinkTable_print(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        printf("%d %c %lu %s %s\n",
+        fprintf(stderr, "%d %c %lu %s %s\n",
                i,
                this_link->type,
                this_link->content_length,
                this_link->p_url,
                this_link->f_url
               );
+        fflush(stderr);
     }
 }
 #endif
 
-static int is_valid_link_p_url(const char *n)
+static LinkType p_url_type(const char *p_url)
 {
     /* The link name has to start with alphanumerical character */
-    if (!isalnum(n[0])) {
-        return 0;
+    if (!isalnum(p_url[0])) {
+        return LINK_INVALID;
     }
 
     /* check for http:// and https:// */
-    if ( !strncmp(n, "http://", 7) || !strncmp(n, "https://", 8) ) {
-        return 0;
+    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
+        return LINK_INVALID;
     }
 
-    return 1;
+    if ( p_url[strlen(p_url) - 1] == '/' ) {
+        return LINK_DIR;
+    }
+
+    return LINK_FILE;
 }
 
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
@@ -347,8 +362,9 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     if (node->v.element.tag == GUMBO_TAG_A &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
-        if (is_valid_link_p_url(href->value)) {
-            LinkTable_add(linktbl, Link_new(href->value));
+        LinkType type = p_url_type(href->value);
+        if (type) {
+            LinkTable_add(linktbl, Link_new(href->value, type));
         }
     }
 
