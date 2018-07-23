@@ -12,7 +12,11 @@
 LinkTable *ROOT_LINK_TBL;
 
 /* ------------------------ Static variable ------------------------------ */
+#ifdef USE_CURL_MULTI
+/** \brief curl multi interface - does not work */
 static CURLM *curl_multi;
+#endif
+/** \brief curl shared interface - not actually being used. */
 static CURLSH *curl_share;
 
 /* Forward declarations */
@@ -53,20 +57,27 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 void network_init(const char *url)
 {
     curl_global_init(CURL_GLOBAL_ALL);
+    ROOT_LINK_TBL = LinkTable_new(url);
+
+#ifdef USE_CURL_MULTI
     curl_multi = curl_multi_init();
     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
                       (long)NETWORK_MAXIMUM_CONNECTION);
-
-    ROOT_LINK_TBL = LinkTable_new(url);
+#endif
 
     curl_share = curl_share_init();
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
 }
 
 static CURL *Link_to_curl(Link *link)
 {
+#ifdef HTTPDIRFS_INFO
+    fprintf(stderr, "Link_to_curl(): %s\n", link->f_url);
+    fflush(stderr);
+#endif
+
     CURL *curl = curl_easy_init();
 
     /* set up some basic curl stuff */
@@ -80,8 +91,7 @@ static CURL *Link_to_curl(Link *link)
      */
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 3);
     curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    fprintf(stderr, "Link_to_curl: %s\n", link->f_url);
-    fflush(stderr);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
 
     return curl;
@@ -108,25 +118,28 @@ static char *url_append(const char *url, const char *sublink)
 }
 
 /* This is the single thread version */
-#pragma GCC diagnostic ignored "-Wunused-function"
 static void do_transfer(CURL *curl)
 {
+#ifdef HTTPDIRFS_DEBUG
 #pragma GCC diagnostic ignored "-Wformat"
     fprintf(stderr, "do_transfer(): handle %x\n", curl);
     fflush(stderr);
+#endif
     CURLcode res = curl_easy_perform(curl);
     if (res) {
         fprintf(stderr, "do_transfer() failed: %u, %s\n", res,
                 curl_easy_strerror(res));
         fflush(stderr);
     }
+#ifdef HTTPDIRFS_DEBUG
     fprintf(stderr, "do_transfer(): DONE\n");
     fflush(stderr);
+#endif
 }
 
+#ifdef USE_CURL_MULTI
 /* This is the version that uses curl multi handle */
-#pragma GCC diagnostic ignored "-Wunused-function"
-static void do_transfer_(CURL *curl)
+static void do_transfer(CURL *curl)
 {
     /* Add the transfer handle */
     curl_multi_add_handle(curl_multi, curl);
@@ -144,6 +157,7 @@ static void do_transfer_(CURL *curl)
             fprintf(stderr,
                     "do_transfer(): curl_multi_perform(): %s\n",
                     curl_multi_strerror(res));
+            fflush(stderr);
         }
         if (!num_transfers) {
             break;
@@ -155,6 +169,7 @@ static void do_transfer_(CURL *curl)
             fprintf(stderr,
                     "do_transfer(): curl_multi_fdset(): %s\n",
                     curl_multi_strerror(res));
+            fflush(stderr);
         }
 
         res = curl_multi_timeout(curl_multi, &timeout);
@@ -162,6 +177,7 @@ static void do_transfer_(CURL *curl)
             fprintf(stderr,
                     "do_transfer(): curl_multi_timeout(): %s\n",
                     curl_multi_strerror(res));
+            fflush(stderr);
         }
 
         if (max_fd < 0 || timeout < 0) {
@@ -196,6 +212,7 @@ static void do_transfer_(CURL *curl)
     /* Remove the transfer handle */
     curl_multi_remove_handle(curl_multi, curl);
 }
+#endif
 
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
@@ -269,7 +286,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
         fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
-        fflush(stdout);
+        fflush(stderr);
         return -ENOENT;
     }
 
@@ -312,6 +329,7 @@ LinkTable *LinkTable_new(const char *url)
     if (http_resp != HTTP_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
 URL: %s, HTTP %ld\n", url, http_resp);
+        fflush(stderr);
         LinkTable_free(linktbl);
         linktbl = NULL;
         return linktbl;
@@ -385,7 +403,7 @@ void LinkTable_fill(LinkTable *linktbl)
     }
 }
 
-
+#ifdef HTTPDIRFS_DEBUG
 void LinkTable_print(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
@@ -399,6 +417,7 @@ void LinkTable_print(LinkTable *linktbl)
               );
     }
 }
+#endif
 
 static int is_valid_link_p_url(const char *n)
 {
@@ -489,7 +508,10 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
             }
         }
     }
+#ifdef HTTPDIRFS_DEBUG
     fprintf(stderr, "path_to_Link(): %s does not exist.\n", path);
+    fflush(stderr);
+#endif
     return NULL;
 }
 
