@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <pthread.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,9 @@ LinkTable *ROOT_LINK_TBL;
 /* ------------------------ Static variable ------------------------------ */
 /** \brief curl shared interface - not actually being used. */
 static CURLSH *curl_share;
+/** \brief pthread mutex for thread safety */
+static pthread_mutex_t pthread_curl_lock;
+
 
 /* Forward declarations */
 
@@ -40,6 +44,26 @@ static void do_transfer(CURL *curl);
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* -------------------------- Functions ---------------------------------- */
+
+static void pthread_lock_cb(CURL *handle, curl_lock_data data,
+                    curl_lock_access access, void *userptr)
+{
+    (void)access; /* unused */
+    (void)userptr; /* unused */
+    (void)handle; /* unused */
+    (void)data; /* unused */
+    pthread_mutex_lock(&pthread_curl_lock);
+}
+
+static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
+                      void *userptr)
+{
+    (void)userptr; /* unused */
+    (void)handle;  /* unused */
+    (void)data;    /* unused */
+    pthread_mutex_unlock(&pthread_curl_lock);
+}
+
 void network_init(const char *url)
 {
     curl_global_init(CURL_GLOBAL_ALL);
@@ -49,12 +73,16 @@ void network_init(const char *url)
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+
+    pthread_mutex_init(&pthread_curl_lock, NULL);
+    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
+    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
 }
 
 static CURL *Link_to_curl(Link *link)
 {
 #ifdef HTTPDIRFS_INFO
-    fprintf(stderr, "Link_to_curl(): %s\n", link->f_url);
+    fprintf(stderr, "Link_to_curl(%s);\n", link->f_url);
     fflush(stderr);
 #endif
 
@@ -319,6 +347,10 @@ void LinkTable_fill(LinkTable *linktbl)
 #ifdef HTTPDIRFS_INFO
 void LinkTable_print(LinkTable *linktbl)
 {
+#pragma GCC diagnostic ignored "-Wformat"
+    fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, "            LinkTable %x\n", linktbl);
+    fprintf(stderr, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         fprintf(stderr, "%d %c %lu %s %s\n",
@@ -330,6 +362,7 @@ void LinkTable_print(LinkTable *linktbl)
               );
         fflush(stderr);
     }
+    fprintf(stderr, "--------------------------------------------\n");
 }
 #endif
 
