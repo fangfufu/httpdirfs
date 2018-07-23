@@ -11,6 +11,8 @@
 #define HTTP_PARTIAL_CONTENT 206
 
 LinkTable *ROOT_LINK_TBL;
+CURLM *curl_multi;
+CURLMsg *curl_msg;
 
 /* ------------------------ Static variable ------------------------------ */
 /** \brief curl shared interface - not actually being used. */
@@ -33,7 +35,6 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 static char *url_append(const char *url, const char *sublink);
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
-
 static void do_transfer(CURL *curl);
 
 /**
@@ -66,9 +67,11 @@ static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
 
 void network_init(const char *url)
 {
+    /* Global related */
     curl_global_init(CURL_GLOBAL_ALL);
     ROOT_LINK_TBL = LinkTable_new(url);
 
+    /* Share related */
     curl_share = curl_share_init();
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
@@ -77,6 +80,11 @@ void network_init(const char *url)
     pthread_mutex_init(&pthread_curl_lock, NULL);
     curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
     curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
+
+    /* Multi related */
+    curl_multi = curl_multi_init();
+    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+                      CURL_MULTI_MAX_CONNECTION);
 }
 
 static CURL *Link_to_curl(Link *link)

@@ -8,6 +8,7 @@
 
 #define URL_LEN_MAX 2048
 #define LINK_LEN_MAX 255
+#define CURL_MULTI_MAX_CONNECTION 10
 
 /** \brief the link type */
 typedef enum {
@@ -42,6 +43,12 @@ struct LinkTable {
 
 /** \brief root link table */
 extern LinkTable *ROOT_LINK_TBL;
+
+/** \brief curl multi interface handle */
+extern CURLM *curl_multi;
+
+/** \brief curl message struct */
+extern CURLMsg *curl_msg;
 
 /** \brief Initialise the network module */
 void network_init(const char *url);
