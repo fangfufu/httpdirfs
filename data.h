@@ -10,9 +10,11 @@
 /** \brief use this data type for buffer */
 typedef struct BufferStruct BufferStruct;
 
-struct BufferStruct {
+struct MemoryStruct {
+    char *memory;
     size_t size;
-    char *data;
 };
+
+typedef struct MemoryStruct MemoryStruct;
 
 #endif

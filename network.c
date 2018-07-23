@@ -98,7 +98,7 @@ static char *url_append(const char *url, const char *sublink)
     char *str;
     size_t ul = strlen(url);
     size_t sl = strlen(sublink);
-    str = calloc(ul + sl + needs_separator, sizeof(char));
+    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
     strncpy(str, url, ul);
     if (needs_separator) {
         str[ul] = '/';
@@ -200,29 +200,22 @@ static void do_transfer_(CURL *curl)
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
-    BufferStruct *buf = (BufferStruct *)userp;
-    size_t recv_size = size * nmemb;
+    size_t realsize = size * nmemb;
+    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
 
-    if ( !(buf->size) ) {
-        buf->data = malloc(recv_size + 1);
-        buf->data[recv_size] = '\0';
-        if(!buf->data) {
-            fprintf(stderr,
-                    "WriteMemoryCallback(): cannot malloc.\n");
-            fflush(stderr);
-            return 0;
-        }
-        memmove(buf->data, contents, recv_size);
-        return recv_size;
-    } else {
-        if(recv_size < buf->size) {
-            memmove(buf->data, contents, recv_size);
-            return recv_size;
-        } else {
-            memmove(buf->data, contents, buf->size);
-            return buf->size;
-        }
+    mem->memory = realloc(mem->memory, mem->size + realsize + 1);
+    if(mem->memory == NULL) {
+        /* out of memory! */
+        fprintf(stderr, "WriteMemoryCallback(): cannot realloc!\n");
+        fflush(stderr);
+        return 0;
     }
+
+    memmove(&(mem->memory[mem->size]), contents, realsize);
+    mem->size += realsize;
+    mem->memory[mem->size] = 0;
+
+    return realsize;
 }
 
 static Link *Link_new(const char *p_url)
@@ -263,12 +256,11 @@ long Link_download(const char *path, char *output_buf, size_t size,
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
 
-    BufferStruct buf;
-    buf.size = size;
-    buf.data = output_buf;
+    MemoryStruct buf;
+    buf.size = 0;
+    buf.memory = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
-
 
     do_transfer(curl);
 
@@ -289,6 +281,8 @@ long Link_download(const char *path, char *output_buf, size_t size,
         recv = size;
     }
 
+    memmove(output_buf, buf.memory, recv);
+
     curl_easy_cleanup(curl);
     return recv;
 }
@@ -305,9 +299,9 @@ LinkTable *LinkTable_new(const char *url)
 
     /* start downloading the base URL */
     CURL *curl = Link_to_curl(head_link);
-    BufferStruct buf;
+    MemoryStruct buf;
     buf.size = 0;
-    buf.data = NULL;
+    buf.memory = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
     do_transfer(curl);
@@ -325,8 +319,8 @@ URL: %s, HTTP %ld\n", url, http_resp);
     curl_easy_cleanup(curl);
 
     /* Otherwise parsed the received data */
-    GumboOutput* output = gumbo_parse(buf.data);
-    free(buf.data);
+    GumboOutput* output = gumbo_parse(buf.memory);
+    free(buf.memory);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 
