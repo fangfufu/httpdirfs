@@ -1,6 +1,4 @@
-tmp
 *.o
-*_test.txt
 *.kate-swp
 httpdirfs
-mnt
+html

@@ -12,7 +12,10 @@ httpdirfs: $(OBJ)
 install:
 	cp httpdirfs ${HOME}/bin/
 
+doc:
+	doxygen Doxyfile
+
 .PHONY: clean
 
 clean:
-	rm -f *.o httpdirfs
+	rm -rf *.o httpdirfs html
