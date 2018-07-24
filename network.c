@@ -11,7 +11,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
 #define HTTP_RANGE_NOT_SATISFIABLE 416
@@ -53,10 +52,8 @@ static pthread_mutex_t *crypto_lockarray;
 static pthread_mutex_t curl_lock;
 
 /* -------------------------- Functions ---------------------------------- */
-#pragma GCC diagnostic ignored "-Wunused-function"
 static void lock_callback(int mode, int type, char *file, int line)
 {
-#pragma GCC diagnostic pop
     (void)file;
     (void)line;
     if(mode & CRYPTO_LOCK) {
@@ -66,10 +63,9 @@ static void lock_callback(int mode, int type, char *file, int line)
         pthread_mutex_unlock(&(crypto_lockarray[type]));
     }
 }
-#pragma GCC diagnostic ignored "-Wunused-function"
+
 static unsigned long thread_id(void)
 {
-#pragma GCC diagnostic pop
     unsigned long ret;
 
     ret = (unsigned long)pthread_self();
