@@ -113,10 +113,6 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
         }
         linktbl = link->next_table;
         if (!linktbl) {
-#ifdef HTTPDIRFS_DEBUG
-            fprintf(stderr, "LinkTable_new(): %s\n", link->f_url);
-
-#endif
             linktbl = LinkTable_new(link->f_url);
             if(!linktbl) {
                 return -ENOENT;
@@ -134,7 +130,6 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
         }
     }
 
-
     return 0;
 }
 
@@ -149,7 +144,6 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EACCES;
     }
 
-
     return 0;
 }
 
@@ -158,15 +152,8 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi)
 {
     (void) fi;
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "fs_read(): path: %s, offset: %ld, size: %lu\n",
-            path, offset, size);
 
-#endif
     long received = Link_download(path, buf, size, offset);
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "fs_read(): received %ld bytes.\n", received);
 
-#endif
     return received;
 }

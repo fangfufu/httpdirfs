@@ -18,8 +18,8 @@ typedef struct {
 } MemoryStruct;
 
 typedef enum {
-    FILESIZE,
-    DATA
+    FILESIZE = 's',
+    DATA = 'd'
 } TransferType;
 
 typedef struct {
@@ -43,7 +43,7 @@ static CURLM *curl_multi;
 
 /* Link related */
 static Link *Link_new(const char *p_url, LinkType type);
-static size_t Link_get_size(Link *this_link);
+static void Link_get_size(Link *this_link);
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 static CURL *Link_to_curl(Link *link);
 static LinkType p_url_type(const char *p_url);
@@ -56,7 +56,6 @@ static void LinkTable_free(LinkTable *linktbl);
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* Transfer related */
-static void transfer_wrapper(CURL *curl, TransferType type);
 static void blocking_transfer(CURL *curl);
 static void nonblocking_transfer(CURL *curl);
 static int curl_multi_perform_once();
@@ -64,14 +63,6 @@ static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
 
 /* -------------------------- Functions ---------------------------------- */
-static void transfer_wrapper(CURL *curl, TransferType type)
-{
-    if (type == DATA) {
-        blocking_transfer(curl);
-    } else if (type == FILESIZE) {
-        nonblocking_transfer(curl);
-    }
-}
 
 static void nonblocking_transfer(CURL *curl)
 {
@@ -86,10 +77,13 @@ static void nonblocking_transfer(CURL *curl)
 /* This uses the curl multi interface */
 static void blocking_transfer(CURL *curl)
 {
-    volatile TransferStruct transfer;
-    transfer.type = DATA;
-    transfer.transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+    TransferStruct *transfer = malloc(sizeof(TransferStruct));
+    if (!transfer) {
+        fprintf(stderr, "blocking_transfer(): malloc failed!\n");
+    }
+    transfer->type = DATA;
+    transfer->transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if(res > 0) {
         fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
@@ -97,9 +91,10 @@ static void blocking_transfer(CURL *curl)
         exit(EXIT_FAILURE);
     }
 
-    while (transfer.transferring) {
+    while (transfer->transferring) {
         curl_multi_perform_once();
     }
+    free(transfer);
 }
 
 /**
@@ -173,8 +168,34 @@ static int curl_multi_perform_once()
                         curl_msg->data.result,
                         curl_easy_strerror(curl_msg->data.result),
                         url);
+            } else {
+                /* Transfer successful, query the file size */
+                if (transfer->type == FILESIZE) {
+                    Link *this_link = transfer->link;
+                    long http_resp;
+                    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+                    if (http_resp == HTTP_OK) {
+                        double cl = 0;
+                        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+                        if (cl == -1) {
+                            /* Turns out not to be a file after all */
+                            this_link->content_length = 0;
+                            this_link->type = LINK_DIR;
+                        } else {
+                            this_link->content_length = cl;
+                            this_link->type = LINK_FILE;
+                        }
+                    } else {
+                        this_link->type = LINK_INVALID;
+                    }
+                }
             }
             curl_multi_remove_handle(curl_multi, curl);
+            /* clean up the handle, if we are querying the file size */
+            if (transfer->type == FILESIZE) {
+                curl_easy_cleanup(curl);
+                free(transfer);
+            }
         } else {
             fprintf(stderr, "curl_multi_perform_once(): curl_msg->msg: %d\n",
                     curl_msg->msg);
@@ -351,7 +372,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    transfer_wrapper(curl, DATA);
+    blocking_transfer(curl);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -400,7 +421,7 @@ LinkTable *LinkTable_new(const char *url)
 //     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    transfer_wrapper(curl, DATA);
+    blocking_transfer(curl);
 
     /* if downloading base URL failed */
     long http_resp;
@@ -446,42 +467,26 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links[linktbl->num - 1] = link;
 }
 
-size_t Link_get_size(Link *this_link)
+void Link_get_size(Link *this_link)
 {
-    #ifdef HTTPDIRFS_INFO
+#ifdef HTTPDIRFS_INFO
     fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
-    #endif
-    double cl = 0;
+#endif
 
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
 
-        TransferStruct transfer;
-        transfer.link = this_link;
-        transfer.type = FILESIZE;
-        curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
-
-        transfer_wrapper(curl, DATA);
-        long http_resp;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-        if (http_resp == HTTP_OK) {
-            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-            if (cl == -1) {
-                /* Turns out not to be a file after all */
-                this_link->content_length = 0;
-                this_link->type = LINK_DIR;
-            } else {
-                this_link->content_length = cl;
-                this_link->type = LINK_FILE;
-            }
-        } else {
-            this_link->type = LINK_INVALID;
+        TransferStruct *transfer = malloc(sizeof(TransferStruct));
+        if (!transfer) {
+            fprintf(stderr, "Link_get_size(): malloc failed!\n");
         }
-        curl_easy_cleanup(curl);
-    }
+        transfer->link = this_link;
+        transfer->type = FILESIZE;
+        curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
 
-    return cl;
+        nonblocking_transfer(curl);
+    }
 }
 
 void LinkTable_fill(LinkTable *linktbl)
@@ -495,7 +500,7 @@ void LinkTable_fill(LinkTable *linktbl)
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
-                this_link->content_length = Link_get_size(this_link);
+                Link_get_size(this_link);
             }
         }
     }
@@ -626,10 +631,6 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
             }
         }
     }
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "path_to_Link(): %s does not exist.\n", path);
-
-#endif
     return NULL;
 }
 
