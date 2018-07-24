@@ -154,7 +154,7 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 {
     (void) fi;
 
-    long received = Link_download(path, buf, size, offset);
+    long received = path_download(path, buf, size, offset);
 
     return received;
 }
