@@ -495,7 +495,6 @@ void Link_get_stat(Link *this_link)
     }
 }
 
-
 void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
