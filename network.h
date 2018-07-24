@@ -1,15 +1,11 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#include <curl/curl.h>
-#include <gumbo.h>
+#include <stdlib.h>
 
 #define URL_LEN_MAX 2048
 #define LINK_LEN_MAX 255
-
-#ifndef HTTPDIRFS_SINGLE
-#   define CURL_MULTI_MAX_CONNECTION 20
-#endif
+#define CURL_MULTI_MAX_CONNECTION 20
 
 /** \brief the link type */
 typedef enum {
