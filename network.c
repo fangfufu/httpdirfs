@@ -11,6 +11,13 @@
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
 
+/* ------------------------ Local structs ---------------------------------*/
+struct MemoryStruct {
+    char *memory;
+    size_t size;
+};
+typedef struct MemoryStruct MemoryStruct;
+
 /* ------------------------ External variables ----------------------------*/
 LinkTable *ROOT_LINK_TBL;
 
