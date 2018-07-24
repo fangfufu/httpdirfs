@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
@@ -18,43 +19,165 @@ LinkTable *ROOT_LINK_TBL;
 static CURLSH *curl_share;
 /** \brief pthread mutex for thread safety */
 static pthread_mutex_t pthread_curl_lock;
+#ifndef HTTPDIRFS_SINGLE
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
+#endif
 
 /* -----------Forward declarations for static functions --------------------*/
 
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
-static LinkType p_url_type(const char *p_url);
+/* Link related */
 static Link *Link_new(const char *p_url, LinkType type);
 static CURL *Link_to_curl(Link *link);
-static void LinkTable_free(LinkTable *linktbl);
+static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
+static LinkType p_url_type(const char *p_url);
+static char *url_append(const char *url, const char *sublink);
+
+/* LinkTable related */
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
 static void LinkTable_fill(LinkTable *linktbl);
-static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
-static char *url_append(const char *url, const char *sublink);
+static void LinkTable_free(LinkTable *linktbl);
+
+/* Transfer related */
+#ifdef HTTPDIRFS_SINGLE
+static void blocking_single_transfer(CURL *curl);
+#else
+static void blocking_multi_transfer(CURL *curl);
+static void curl_multi_perform_once();
+#endif
+static void transfer_wrapper(CURL *curl);
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
-static void blocking_single_transfer(CURL *curl);
-static void transfer_wrapper(CURL *curl);
-static int is_downloading(Link *link);
-
-/**
- * \brief convert a HTML page to a LinkTable
- * \details Shamelessly copied and pasted from:
- * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
- */
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* -------------------------- Functions ---------------------------------- */
-static int is_downloading(Link *link)
-{
-    return link->downloading;
-}
-
 static void transfer_wrapper(CURL *curl)
 {
+#ifdef HTTPDIRFS_SINGLE
     blocking_single_transfer(curl);
+#else
+    blocking_multi_transfer(curl);
+#endif
 }
+
+/* This is the single thread version */
+#ifdef HTTPDIRFS_SINGLE
+static void blocking_single_transfer(CURL *curl)
+{
+#ifdef HTTPDIRFS_DEBUG
+    fprintf(stderr, "blocking_single_transfer(): handle %p\n", curl);
+
+#endif
+    CURLcode res = curl_easy_perform(curl);
+    if (res) {
+        fprintf(stderr, "blocking_single_transfer() failed: %u, %s\n", res,
+                curl_easy_strerror(res));
+
+    }
+#ifdef HTTPDIRFS_DEBUG
+    fprintf(stderr, "blocking_single_transfer(): DONE\n");
+
+#endif
+}
+#else
+/* This uses the curl multi interface */
+static void blocking_multi_transfer(CURL *curl)
+{
+    volatile int transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transferring);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
+    }
+
+    while (transferring) {
+        curl_multi_perform_once();
+    }
+}
+
+/**
+ * Shamelessly copy and pasted from:
+ * https://curl.haxx.se/libcurl/c/10-at-a-time.html
+ */
+static void curl_multi_perform_once()
+{
+    /* Get curl multi interface to perform pending tasks */
+    int n_running_curl;
+    curl_multi_perform(curl_multi, &n_running_curl);
+
+    /* Check if any of the tasks encountered error */
+    int max_fd;
+    fd_set read_fd_set;
+    fd_set write_fd_set;
+    fd_set exc_fd_set;
+    FD_ZERO(&read_fd_set);
+    FD_ZERO(&write_fd_set);
+    FD_ZERO(&exc_fd_set);
+    CURLMcode res;
+    res = curl_multi_fdset(curl_multi, &read_fd_set, &write_fd_set, &exc_fd_set,
+                           &max_fd);
+    if(res > 0) {
+        fprintf(stderr, "curl_multi_perform_once(): curl_multi_fdset: %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
+    }
+
+    long timeout;
+    if(curl_multi_timeout(curl_multi, &timeout)) {
+        fprintf(stderr, "curl_multi_perform_once(): curl_multi_timeout\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if(timeout == -1) {
+        timeout = 100;
+    }
+
+    if(max_fd == -1) {
+        sleep((unsigned int)timeout / 1000);
+    } else {
+        struct timeval t;
+        t.tv_sec = timeout/1000;
+        t.tv_usec = (timeout%1000)*1000;
+
+        if(select(max_fd + 1, &read_fd_set, &write_fd_set,
+            &exc_fd_set, &t) < 0) {
+            fprintf(stderr,
+                    "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
+                    max_fd + 1, timeout, errno, strerror(errno));
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    /* Process messages */
+    int n_mesgs;
+    CURLMsg *curl_msg;
+    while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
+        if (curl_msg->msg == CURLMSG_DONE) {
+            int *transferring;
+            CURL *curl = curl_msg->easy_handle;
+            curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
+                                &transferring);
+            *transferring = 0;
+            char *url = NULL;
+            if (curl_msg->data.result) {
+                curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, url);
+                fprintf(stderr,
+                        "curl_multi_perform_once(): %d - %s <%s>\n",
+                        curl_msg->data.result,
+                        curl_easy_strerror(curl_msg->data.result),
+                        url);
+            }
+            curl_multi_remove_handle(curl_multi, curl);
+        } else {
+            fprintf(stderr, "curl_multi_perform_once(): curl_msg->msg: %d\n",
+                    curl_msg->msg);
+        }
+    }
+}
+#endif
+
 
 static void pthread_lock_cb(CURL *handle, curl_lock_data data,
                     curl_lock_access access, void *userptr)
@@ -78,8 +201,10 @@ static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
 void network_init(const char *url)
 {
     /* Global related */
-    curl_global_init(CURL_GLOBAL_ALL);
-    ROOT_LINK_TBL = LinkTable_new(url);
+    if (curl_global_init(CURL_GLOBAL_ALL)) {
+        fprintf(stderr, "network_init(): curl_global_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* Share related */
     curl_share = curl_share_init();
@@ -91,38 +216,20 @@ void network_init(const char *url)
     curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
     curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
 
+#ifndef HTTPDIRFS_SINGLE
     /* Multi related */
     curl_multi = curl_multi_init();
+    if (!curl_multi) {
+        fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
                       CURL_MULTI_MAX_CONNECTION);
-}
-
-static CURL *Link_to_curl(Link *link)
-{
-#ifdef HTTPDIRFS_INFO
-    fprintf(stderr, "Link_to_curl(%s);\n", link->f_url);
-    fflush(stderr);
 #endif
 
-    CURL *curl = curl_easy_init();
-
-    /* set up some basic curl stuff */
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    /*
-     * only 1 redirection is really needed
-     * - for following directories without the '/'
-     */
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 1);
-    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
-    curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
-
-    return curl;
+    /* create the root link table */
+    ROOT_LINK_TBL = LinkTable_new(url);
 }
-
 
 static char *url_append(const char *url, const char *sublink)
 {
@@ -147,25 +254,6 @@ static char *url_append(const char *url, const char *sublink)
     return str;
 }
 
-/* This is the single thread version */
-static void blocking_single_transfer(CURL *curl)
-{
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "blocking_single_transfer(): handle %p\n", curl);
-    fflush(stderr);
-#endif
-    CURLcode res = curl_easy_perform(curl);
-    if (res) {
-        fprintf(stderr, "blocking_single_transfer() failed: %u, %s\n", res,
-                curl_easy_strerror(res));
-        fflush(stderr);
-    }
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "blocking_single_transfer(): DONE\n");
-    fflush(stderr);
-#endif
-}
-
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
@@ -173,7 +261,7 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     struct MemoryStruct *mem = (struct MemoryStruct *)userp;
 
     mem->memory = realloc(mem->memory, mem->size + realsize + 1);
-    if(mem->memory == NULL) {
+    if(!mem->memory) {
         /* out of memory! */
         fprintf(stderr, "WriteMemoryCallback(): realloc failure!\n");
         exit(EXIT_FAILURE);
@@ -206,6 +294,35 @@ static Link *Link_new(const char *p_url, LinkType type)
     return link;
 }
 
+static CURL *Link_to_curl(Link *link)
+{
+    #ifdef HTTPDIRFS_INFO
+    fprintf(stderr, "Link_to_curl(%s);\n", link->f_url);
+    #endif
+
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        fprintf(stderr, "Link_to_curl(): curl_easy_init() failed!\n");
+    }
+
+    /* set up some basic curl stuff */
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    /* for following directories without the '/' */
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
+    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
+    /*
+     * The write back function pointer has to be set at curl handle creation,
+     * for thread safety
+     */
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+
+    return curl;
+}
+
 long Link_download(const char *path, char *output_buf, size_t size,
                      off_t offset)
 {
@@ -217,16 +334,20 @@ long Link_download(const char *path, char *output_buf, size_t size,
 
     size_t start = offset;
     size_t end = start + size;
-    CURL *curl = Link_to_curl(link);
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
 
     MemoryStruct buf;
     buf.size = 0;
     buf.memory = NULL;
+
+    CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
-
+#ifdef HTTPDIRFS_INFO
+    fprintf(stderr, "Link_download(%s, %p, %s);\n",
+            path, output_buf, range_str);
+#endif
     transfer_wrapper(curl);
 
     long http_resp;
@@ -234,7 +355,6 @@ long Link_download(const char *path, char *output_buf, size_t size,
     if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
         fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
-        fflush(stderr);
         return -ENOENT;
     }
 
@@ -271,6 +391,7 @@ LinkTable *LinkTable_new(const char *url)
     MemoryStruct buf;
     buf.size = 0;
     buf.memory = NULL;
+//     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
     transfer_wrapper(curl);
@@ -281,7 +402,7 @@ LinkTable *LinkTable_new(const char *url)
     if (http_resp != HTTP_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
 URL: %s, HTTP %ld\n", url, http_resp);
-        fflush(stderr);
+
         LinkTable_free(linktbl);
         linktbl = NULL;
         return linktbl;
@@ -296,9 +417,6 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
     /* Fill in the link table */
     LinkTable_fill(linktbl);
-#ifdef HTTPDIRFS_INFO
-    LinkTable_print(linktbl);
-#endif
     return linktbl;
 }
 
@@ -315,7 +433,7 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
     linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
-    if (linktbl->links) {
+    if (!linktbl->links) {
         fprintf(stderr, "LinkTable_add(): realloc failure!\n");
         exit(EXIT_FAILURE);
     }
@@ -324,6 +442,9 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
 
 size_t Link_get_size(Link *this_link)
 {
+#ifdef HTTPDIRFS_INFO
+    fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
+#endif
     double cl = 0;
 
     if (this_link->type == LINK_FILE) {
@@ -361,7 +482,7 @@ void LinkTable_fill(LinkTable *linktbl)
             url = url_append(head_link->f_url, this_link->p_url);
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
-            if (this_link->type == LINK_FILE) {
+            if (this_link->type == LINK_FILE && !(this_link->content_length)) {
                 this_link->content_length = Link_get_size(this_link);
             }
         }
@@ -372,18 +493,20 @@ void LinkTable_fill(LinkTable *linktbl)
 void LinkTable_print(LinkTable *linktbl)
 {
     fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, "            LinkTable %p\n", linktbl);
+    fprintf(stderr, " LinkTable %p for %s\n", linktbl,
+            linktbl->links[0]->f_url);
     fprintf(stderr, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        fprintf(stderr, "%d %c %lu %s %s\n",
+        fprintf(stderr, "%d %c %lu %s %p %s\n",
                i,
                this_link->type,
                this_link->content_length,
                this_link->p_url,
+               this_link->next_table,
                this_link->f_url
               );
-        fflush(stderr);
+
     }
     fprintf(stderr, "--------------------------------------------\n");
 }
@@ -408,6 +531,10 @@ static LinkType p_url_type(const char *p_url)
     return LINK_FILE;
 }
 
+/**
+ * Shamelessly copied and pasted from:
+ * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
+ */
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
 {
     if (node->type != GUMBO_NODE_ELEMENT) {
@@ -470,17 +597,24 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
                 /* The next sub-directory exists */
-                LinkTable *next_table = linktbl->links[i]->next_table;
-                if (!(next_table)) {
-                    next_table = LinkTable_new(linktbl->links[i]->f_url);
+                if (!(linktbl->links[i]->next_table)) {
+                    linktbl->links[i]->next_table = LinkTable_new(
+                        linktbl->links[i]->f_url);
+#ifdef HTTPDIRFS_INFO
+                    fprintf(stderr, "Created new link table for %s\n",
+                            linktbl->links[i]->f_url);
+                    LinkTable_print(linktbl->links[i]->next_table);
+#endif
                 }
-                return path_to_Link_recursive(next_path, next_table);
+
+                return path_to_Link_recursive(next_path,
+                                              linktbl->links[i]->next_table);
             }
         }
     }
 #ifdef HTTPDIRFS_DEBUG
     fprintf(stderr, "path_to_Link(): %s does not exist.\n", path);
-    fflush(stderr);
+
 #endif
     return NULL;
 }
@@ -488,6 +622,10 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 Link *path_to_Link(const char *path)
 {
     char *new_path = strndup(path, URL_LEN_MAX);
+    if (!new_path) {
+        fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
+        exit(EXIT_FAILURE);
+    }
     return path_to_Link_recursive(new_path, ROOT_LINK_TBL);
 }
 

@@ -1,7 +1,4 @@
 {
     "name": "mount-http-dir", 
-    "files": [ { "git": 1 } ],
-    "build" : {
-        "build": "make",
-    }
+    "files": [ { "git": 1 } ]
 }
