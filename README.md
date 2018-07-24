@@ -13,11 +13,15 @@ This program was developed under Debian Stretch. If you are using the same opera
 
 An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting. 
 
-If you run the program in the foreground, when it starts up, it will output the SSL engine version string. Please verify that your libcurl is linked agains OpenSSL, otherwise it might crash when you are downloading from HTTPS websites.
+## SSL Support
+
+If you run the program in the foreground, when it starts up, it will output the SSL engine version string. Please verify that your libcurl is linked agains OpenSSL, as the pthread mutex functions are designed for OpenSSL. 
 
 The SSL engine version string looks something like this:
 
         libcurl SSL engine: OpenSSL/1.0.2l
+
+Finally SSL support seems to be unstable right now, if you mount a HTTPS website, it might randomly crash. Non-HTTPS website seems to have better performance as well. 
 
 ## The Technical Details
 I noticed that most HTTP directory listings don't provide the file size for the web page itself. I suppose this makes perfect sense, as they are generated on the fly. Whereas the actual files have got file sizes. So the listing pages can be treated as folders, and the rest are files. 
