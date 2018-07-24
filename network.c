@@ -37,7 +37,7 @@ typedef struct {
 } TransferStruct;
 
 /* ------------------------ Static variable ------------------------------ */
-/** \brief curl shared interface - not actually being used. */
+/** \brief curl shared interface - not sure if is being used properly. */
 static CURLSH *curl_share;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
@@ -227,7 +227,7 @@ static int curl_multi_perform_once()
     }
 
     if(max_fd == -1) {
-        sleep((unsigned int)timeout / 1000);
+        sleep(1);
     } else {
         struct timeval t;
         t.tv_sec = timeout/1000;
@@ -260,6 +260,7 @@ static int curl_multi_perform_once()
                         curl_msg->data.result,
                         curl_easy_strerror(curl_msg->data.result),
                         url);
+                sleep(1);
             } else {
                 /* Transfer successful, query the file size */
                 if (transfer->type == FILESTAT) {
