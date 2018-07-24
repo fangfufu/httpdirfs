@@ -297,7 +297,7 @@ static void nonblocking_transfer(CURL *curl)
 /* This uses the curl multi interface */
 static void blocking_transfer(CURL *curl)
 {
-    TransferStruct transfer;
+    volatile TransferStruct transfer;
     transfer.type = DATA;
     transfer.transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
