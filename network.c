@@ -1,5 +1,7 @@
 #include "network.h"
 
+#include <curl/curl.h>
+#include <gumbo.h>
 #include <openssl/crypto.h>
 
 #include <ctype.h>
