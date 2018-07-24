@@ -34,14 +34,96 @@ int main(int argc, char **argv) {
      * Copied from:
      * https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/src/bbfs.c
      */
-    if ((argc < 3) || (argv[argc-2][0] == '-') || (argv[argc-1][0] == '-')) {
+    if ((argc < 3)) {
         fs_usage();
     }
 
+    //Parse the command line options
+    char password[256];
+    char username[256];
+    int c;
+    //Hold the position of the username and password arguments so 
+    //we can remove them later (fuse doesn't like them)
+    int passpos = -1;
+    int userpos = -1;
+    for (c = 0; c < argc; c++)
+    {
+	    if (!strcmp(argv[c], "-p"))
+	    {
+	        strcpy(password, argv[c + 1]);
+            passpos = c;
+	    }
+	    if (!strcmp(argv[c], "-u"))
+	    {
+            userpos = c;
+	        strcpy(username, argv[c + 1]);
+	    }
+    }
+    fprintf(stderr, "Username and password are %s:%s\n", username, password);
+
+    //Remove the url from the command line options.
     BASE_URL = argv[argc-2];
     argv[argc-2] = argv[argc-1];
     argv[argc-1] = NULL;
     argc--;
+
+
+    //This holds the final url adjusted for passwords
+    char passurl[512];
+    char noheaderurl[256];
+
+    if ((username != NULL) && (password != NULL))
+    {
+	
+	    char* doeshavehttpheader = strstr(BASE_URL, "://");
+        
+	    //XXX - Forces http by default.
+	    strcpy(passurl, "http://");
+	    strcat(passurl, username);
+        strcat(passurl, ":");
+        strcat(passurl, password);
+        strcat(passurl, "@");
+        //Get rid of the http/s crap and put it on the request url.
+        if (doeshavehttpheader != NULL)
+	    {
+            strcpy(noheaderurl, doeshavehttpheader);
+            strcat(passurl, noheaderurl+3);
+	    }
+        else
+        {
+            strcpy(noheaderurl, BASE_URL);
+            strcat(passurl, noheaderurl);
+        }
+        BASE_URL = passurl;
+
+        //Assemble the arguments into a form fuse likes, excluding the password and username arguments (args in total)
+        int argcfuse = argc-4;
+        char** argvfuse = malloc(argcfuse);
+        //XXX Allocate 64 characters for each argument, should probably make dynamic
+        int k;
+        int argnum = 0;
+        for (k = 0; k < argc; k++)
+        {
+            argvfuse[argnum] = malloc(64);
+            //Skip over the argument if its a password or username.
+            if ((k == passpos) || (k == userpos) || (k == userpos+1) || (k == passpos + 1))
+            {
+                continue;
+            }
+            //Otherwise put it in the array
+            else
+            {
+                strcpy(argvfuse[argnum], argv[k]);
+                argnum++;
+            }
+
+        }
+        return fuse_main(argcfuse, argvfuse, &fs_oper, NULL);
+    }
+
+
+
+    
     return fuse_main(argc, argv, &fs_oper, NULL);
 }
 
