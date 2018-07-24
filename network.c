@@ -12,11 +12,21 @@
 #define HTTP_PARTIAL_CONTENT 206
 
 /* ------------------------ Local structs ---------------------------------*/
-struct MemoryStruct {
+typedef struct {
     char *memory;
     size_t size;
-};
-typedef struct MemoryStruct MemoryStruct;
+} MemoryStruct;
+
+typedef enum {
+    FILESIZE,
+    DATA
+} TransferType;
+
+typedef struct {
+    TransferType type;
+    int transferring;
+    Link *link;
+} TransferStruct;
 
 /* ------------------------ External variables ----------------------------*/
 LinkTable *ROOT_LINK_TBL;
@@ -26,69 +36,56 @@ LinkTable *ROOT_LINK_TBL;
 static CURLSH *curl_share;
 /** \brief pthread mutex for thread safety */
 static pthread_mutex_t pthread_curl_lock;
-#ifndef HTTPDIRFS_SINGLE
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
-#endif
 
 /* -----------Forward declarations for static functions --------------------*/
 
 /* Link related */
 static Link *Link_new(const char *p_url, LinkType type);
-static CURL *Link_to_curl(Link *link);
+static size_t Link_get_size(Link *this_link);
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
+static CURL *Link_to_curl(Link *link);
 static LinkType p_url_type(const char *p_url);
 static char *url_append(const char *url, const char *sublink);
 
 /* LinkTable related */
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
 static void LinkTable_fill(LinkTable *linktbl);
 static void LinkTable_free(LinkTable *linktbl);
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* Transfer related */
-#ifdef HTTPDIRFS_SINGLE
-static void blocking_single_transfer(CURL *curl);
-#else
-static void blocking_multi_transfer(CURL *curl);
-static void curl_multi_perform_once();
-#endif
-static void transfer_wrapper(CURL *curl);
+static void transfer_wrapper(CURL *curl, TransferStruct *transfer);
+static void blocking_transfer(CURL *curl);
+static void nonblocking_transfer(CURL *curl, TransferStruct *transfer);
+static int curl_multi_perform_once();
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
 
 /* -------------------------- Functions ---------------------------------- */
-static void transfer_wrapper(CURL *curl)
+static void transfer_wrapper(CURL *curl, TransferStruct *transfer)
 {
-#ifdef HTTPDIRFS_SINGLE
-    blocking_single_transfer(curl);
-#else
-    blocking_multi_transfer(curl);
-#endif
+//     if (!transfer) {
+        blocking_transfer(curl);
+//     } else {
+//         nonblocking_transfer(curl, transfer);
+//     }
 }
 
-/* This is the single thread version */
-#ifdef HTTPDIRFS_SINGLE
-static void blocking_single_transfer(CURL *curl)
+static void nonblocking_transfer(CURL *curl, TransferStruct *transfer)
 {
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "blocking_single_transfer(): handle %p\n", curl);
-
-#endif
-    CURLcode res = curl_easy_perform(curl);
-    if (res) {
-        fprintf(stderr, "blocking_single_transfer() failed: %u, %s\n", res,
-                curl_easy_strerror(res));
-
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
     }
-#ifdef HTTPDIRFS_DEBUG
-    fprintf(stderr, "blocking_single_transfer(): DONE\n");
-
-#endif
 }
-#else
+
 /* This uses the curl multi interface */
-static void blocking_multi_transfer(CURL *curl)
+static void blocking_transfer(CURL *curl)
 {
     volatile int transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transferring);
@@ -108,7 +105,7 @@ static void blocking_multi_transfer(CURL *curl)
  * Shamelessly copy and pasted from:
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
-static void curl_multi_perform_once()
+static int curl_multi_perform_once()
 {
     /* Get curl multi interface to perform pending tasks */
     int n_running_curl;
@@ -154,7 +151,7 @@ static void curl_multi_perform_once()
                     "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
                     max_fd + 1, timeout, errno, strerror(errno));
             exit(EXIT_FAILURE);
-        }
+            }
     }
 
     /* Process messages */
@@ -165,7 +162,7 @@ static void curl_multi_perform_once()
             int *transferring;
             CURL *curl = curl_msg->easy_handle;
             curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
-                                &transferring);
+                              &transferring);
             *transferring = 0;
             char *url = NULL;
             if (curl_msg->data.result) {
@@ -182,9 +179,8 @@ static void curl_multi_perform_once()
                     curl_msg->msg);
         }
     }
+    return n_running_curl;
 }
-#endif
-
 
 static void pthread_lock_cb(CURL *handle, curl_lock_data data,
                     curl_lock_access access, void *userptr)
@@ -223,7 +219,6 @@ void network_init(const char *url)
     curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
     curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
 
-#ifndef HTTPDIRFS_SINGLE
     /* Multi related */
     curl_multi = curl_multi_init();
     if (!curl_multi) {
@@ -232,7 +227,6 @@ void network_init(const char *url)
     }
     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
                       CURL_MULTI_MAX_CONNECTION);
-#endif
 
     /* create the root link table */
     ROOT_LINK_TBL = LinkTable_new(url);
@@ -265,7 +259,7 @@ static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     size_t realsize = size * nmemb;
-    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+    MemoryStruct *mem = (MemoryStruct *)userp;
 
     mem->memory = realloc(mem->memory, mem->size + realsize + 1);
     if(!mem->memory) {
@@ -356,7 +350,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    transfer_wrapper(curl);
+    transfer_wrapper(curl, NULL);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -405,7 +399,7 @@ LinkTable *LinkTable_new(const char *url)
 //     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    transfer_wrapper(curl);
+    transfer_wrapper(curl, NULL);
 
     /* if downloading base URL failed */
     long http_resp;
@@ -453,15 +447,15 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
 
 size_t Link_get_size(Link *this_link)
 {
-#ifdef HTTPDIRFS_INFO
+    #ifdef HTTPDIRFS_INFO
     fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
-#endif
+    #endif
     double cl = 0;
 
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        transfer_wrapper(curl);
+        transfer_wrapper(curl, NULL);
         long http_resp;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (http_resp == HTTP_OK) {
@@ -498,6 +492,8 @@ void LinkTable_fill(LinkTable *linktbl)
             }
         }
     }
+    /* Block until the LinkTable is filled up */
+    while(curl_multi_perform_once());
 }
 
 #ifdef HTTPDIRFS_INFO
