@@ -8,8 +8,13 @@
 #include <fcntl.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static char *BASE_URL;
+static uid_t uid;
+static gid_t gid;
+
+
 
 static void fs_usage();
 static void *fs_init(struct fuse_conn_info *conn);
@@ -37,7 +42,10 @@ int main(int argc, char **argv) {
         fs_usage();
     }
 
+    uid = getuid();
+    gid = getgid();
     BASE_URL = argv[argc-2];
+
     argv[argc-2] = argv[argc-1];
     argv[argc-1] = NULL;
     argc--;
@@ -89,6 +97,8 @@ static int fs_getattr(const char *path, struct stat *stbuf)
                 return -ENOENT;
         }
     }
+    stbuf->st_uid = uid;
+    stbuf->st_gid = gid;
     return res;
 }
 
