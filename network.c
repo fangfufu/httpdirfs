@@ -631,7 +631,7 @@ URL: %s, HTTP %ld\n", url, http_resp);
 }
 
 /** \brief print a LinkTable */
-void LinkTable_print(LinkTable *linktbl)
+static void LinkTable_print(LinkTable *linktbl)
 {
     fprintf(stderr, "--------------------------------------------\n");
     fprintf(stderr, " LinkTable %p for %s\n", linktbl,
@@ -639,12 +639,11 @@ void LinkTable_print(LinkTable *linktbl)
     fprintf(stderr, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        fprintf(stderr, "%d %c %lu %s %p %s\n",
+        fprintf(stderr, "%d %c %lu %s %s\n",
                i,
                this_link->type,
                this_link->content_length,
                this_link->p_url,
-               this_link->next_table,
                this_link->f_url
               );
 
