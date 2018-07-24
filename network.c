@@ -344,6 +344,7 @@ static CURL *Link_to_curl(Link *link)
     /* for following directories without the '/' */
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
     curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+    fprintf(stderr, "Link_to_curl(): link->f_url: %s\n", link->f_url);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
     /*
@@ -459,20 +460,16 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         LinkType type = p_url_type(href->value);
-    char *unescaped_p_url;
-    unescaped_p_url = curl_easy_unescape(NULL, href->value, 0, NULL);
-    if (type) {
-        LinkTable_add(linktbl, Link_new(unescaped_p_url, type));
+        if (type) {
+            LinkTable_add(linktbl, Link_new(href->value, type));
+        }
     }
-    curl_free(unescaped_p_url);
-        }
-
-        /* Note the recursive call, lol. */
-        GumboVector *children = &node->v.element.children;
-        for (size_t i = 0; i < children->length; ++i) {
-            HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
-        }
-        return;
+    /* Note the recursive call, lol. */
+    GumboVector *children = &node->v.element.children;
+    for (size_t i = 0; i < children->length; ++i) {
+        HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
+    }
+    return;
 }
 
 void Link_get_stat(Link *this_link)
@@ -509,6 +506,12 @@ void LinkTable_fill(LinkTable *linktbl)
             url = url_append(head_link->f_url, this_link->p_url);
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
+
+            char *unescaped_p_url;
+            unescaped_p_url = curl_easy_unescape(NULL, this_link->p_url, 0,
+                                                 NULL);
+            strncpy(this_link->p_url, unescaped_p_url, LINK_LEN_MAX);
+            curl_free(unescaped_p_url);
 
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
                 Link_get_stat(this_link);
