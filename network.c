@@ -434,8 +434,8 @@ long path_download(const char *path, char *output_buf, size_t size,
     buf.memory = NULL;
 
 #ifdef HTTPDIRFS_INFO
-    fprintf(stderr, "path_download(%s, %p, %s);\n",
-            path, output_buf, range_str);
+    fprintf(stderr, "path_download(%s, %s);\n",
+            path, range_str);
 #endif
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);

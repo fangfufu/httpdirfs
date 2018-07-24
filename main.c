@@ -20,7 +20,6 @@ static int fs_open(const char *path, struct fuse_file_info *fi);
 static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi);
 
-
 static struct fuse_operations fs_oper = {
     .getattr	= fs_getattr,
     .readdir	= fs_readdir,
@@ -102,7 +101,6 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
 
     Link *link;
     LinkTable *linktbl;
-
 
     if (!strcmp(path, "/")) {
         linktbl = ROOT_LINK_TBL;
