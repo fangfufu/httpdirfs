@@ -39,30 +39,6 @@ static pthread_mutex_t pthread_curl_lock;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
 
-/* -----------Forward declarations for static functions --------------------*/
-
-/* Link related */
-static Link *Link_new(const char *p_url, LinkType type);
-static void Link_get_stat(Link *this_link);
-static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
-static CURL *Link_to_curl(Link *link);
-static LinkType p_url_type(const char *p_url);
-static char *url_append(const char *url, const char *sublink);
-static void link_set_stat(Link* this_link, CURL *curl);
-
-/* LinkTable related */
-static void LinkTable_add(LinkTable *linktbl, Link *link);
-static void LinkTable_fill(LinkTable *linktbl);
-static void LinkTable_free(LinkTable *linktbl);
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
-
-/* Transfer related */
-static void blocking_transfer(CURL *curl);
-static void nonblocking_transfer(CURL *curl);
-static int curl_multi_perform_once();
-static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
-                                  void *userp);
-
 /* -------------------------- Functions ---------------------------------- */
 
 static void nonblocking_transfer(CURL *curl)
@@ -75,22 +51,25 @@ static void nonblocking_transfer(CURL *curl)
     }
 }
 
-/* This uses the curl multi interface */
-static void blocking_transfer(CURL *curl)
+static void link_set_stat(Link* this_link, CURL *curl)
 {
-    TransferStruct transfer;
-    transfer.type = DATA;
-    transfer.transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
-    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-    if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
-                res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
-    }
+    long http_resp;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (http_resp == HTTP_OK) {
+        double cl = 0;
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
 
-    while (transfer.transferring) {
-        curl_multi_perform_once();
+        if (cl == -1) {
+            /* Turns out not to be a file after all */
+            this_link->content_length = 0;
+            this_link->type = LINK_DIR;
+        } else {
+            this_link->content_length = cl;
+            this_link->type = LINK_FILE;
+        }
+    } else {
+        this_link->type = LINK_INVALID;
     }
 }
 
@@ -183,6 +162,25 @@ static int curl_multi_perform_once()
         }
     }
     return n_running_curl;
+}
+
+/* This uses the curl multi interface */
+static void blocking_transfer(CURL *curl)
+{
+    TransferStruct transfer;
+    transfer.type = DATA;
+    transfer.transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
+    }
+
+    while (transfer.transferring) {
+        curl_multi_perform_once();
+    }
 }
 
 static void pthread_lock_cb(CURL *handle, curl_lock_data data,
@@ -381,6 +379,120 @@ long path_download(const char *path, char *output_buf, size_t size,
     return recv;
 }
 
+static void LinkTable_free(LinkTable *linktbl)
+{
+    for (int i = 0; i < linktbl->num; i++) {
+        free(linktbl->links[i]);
+    }
+    free(linktbl->links);
+    free(linktbl);
+}
+
+static LinkType p_url_type(const char *p_url)
+{
+    /* The link name has to start with alphanumerical character */
+    if (!isalnum(p_url[0])) {
+        return LINK_INVALID;
+    }
+
+    /* check for http:// and https:// */
+    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
+        return LINK_INVALID;
+    }
+
+    if ( p_url[strlen(p_url) - 1] == '/' ) {
+        return LINK_DIR;
+    }
+
+    return LINK_FILE;
+}
+
+static void LinkTable_add(LinkTable *linktbl, Link *link)
+{
+    linktbl->num++;
+    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
+    if (!linktbl->links) {
+        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    linktbl->links[linktbl->num - 1] = link;
+}
+
+/**
+ * Shamelessly copied and pasted from:
+ * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
+ */
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
+{
+    if (node->type != GUMBO_NODE_ELEMENT) {
+        return;
+    }
+    GumboAttribute* href;
+
+    if (node->v.element.tag == GUMBO_TAG_A &&
+        (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
+        /* if it is valid, copy the link onto the heap */
+        LinkType type = p_url_type(href->value);
+    char *unescaped_p_url;
+    unescaped_p_url = curl_easy_unescape(NULL, href->value, 0, NULL);
+    if (type) {
+        LinkTable_add(linktbl, Link_new(unescaped_p_url, type));
+    }
+    curl_free(unescaped_p_url);
+        }
+
+        /* Note the recursive call, lol. */
+        GumboVector *children = &node->v.element.children;
+        for (size_t i = 0; i < children->length; ++i) {
+            HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
+        }
+        return;
+}
+
+void Link_get_stat(Link *this_link)
+{
+    #ifdef HTTPDIRFS_INFO
+    fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
+    #endif
+
+    if (this_link->type == LINK_FILE) {
+        CURL *curl = Link_to_curl(this_link);
+        curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+        curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+
+        TransferStruct *transfer = malloc(sizeof(TransferStruct));
+        if (!transfer) {
+            fprintf(stderr, "Link_get_size(): malloc failed!\n");
+        }
+        transfer->link = this_link;
+        transfer->type = FILESTAT;
+        curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+
+        nonblocking_transfer(curl);
+    }
+}
+
+
+void LinkTable_fill(LinkTable *linktbl)
+{
+    Link *head_link = linktbl->links[0];
+    for (int i = 0; i < linktbl->num; i++) {
+        Link *this_link = linktbl->links[i];
+        if (this_link->type) {
+            char *url;
+            url = url_append(head_link->f_url, this_link->p_url);
+            strncpy(this_link->f_url, url, URL_LEN_MAX);
+            free(url);
+
+            if (this_link->type == LINK_FILE && !(this_link->content_length)) {
+                Link_get_stat(this_link);
+            }
+        }
+    }
+    /* Block until the LinkTable is filled up */
+    while(curl_multi_perform_once());
+}
+
 LinkTable *LinkTable_new(const char *url)
 {
 #ifdef HTTPDIRFS_INFO
@@ -432,91 +544,6 @@ URL: %s, HTTP %ld\n", url, http_resp);
     return linktbl;
 }
 
-static void LinkTable_free(LinkTable *linktbl)
-{
-    for (int i = 0; i < linktbl->num; i++) {
-        free(linktbl->links[i]);
-    }
-    free(linktbl->links);
-    free(linktbl);
-}
-
-static void LinkTable_add(LinkTable *linktbl, Link *link)
-{
-    linktbl->num++;
-    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
-    if (!linktbl->links) {
-        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    linktbl->links[linktbl->num - 1] = link;
-}
-
-static void link_set_stat(Link* this_link, CURL *curl)
-{
-    long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (http_resp == HTTP_OK) {
-        double cl = 0;
-        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-
-        if (cl == -1) {
-            /* Turns out not to be a file after all */
-            this_link->content_length = 0;
-            this_link->type = LINK_DIR;
-        } else {
-            this_link->content_length = cl;
-            this_link->type = LINK_FILE;
-        }
-    } else {
-        this_link->type = LINK_INVALID;
-    }
-}
-
-void Link_get_stat(Link *this_link)
-{
-#ifdef HTTPDIRFS_INFO
-    fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
-#endif
-
-    if (this_link->type == LINK_FILE) {
-        CURL *curl = Link_to_curl(this_link);
-        curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-
-        TransferStruct *transfer = malloc(sizeof(TransferStruct));
-        if (!transfer) {
-            fprintf(stderr, "Link_get_size(): malloc failed!\n");
-        }
-        transfer->link = this_link;
-        transfer->type = FILESTAT;
-        curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
-
-        nonblocking_transfer(curl);
-    }
-}
-
-void LinkTable_fill(LinkTable *linktbl)
-{
-    Link *head_link = linktbl->links[0];
-    for (int i = 0; i < linktbl->num; i++) {
-        Link *this_link = linktbl->links[i];
-        if (this_link->type) {
-            char *url;
-            url = url_append(head_link->f_url, this_link->p_url);
-            strncpy(this_link->f_url, url, URL_LEN_MAX);
-            free(url);
-
-            if (this_link->type == LINK_FILE && !(this_link->content_length)) {
-                Link_get_stat(this_link);
-            }
-        }
-    }
-    /* Block until the LinkTable is filled up */
-    while(curl_multi_perform_once());
-}
-
 #ifdef HTTPDIRFS_INFO
 void LinkTable_print(LinkTable *linktbl)
 {
@@ -539,56 +566,6 @@ void LinkTable_print(LinkTable *linktbl)
     fprintf(stderr, "--------------------------------------------\n");
 }
 #endif
-
-static LinkType p_url_type(const char *p_url)
-{
-    /* The link name has to start with alphanumerical character */
-    if (!isalnum(p_url[0])) {
-        return LINK_INVALID;
-    }
-
-    /* check for http:// and https:// */
-    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
-        return LINK_INVALID;
-    }
-
-    if ( p_url[strlen(p_url) - 1] == '/' ) {
-        return LINK_DIR;
-    }
-
-    return LINK_FILE;
-}
-
-/**
- * Shamelessly copied and pasted from:
- * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
- */
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
-{
-    if (node->type != GUMBO_NODE_ELEMENT) {
-        return;
-    }
-    GumboAttribute* href;
-
-    if (node->v.element.tag == GUMBO_TAG_A &&
-        (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
-        /* if it is valid, copy the link onto the heap */
-        LinkType type = p_url_type(href->value);
-        char *unescaped_p_url;
-        unescaped_p_url = curl_easy_unescape(NULL, href->value, 0, NULL);
-        if (type) {
-            LinkTable_add(linktbl, Link_new(unescaped_p_url, type));
-        }
-        curl_free(unescaped_p_url);
-    }
-
-    /* Note the recursive call, lol. */
-    GumboVector *children = &node->v.element.children;
-    for (size_t i = 0; i < children->length; ++i) {
-        HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
-    }
-    return;
-}
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 {
