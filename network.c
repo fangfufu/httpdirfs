@@ -87,8 +87,9 @@ static void nonblocking_transfer(CURL *curl, TransferStruct *transfer)
 /* This uses the curl multi interface */
 static void blocking_transfer(CURL *curl)
 {
-    volatile int transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transferring);
+    volatile TransferStruct transfer;
+    transfer.transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if(res > 0) {
         fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
@@ -96,7 +97,7 @@ static void blocking_transfer(CURL *curl)
         exit(EXIT_FAILURE);
     }
 
-    while (transferring) {
+    while (transfer.transferring) {
         curl_multi_perform_once();
     }
 }
@@ -159,11 +160,11 @@ static int curl_multi_perform_once()
     CURLMsg *curl_msg;
     while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
         if (curl_msg->msg == CURLMSG_DONE) {
-            int *transferring;
+            TransferStruct *transfer;
             CURL *curl = curl_msg->easy_handle;
             curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
-                              &transferring);
-            *transferring = 0;
+                              &transfer);
+            transfer->transferring = 0;
             char *url = NULL;
             if (curl_msg->data.result) {
                 curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, url);
