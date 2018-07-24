@@ -328,10 +328,6 @@ static Link *Link_new(const char *p_url, LinkType type)
 
 static CURL *Link_to_curl(Link *link)
 {
-#ifdef HTTPDIRFS_INFO
-    fprintf(stderr, "Link_to_curl(%s);\n", link->f_url);
-#endif
-
     CURL *curl = curl_easy_init();
     if (!curl) {
         fprintf(stderr, "Link_to_curl(): curl_easy_init() failed!\n");
@@ -344,7 +340,6 @@ static CURL *Link_to_curl(Link *link)
     /* for following directories without the '/' */
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
     curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    fprintf(stderr, "Link_to_curl(): link->f_url: %s\n", link->f_url);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
     /*
