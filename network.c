@@ -199,6 +199,20 @@ static int curl_multi_perform_once()
     int n_running_curl;
     curl_multi_perform(curl_multi, &n_running_curl);
 
+    long timeout;
+    if(curl_multi_timeout(curl_multi, &timeout)) {
+        fprintf(stderr, "curl_multi_perform_once(): curl_multi_timeout\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if(timeout == -1) {
+        /*
+         * https://curl.haxx.se/libcurl/c/curl_multi_timeout.html
+         * If it returns -1, there's no timeout at all set.
+         */
+        timeout = 0;
+    }
+
     /* Check if any of the tasks encountered error */
     int max_fd;
     fd_set read_fd_set;
@@ -216,30 +230,27 @@ static int curl_multi_perform_once()
         exit(EXIT_FAILURE);
     }
 
-    long timeout;
-    if(curl_multi_timeout(curl_multi, &timeout)) {
-        fprintf(stderr, "curl_multi_perform_once(): curl_multi_timeout\n");
-        exit(EXIT_FAILURE);
-    }
-
-    if(timeout == -1) {
-        timeout = 100;
-    }
-
     if(max_fd == -1) {
-        sleep(1);
-    } else {
-        struct timeval t;
-        t.tv_sec = timeout/1000;
-        t.tv_usec = (timeout%1000)*1000;
+        /*
+         * https://curl.haxx.se/libcurl/c/curl_multi_fdset.html
+         * The above web page suggests sleeping for 100ms, unless
+         * curl_multi_timeout() suggests something shorter.
+         */
+        if (timeout > 100) {
+            timeout = 100;
+        }
+    }
 
-        if(select(max_fd + 1, &read_fd_set, &write_fd_set,
-            &exc_fd_set, &t) < 0) {
-            fprintf(stderr,
-                    "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
-                    max_fd + 1, timeout, errno, strerror(errno));
-            exit(EXIT_FAILURE);
-            }
+    struct timeval t;
+    t.tv_sec = timeout/1000;
+    t.tv_usec = (timeout%1000)*1000;
+
+    if(select(max_fd + 1, &read_fd_set, &write_fd_set,
+        &exc_fd_set, &t) < 0) {
+        fprintf(stderr,
+                "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
+                max_fd + 1, timeout, errno, strerror(errno));
+        exit(EXIT_FAILURE);
     }
 
     /* Process messages */
