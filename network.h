@@ -35,6 +35,7 @@ struct Link {
     LinkType type;
     size_t content_length;
     LinkTable *next_table;
+    long time;
 };
 
 struct LinkTable {

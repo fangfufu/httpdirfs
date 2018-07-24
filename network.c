@@ -18,7 +18,7 @@ typedef struct {
 } MemoryStruct;
 
 typedef enum {
-    FILESIZE = 's',
+    FILESTAT = 's',
     DATA = 'd'
 } TransferType;
 
@@ -43,11 +43,12 @@ static CURLM *curl_multi;
 
 /* Link related */
 static Link *Link_new(const char *p_url, LinkType type);
-static void Link_get_size(Link *this_link);
+static void Link_get_stat(Link *this_link);
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 static CURL *Link_to_curl(Link *link);
 static LinkType p_url_type(const char *p_url);
 static char *url_append(const char *url, const char *sublink);
+static void link_set_stat(Link* this_link, CURL *curl);
 
 /* LinkTable related */
 static void LinkTable_add(LinkTable *linktbl, Link *link);
@@ -170,29 +171,13 @@ static int curl_multi_perform_once()
                         url);
             } else {
                 /* Transfer successful, query the file size */
-                if (transfer->type == FILESIZE) {
-                    Link *this_link = transfer->link;
-                    long http_resp;
-                    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-                    if (http_resp == HTTP_OK) {
-                        double cl = 0;
-                        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-                        if (cl == -1) {
-                            /* Turns out not to be a file after all */
-                            this_link->content_length = 0;
-                            this_link->type = LINK_DIR;
-                        } else {
-                            this_link->content_length = cl;
-                            this_link->type = LINK_FILE;
-                        }
-                    } else {
-                        this_link->type = LINK_INVALID;
-                    }
+                if (transfer->type == FILESTAT) {
+                    link_set_stat(transfer->link, curl);
                 }
             }
             curl_multi_remove_handle(curl_multi, curl);
             /* clean up the handle, if we are querying the file size */
-            if (transfer->type == FILESIZE) {
+            if (transfer->type == FILESTAT) {
                 curl_easy_cleanup(curl);
                 free(transfer);
             }
@@ -467,7 +452,28 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links[linktbl->num - 1] = link;
 }
 
-void Link_get_size(Link *this_link)
+static void link_set_stat(Link* this_link, CURL *curl)
+{
+    long http_resp;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (http_resp == HTTP_OK) {
+        double cl = 0;
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
+        if (cl == -1) {
+            /* Turns out not to be a file after all */
+            this_link->content_length = 0;
+            this_link->type = LINK_DIR;
+        } else {
+            this_link->content_length = cl;
+            this_link->type = LINK_FILE;
+        }
+    } else {
+        this_link->type = LINK_INVALID;
+    }
+}
+
+void Link_get_stat(Link *this_link)
 {
 #ifdef HTTPDIRFS_INFO
     fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
@@ -476,13 +482,14 @@ void Link_get_size(Link *this_link)
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+        curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
         TransferStruct *transfer = malloc(sizeof(TransferStruct));
         if (!transfer) {
             fprintf(stderr, "Link_get_size(): malloc failed!\n");
         }
         transfer->link = this_link;
-        transfer->type = FILESIZE;
+        transfer->type = FILESTAT;
         curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
 
         nonblocking_transfer(curl);
@@ -500,7 +507,7 @@ void LinkTable_fill(LinkTable *linktbl)
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
-                Link_get_size(this_link);
+                Link_get_stat(this_link);
             }
         }
     }
