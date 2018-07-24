@@ -1,6 +1,6 @@
 CC=gcc
 CFLAGS= -g -Wall -Wextra -lgumbo -lcurl -lfuse -lcrypto \
--D_FILE_OFFSET_BITS=64 -DHTTPDIRFS_INFO
+	-D_FILE_OFFSET_BITS=64
 OBJ = main.o network.o
 
 %.o: %.c

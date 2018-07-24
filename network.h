@@ -55,9 +55,6 @@ long path_download(const char *path, char *output_buf, size_t size,
 /** \brief create a new LinkTable */
 LinkTable *LinkTable_new(const char *url);
 
-/** \brief print a LinkTable */
-void LinkTable_print(LinkTable *linktbl);
-
 /** \brief find the link associated with a path */
 Link *path_to_Link(const char *path);
 

@@ -433,10 +433,9 @@ long path_download(const char *path, char *output_buf, size_t size,
     buf.size = 0;
     buf.memory = NULL;
 
-#ifdef HTTPDIRFS_INFO
     fprintf(stderr, "path_download(%s, %s);\n",
             path, range_str);
-#endif
+
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
@@ -537,9 +536,7 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
 
 void Link_get_stat(Link *this_link)
 {
-    #ifdef HTTPDIRFS_INFO
     fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
-    #endif
 
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
@@ -586,9 +583,8 @@ void LinkTable_fill(LinkTable *linktbl)
 
 LinkTable *LinkTable_new(const char *url)
 {
-#ifdef HTTPDIRFS_INFO
     fprintf(stderr, "LinkTable_new(%s);\n", url);
-#endif
+
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
         fprintf(stderr, "LinkTable_new(): calloc failure!\n");
@@ -634,7 +630,7 @@ URL: %s, HTTP %ld\n", url, http_resp);
     return linktbl;
 }
 
-#ifdef HTTPDIRFS_INFO
+/** \brief print a LinkTable */
 void LinkTable_print(LinkTable *linktbl)
 {
     fprintf(stderr, "--------------------------------------------\n");
@@ -655,7 +651,6 @@ void LinkTable_print(LinkTable *linktbl)
     }
     fprintf(stderr, "--------------------------------------------\n");
 }
-#endif
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 {
@@ -698,11 +693,9 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                 if (!(linktbl->links[i]->next_table)) {
                     linktbl->links[i]->next_table = LinkTable_new(
                         linktbl->links[i]->f_url);
-#ifdef HTTPDIRFS_INFO
                     fprintf(stderr, "Created new link table for %s\n",
                             linktbl->links[i]->f_url);
                     LinkTable_print(linktbl->links[i]->next_table);
-#endif
                 }
 
                 return path_to_Link_recursive(next_path,
