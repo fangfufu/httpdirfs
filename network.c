@@ -78,13 +78,10 @@ static void nonblocking_transfer(CURL *curl)
 /* This uses the curl multi interface */
 static void blocking_transfer(CURL *curl)
 {
-    TransferStruct *transfer = malloc(sizeof(TransferStruct));
-    if (!transfer) {
-        fprintf(stderr, "blocking_transfer(): malloc failed!\n");
-    }
-    transfer->type = DATA;
-    transfer->transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+    TransferStruct transfer;
+    transfer.type = DATA;
+    transfer.transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if(res > 0) {
         fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
@@ -92,10 +89,9 @@ static void blocking_transfer(CURL *curl)
         exit(EXIT_FAILURE);
     }
 
-    while (transfer->transferring) {
+    while (transfer.transferring) {
         curl_multi_perform_once();
     }
-    free(transfer);
 }
 
 /**
@@ -331,7 +327,7 @@ static CURL *Link_to_curl(Link *link)
     return curl;
 }
 
-long Link_download(const char *path, char *output_buf, size_t size,
+long path_download(const char *path, char *output_buf, size_t size,
                      off_t offset)
 {
     Link *link;
@@ -350,7 +346,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     buf.memory = NULL;
 
 #ifdef HTTPDIRFS_INFO
-    fprintf(stderr, "Link_download(%s, %p, %s);\n",
+    fprintf(stderr, "path_download(%s, %p, %s);\n",
             path, output_buf, range_str);
 #endif
     CURL *curl = Link_to_curl(link);
@@ -362,7 +358,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
-        fprintf(stderr, "Link_download(): Could not download %s, HTTP %ld\n",
+        fprintf(stderr, "path_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
         return -ENOENT;
     }
@@ -460,6 +456,7 @@ static void link_set_stat(Link* this_link, CURL *curl)
         double cl = 0;
         curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
         curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
+
         if (cl == -1) {
             /* Turns out not to be a file after all */
             this_link->content_length = 0;
@@ -506,6 +503,7 @@ void LinkTable_fill(LinkTable *linktbl)
             url = url_append(head_link->f_url, this_link->p_url);
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
+
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
                 Link_get_stat(this_link);
             }
@@ -572,9 +570,12 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         LinkType type = p_url_type(href->value);
+        char *unescaped_p_url;
+        unescaped_p_url = curl_easy_unescape(NULL, href->value, 0, NULL);
         if (type) {
-            LinkTable_add(linktbl, Link_new(href->value, type));
+            LinkTable_add(linktbl, Link_new(unescaped_p_url, type));
         }
+        curl_free(unescaped_p_url);
     }
 
     /* Note the recursive call, lol. */

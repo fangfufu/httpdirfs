@@ -53,7 +53,7 @@ void network_init(const char *url);
  * \brief download a link */
 /* \return the number of bytes downloaded
  */
-long Link_download(const char *path, char *output_buf, size_t size,
+long path_download(const char *path, char *output_buf, size_t size,
                    off_t offset);
 
 /** \brief create a new LinkTable */
