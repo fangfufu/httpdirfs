@@ -400,7 +400,8 @@ static CURL *Link_to_curl(Link *link)
     }
 
     /* set up some basic curl stuff */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "mount-http-dir/libcurl");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "httpdirfs - \
+https://github.com/fangfufu/httpdirfs");
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     /* for following directories without the '/' */
