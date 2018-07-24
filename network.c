@@ -574,6 +574,8 @@ void LinkTable_fill(LinkTable *linktbl)
 
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
                 Link_get_stat(this_link);
+            } else if (this_link->type == LINK_DIR) {
+                this_link->time = head_link->time;
             }
         }
     }
@@ -617,6 +619,7 @@ URL: %s, HTTP %ld\n", url, http_resp);
         linktbl = NULL;
         return linktbl;
     };
+    curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
     curl_easy_cleanup(curl);
 
     /* Otherwise parsed the received data */
