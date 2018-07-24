@@ -214,6 +214,10 @@ void network_init(const char *url)
 
     /* Share related */
     curl_share = curl_share_init();
+    if (!(curl_share)) {
+        fprintf(stderr, "network_init(): curl_share_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
