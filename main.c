@@ -74,6 +74,9 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         if (!link) {
             return -ENOENT;
         }
+        struct timespec spec;
+        spec.tv_sec = link->time;
+        stbuf->st_mtim = spec;
         switch (link->type) {
             case LINK_DIR:
                 stbuf->st_mode = S_IFDIR | 0755;
@@ -88,8 +91,6 @@ static int fs_getattr(const char *path, struct stat *stbuf)
                 return -ENOENT;
         }
     }
-
-
     return res;
 }
 
