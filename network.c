@@ -296,9 +296,9 @@ static Link *Link_new(const char *p_url, LinkType type)
 
 static CURL *Link_to_curl(Link *link)
 {
-    #ifdef HTTPDIRFS_INFO
+#ifdef HTTPDIRFS_INFO
     fprintf(stderr, "Link_to_curl(%s);\n", link->f_url);
-    #endif
+#endif
 
     CURL *curl = curl_easy_init();
     if (!curl) {
@@ -341,13 +341,14 @@ long Link_download(const char *path, char *output_buf, size_t size,
     buf.size = 0;
     buf.memory = NULL;
 
-    CURL *curl = Link_to_curl(link);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
-    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 #ifdef HTTPDIRFS_INFO
     fprintf(stderr, "Link_download(%s, %p, %s);\n",
             path, output_buf, range_str);
 #endif
+    CURL *curl = Link_to_curl(link);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
+    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+
     transfer_wrapper(curl);
 
     long http_resp;
@@ -374,6 +375,9 @@ long Link_download(const char *path, char *output_buf, size_t size,
 
 LinkTable *LinkTable_new(const char *url)
 {
+#ifdef HTTPDIRFS_INFO
+    fprintf(stderr, "LinkTable_new(%s);\n", url);
+#endif
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
         fprintf(stderr, "LinkTable_new(): calloc failure!\n");
