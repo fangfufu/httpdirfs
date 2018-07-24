@@ -9,6 +9,9 @@ OBJ = main.o network.o
 httpdirfs: $(OBJ)
 	$(CC) -o $@ $^ $(CFLAGS)
 
+install:
+	cp httpdirfs ${HOME}/bin/
+
 .PHONY: clean
 
 clean:
