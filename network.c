@@ -10,6 +10,7 @@
 
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
+#define HTTP_RANGE_NOT_SATISFIABLE 416
 
 /* ------------------------ Local structs ---------------------------------*/
 typedef struct {
@@ -381,7 +382,11 @@ long path_download(const char *path, char *output_buf, size_t size,
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if ( (http_resp != HTTP_OK) && ( http_resp != HTTP_PARTIAL_CONTENT) ) {
+    if ( !(
+            (http_resp != HTTP_OK) ||
+            (http_resp != HTTP_PARTIAL_CONTENT) ||
+            (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
+          )) {
         fprintf(stderr, "path_download(): Could not download %s, HTTP %ld\n",
         link->f_url, http_resp);
         return -ENOENT;
