@@ -1,8 +1,6 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#include "data.h"
-
 #include <curl/curl.h>
 #include <gumbo.h>
 
@@ -10,7 +8,7 @@
 #define LINK_LEN_MAX 255
 
 #ifndef HTTPDIRFS_SINGLE
-#   define CURL_MULTI_MAX_CONNECTION 10
+#   define CURL_MULTI_MAX_CONNECTION 20
 #endif
 
 /** \brief the link type */

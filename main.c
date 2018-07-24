@@ -7,6 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 static char *BASE_URL;
@@ -49,7 +50,7 @@ static void fs_usage()
 {
     fprintf(stderr,
             "usage:  mount-http-dir [options] URL mount_point\n");
-    abort();
+    exit(EXIT_FAILURE);
 }
 
 static void *fs_init(struct fuse_conn_info *conn)
