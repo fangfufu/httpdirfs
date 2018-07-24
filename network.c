@@ -34,21 +34,82 @@ LinkTable *ROOT_LINK_TBL;
 /* ------------------------ Static variable ------------------------------ */
 /** \brief curl shared interface - not actually being used. */
 static CURLSH *curl_share;
-/** \brief pthread mutex for thread safety */
-static pthread_mutex_t pthread_curl_lock;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
+/** \brief pthread mutex for transfer functions/ */
+static pthread_mutex_t transfer_lock;
+/**
+ * \brief pthread mutex for curl itself
+ * \note I am sure if it is being used properly
+ */
+static pthread_mutex_t curl_lock;
 
 /* -------------------------- Functions ---------------------------------- */
-
-static void nonblocking_transfer(CURL *curl)
+static void pthread_lock_cb(CURL *handle, curl_lock_data data,
+                            curl_lock_access access, void *userptr)
 {
-    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-    if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
-                res, curl_multi_strerror(res));
+    (void)access; /* unused */
+    (void)userptr; /* unused */
+    (void)handle; /* unused */
+    (void)data; /* unused */
+    pthread_mutex_lock(&curl_lock);
+}
+
+static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
+                              void *userptr)
+{
+    (void)userptr; /* unused */
+    (void)handle;  /* unused */
+    (void)data;    /* unused */
+    pthread_mutex_unlock(&curl_lock);
+}
+
+void network_init(const char *url)
+{
+    /* Global related */
+    if (curl_global_init(CURL_GLOBAL_ALL)) {
+        fprintf(stderr, "network_init(): curl_global_init() failed!\n");
         exit(EXIT_FAILURE);
     }
+
+    /* Share related */
+    curl_share = curl_share_init();
+    if (!(curl_share)) {
+        fprintf(stderr, "network_init(): curl_share_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+
+    if (pthread_mutex_init(&curl_lock, NULL) != 0)
+    {
+        printf(
+            "network_init(): curl_lock initialisation failed!\n");
+        exit(EXIT_FAILURE);
+    }
+    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
+    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
+
+    /* Multi related */
+    curl_multi = curl_multi_init();
+    if (!curl_multi) {
+        fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
+    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+                      CURL_MULTI_MAX_CONNECTION);
+
+    /* Initialise transfer lock */
+    if (pthread_mutex_init(&transfer_lock, NULL) != 0)
+    {
+        printf(
+            "network_init(): transfer_lock initialisation failed!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* create the root link table */
+    ROOT_LINK_TBL = LinkTable_new(url);
 }
 
 static void link_set_stat(Link* this_link, CURL *curl)
@@ -79,6 +140,7 @@ static void link_set_stat(Link* this_link, CURL *curl)
  */
 static int curl_multi_perform_once()
 {
+    pthread_mutex_lock(&transfer_lock);
     /* Get curl multi interface to perform pending tasks */
     int n_running_curl;
     curl_multi_perform(curl_multi, &n_running_curl);
@@ -161,7 +223,21 @@ static int curl_multi_perform_once()
                     curl_msg->msg);
         }
     }
+    pthread_mutex_unlock(&transfer_lock);
     return n_running_curl;
+}
+
+static void nonblocking_transfer(CURL *curl)
+{
+    pthread_mutex_lock(&transfer_lock);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    pthread_mutex_unlock(&transfer_lock);
+
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
+    }
 }
 
 /* This uses the curl multi interface */
@@ -171,7 +247,11 @@ static void blocking_transfer(CURL *curl)
     transfer.type = DATA;
     transfer.transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+
+    pthread_mutex_lock(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    pthread_mutex_unlock(&transfer_lock);
+
     if(res > 0) {
         fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
                 res, curl_multi_strerror(res));
@@ -181,60 +261,6 @@ static void blocking_transfer(CURL *curl)
     while (transfer.transferring) {
         curl_multi_perform_once();
     }
-}
-
-static void pthread_lock_cb(CURL *handle, curl_lock_data data,
-                    curl_lock_access access, void *userptr)
-{
-    (void)access; /* unused */
-    (void)userptr; /* unused */
-    (void)handle; /* unused */
-    (void)data; /* unused */
-    pthread_mutex_lock(&pthread_curl_lock);
-}
-
-static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
-                      void *userptr)
-{
-    (void)userptr; /* unused */
-    (void)handle;  /* unused */
-    (void)data;    /* unused */
-    pthread_mutex_unlock(&pthread_curl_lock);
-}
-
-void network_init(const char *url)
-{
-    /* Global related */
-    if (curl_global_init(CURL_GLOBAL_ALL)) {
-        fprintf(stderr, "network_init(): curl_global_init() failed!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    /* Share related */
-    curl_share = curl_share_init();
-    if (!(curl_share)) {
-        fprintf(stderr, "network_init(): curl_share_init() failed!\n");
-        exit(EXIT_FAILURE);
-    }
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
-
-    pthread_mutex_init(&pthread_curl_lock, NULL);
-    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
-    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
-
-    /* Multi related */
-    curl_multi = curl_multi_init();
-    if (!curl_multi) {
-        fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
-        exit(EXIT_FAILURE);
-    }
-    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-                      CURL_MULTI_MAX_CONNECTION);
-
-    /* create the root link table */
-    ROOT_LINK_TBL = LinkTable_new(url);
 }
 
 static char *url_append(const char *url, const char *sublink)
