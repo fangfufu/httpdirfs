@@ -161,15 +161,15 @@ static int curl_multi_perform_once()
     t.tv_usec = (timeout%1000)*1000;    /* microseconds */
 
     if(select(max_fd + 1, &read_fd_set, &write_fd_set,
-        &exc_fd_set, &t) < 0) {
+              &exc_fd_set, &t) < 0) {
         fprintf(stderr,
                 "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
                 max_fd + 1, timeout, errno, strerror(errno));
         exit(EXIT_FAILURE);
-        }
+    }
 
-        /* Process the message queue */
-        int n_mesgs;
+    /* Process the message queue */
+    int n_mesgs;
     CURLMsg *curl_msg;
     while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
         if (curl_msg->msg == CURLMSG_DONE) {
@@ -220,19 +220,19 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     GumboAttribute* href;
 
     if (node->v.element.tag == GUMBO_TAG_A &&
-        (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
+            (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         LinkType type = p_url_type(href->value);
-    if (type) {
-        LinkTable_add(linktbl, Link_new(href->value, type));
+        if (type) {
+            LinkTable_add(linktbl, Link_new(href->value, type));
+        }
     }
-        }
-        /* Note the recursive call, lol. */
-        GumboVector *children = &node->v.element.children;
-        for (size_t i = 0; i < children->length; ++i) {
-            HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
-        }
-        return;
+    /* Note the recursive call, lol. */
+    GumboVector *children = &node->v.element.children;
+    for (size_t i = 0; i < children->length; ++i) {
+        HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
+    }
+    return;
 }
 
 static void init_locks(void)
@@ -240,7 +240,7 @@ static void init_locks(void)
     int i;
 
     crypto_lockarray = (pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
-    sizeof(pthread_mutex_t));
+                       sizeof(pthread_mutex_t));
     for(i = 0; i<CRYPTO_num_locks(); i++) {
         pthread_mutex_init(&(crypto_lockarray[i]), NULL);
     }
@@ -445,12 +445,12 @@ static void LinkTable_print(LinkTable *linktbl)
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         fprintf(stderr, "%d %c %lu %s %s\n",
-               i,
-               this_link->type,
-               this_link->content_length,
-               this_link->p_url,
-               this_link->f_url
-              );
+                i,
+                this_link->type,
+                this_link->content_length,
+                this_link->p_url,
+                this_link->f_url
+               );
 
     }
     fprintf(stderr, "--------------------------------------------\n");
@@ -462,8 +462,7 @@ static void lock_callback(int mode, int type, char *file, int line)
     (void)line;
     if(mode & CRYPTO_LOCK) {
         pthread_mutex_lock(&(crypto_lockarray[type]));
-    }
-    else {
+    } else {
         pthread_mutex_unlock(&(crypto_lockarray[type]));
     }
 }
@@ -492,8 +491,7 @@ void network_init(const char *url)
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
     curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
 
-    if (pthread_mutex_init(&curl_lock, NULL) != 0)
-    {
+    if (pthread_mutex_init(&curl_lock, NULL) != 0) {
         printf(
             "network_init(): curl_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
@@ -511,8 +509,7 @@ void network_init(const char *url)
                       CURL_MULTI_MAX_CONNECTION);
 
     /* Initialise transfer lock */
-    if (pthread_mutex_init(&transfer_lock, NULL) != 0)
-    {
+    if (pthread_mutex_init(&transfer_lock, NULL) != 0) {
         printf(
             "network_init(): transfer_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
@@ -607,7 +604,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                 /* The next sub-directory exists */
                 if (!(linktbl->links[i]->next_table)) {
                     linktbl->links[i]->next_table = LinkTable_new(
-                        linktbl->links[i]->f_url);
+                                                        linktbl->links[i]->f_url);
                     fprintf(stderr, "Created new link table for %s\n",
                             linktbl->links[i]->f_url);
                     LinkTable_print(linktbl->links[i]->next_table);
@@ -651,10 +648,10 @@ long path_download(const char *path, char *output_buf, size_t size,
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if ( !(
-        (http_resp != HTTP_OK) ||
-        (http_resp != HTTP_PARTIAL_CONTENT) ||
-        (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
-    )) {
+                (http_resp != HTTP_OK) ||
+                (http_resp != HTTP_PARTIAL_CONTENT) ||
+                (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
+            )) {
         fprintf(stderr, "path_download(): Could not download %s, HTTP %ld\n",
                 link->f_url, http_resp);
         return -ENOENT;

@@ -14,8 +14,6 @@ static char *BASE_URL;
 static uid_t uid;
 static gid_t gid;
 
-
-
 static void fs_usage();
 static void *fs_init(struct fuse_conn_info *conn);
 static int fs_getattr(const char *path, struct stat *stbuf);
@@ -33,7 +31,8 @@ static struct fuse_operations fs_oper = {
     .init       = fs_init
 };
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     /*
      * Copied from:
      * https://www.cs.nmsu.edu/~pfeiffer/fuse-tutorial/src/bbfs.c
@@ -49,6 +48,7 @@ int main(int argc, char **argv) {
     argv[argc-2] = argv[argc-1];
     argv[argc-1] = NULL;
     argc--;
+
     return fuse_main(argc, argv, &fs_oper, NULL);
 }
 
@@ -84,24 +84,48 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         spec.tv_sec = link->time;
         stbuf->st_mtim = spec;
         switch (link->type) {
-            case LINK_DIR:
-                stbuf->st_mode = S_IFDIR | 0755;
-                stbuf->st_nlink = 1;
-                break;
-            case LINK_FILE:
-                stbuf->st_mode = S_IFREG | 0444;
-                stbuf->st_nlink = 1;
-                stbuf->st_size = link->content_length;
-                stbuf->st_blksize = 128*1024;
-                stbuf->st_blocks = (link->content_length)/512;
-                break;
-            default:
-                return -ENOENT;
+        case LINK_DIR:
+            stbuf->st_mode = S_IFDIR | 0755;
+            stbuf->st_nlink = 1;
+            break;
+        case LINK_FILE:
+            stbuf->st_mode = S_IFREG | 0444;
+            stbuf->st_nlink = 1;
+            stbuf->st_size = link->content_length;
+            stbuf->st_blksize = 128*1024;
+            stbuf->st_blocks = (link->content_length)/512;
+            break;
+        default:
+            return -ENOENT;
         }
     }
     stbuf->st_uid = uid;
     stbuf->st_gid = gid;
+
     return res;
+}
+
+/** \brief read a file */
+static int fs_read(const char *path, char *buf, size_t size, off_t offset,
+                   struct fuse_file_info *fi)
+{
+    (void) fi;
+    long received = path_download(path, buf, size, offset);
+    return received;
+}
+
+/** \brief open a file indicated by the path */
+static int fs_open(const char *path, struct fuse_file_info *fi)
+{
+    if (!path_to_Link(path)) {
+        return -ENOENT;
+    }
+
+    if ((fi->flags & 3) != O_RDONLY) {
+        return -EACCES;
+    }
+
+    return 0;
 }
 
 /** \brief read the directory indicated by the path*/
@@ -141,29 +165,4 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     }
 
     return 0;
-}
-
-/** \brief open a file indicated by the path */
-static int fs_open(const char *path, struct fuse_file_info *fi)
-{
-    if (!path_to_Link(path)) {
-        return -ENOENT;
-    }
-
-    if ((fi->flags & 3) != O_RDONLY) {
-        return -EACCES;
-    }
-
-    return 0;
-}
-
-/** \brief read a file */
-static int fs_read(const char *path, char *buf, size_t size, off_t offset,
-                   struct fuse_file_info *fi)
-{
-    (void) fi;
-
-    long received = path_download(path, buf, size, offset);
-
-    return received;
 }
