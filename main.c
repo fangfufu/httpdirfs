@@ -40,10 +40,6 @@ int main(int argc, char **argv) {
     }
 
     BASE_URL = argv[argc-2];
-    if (!strncmp(BASE_URL, "https", 5)) {
-        fprintf(stderr, "You have supplied an HTTPS link, the program might \
-crash, due to thread safety issues.");
-    }
     argv[argc-2] = argv[argc-1];
     argv[argc-1] = NULL;
     argc--;

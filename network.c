@@ -1,5 +1,7 @@
 #include "network.h"
 
+#include <openssl/crypto.h>
+
 #include <ctype.h>
 #include <errno.h>
 #include <pthread.h>
@@ -8,9 +10,13 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
 #define HTTP_RANGE_NOT_SATISFIABLE 416
+
+/* ------------------------ External variables ----------------------------*/
+LinkTable *ROOT_LINK_TBL;
 
 /* ------------------------ Local structs ---------------------------------*/
 typedef struct {
@@ -29,16 +35,16 @@ typedef struct {
     Link *link;
 } TransferStruct;
 
-/* ------------------------ External variables ----------------------------*/
-LinkTable *ROOT_LINK_TBL;
-
 /* ------------------------ Static variable ------------------------------ */
 /** \brief curl shared interface - not actually being used. */
 static CURLSH *curl_share;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
-/** \brief pthread mutex for transfer functions/ */
+/** \brief pthread mutex for transfer functions */
 static pthread_mutex_t transfer_lock;
+
+/** \brief the lock array for cryptographic functions */
+static pthread_mutex_t *crypto_lockarray;
 /**
  * \brief pthread mutex for curl itself
  * \note I am sure if it is being used properly
@@ -46,6 +52,43 @@ static pthread_mutex_t transfer_lock;
 static pthread_mutex_t curl_lock;
 
 /* -------------------------- Functions ---------------------------------- */
+#pragma GCC diagnostic ignored "-Wunused-function"
+static void lock_callback(int mode, int type, char *file, int line)
+{
+#pragma GCC diagnostic pop
+    (void)file;
+    (void)line;
+    if(mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&(crypto_lockarray[type]));
+    }
+    else {
+        pthread_mutex_unlock(&(crypto_lockarray[type]));
+    }
+}
+#pragma GCC diagnostic ignored "-Wunused-function"
+static unsigned long thread_id(void)
+{
+#pragma GCC diagnostic pop
+    unsigned long ret;
+
+    ret = (unsigned long)pthread_self();
+    return ret;
+}
+
+static void init_locks(void)
+{
+    int i;
+
+    crypto_lockarray = (pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
+    sizeof(pthread_mutex_t));
+    for(i = 0; i<CRYPTO_num_locks(); i++) {
+        pthread_mutex_init(&(crypto_lockarray[i]), NULL);
+    }
+
+    CRYPTO_set_id_callback((unsigned long (*)())thread_id);
+    CRYPTO_set_locking_callback((void (*)())lock_callback);
+}
+
 static void pthread_lock_cb(CURL *handle, curl_lock_data data,
                             curl_lock_access access, void *userptr)
 {
@@ -67,6 +110,12 @@ static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
 
 void network_init(const char *url)
 {
+    /*
+     * Intialise the cryptographic locks, these are shamelessly copied from
+     * https://curl.haxx.se/libcurl/c/threaded-ssl.html
+     */
+    init_locks();
+
     /* Global related */
     if (curl_global_init(CURL_GLOBAL_ALL)) {
         fprintf(stderr, "network_init(): curl_global_init() failed!\n");
@@ -108,6 +157,9 @@ void network_init(const char *url)
             "network_init(): transfer_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
+
+    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
+    printf("libcurl SSL engine: %s\n", data->ssl_version);
 
     /* create the root link table */
     ROOT_LINK_TBL = LinkTable_new(url);
