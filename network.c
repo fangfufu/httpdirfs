@@ -237,9 +237,10 @@ static int curl_multi_perform_once()
         }
     }
 
+    /* timeout is in miliseconds */
     struct timeval t;
-    t.tv_sec = timeout/1000;
-    t.tv_usec = (timeout%1000)*1000;
+    t.tv_sec = timeout/1000;            /* seconds      */
+    t.tv_usec = (timeout%1000)*1000;    /* microseconds */
 
     if(select(max_fd + 1, &read_fd_set, &write_fd_set,
         &exc_fd_set, &t) < 0) {
@@ -249,7 +250,7 @@ static int curl_multi_perform_once()
         exit(EXIT_FAILURE);
     }
 
-    /* Process messages */
+    /* Process the message queue */
     int n_mesgs;
     CURLMsg *curl_msg;
     while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
@@ -605,7 +606,6 @@ LinkTable *LinkTable_new(const char *url)
     MemoryStruct buf;
     buf.size = 0;
     buf.memory = NULL;
-//     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
     blocking_transfer(curl);
