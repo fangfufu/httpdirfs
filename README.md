@@ -2,7 +2,7 @@
 
 Have you ever wanted to mount those HTTP directory listings as if it was a partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper Text Transfer Protocol Directory Filesystem
 
-The performance of the program is excellent, due to the use of curl-multi interface. HTTP connections are reused
+The performance of the program is excellent, due to the use of curl-multi interface. HTTP connections are reused. I haven't benchmarked it, but I feel this is faster than ``rclone mount``.
 
 ## Usage
 		./httpdirfs -f $URL $YOUR_MOUNT_POINT
