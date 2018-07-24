@@ -56,26 +56,25 @@ static void LinkTable_free(LinkTable *linktbl);
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 
 /* Transfer related */
-static void transfer_wrapper(CURL *curl, TransferStruct *transfer);
+static void transfer_wrapper(CURL *curl, TransferType type);
 static void blocking_transfer(CURL *curl);
-static void nonblocking_transfer(CURL *curl, TransferStruct *transfer);
+static void nonblocking_transfer(CURL *curl);
 static int curl_multi_perform_once();
 static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
                                   void *userp);
 
 /* -------------------------- Functions ---------------------------------- */
-static void transfer_wrapper(CURL *curl, TransferStruct *transfer)
+static void transfer_wrapper(CURL *curl, TransferType type)
 {
-//     if (!transfer) {
+    if (type == DATA) {
         blocking_transfer(curl);
-//     } else {
-//         nonblocking_transfer(curl, transfer);
-//     }
+    } else if (type == FILESIZE) {
+        nonblocking_transfer(curl);
+    }
 }
 
-static void nonblocking_transfer(CURL *curl, TransferStruct *transfer)
+static void nonblocking_transfer(CURL *curl)
 {
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if(res > 0) {
         fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
@@ -88,6 +87,7 @@ static void nonblocking_transfer(CURL *curl, TransferStruct *transfer)
 static void blocking_transfer(CURL *curl)
 {
     volatile TransferStruct transfer;
+    transfer.type = DATA;
     transfer.transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
@@ -351,7 +351,7 @@ long Link_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    transfer_wrapper(curl, NULL);
+    transfer_wrapper(curl, DATA);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -400,7 +400,7 @@ LinkTable *LinkTable_new(const char *url)
 //     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    transfer_wrapper(curl, NULL);
+    transfer_wrapper(curl, DATA);
 
     /* if downloading base URL failed */
     long http_resp;
@@ -456,7 +456,13 @@ size_t Link_get_size(Link *this_link)
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        transfer_wrapper(curl, NULL);
+
+        TransferStruct transfer;
+        transfer.link = this_link;
+        transfer.type = FILESIZE;
+        curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+
+        transfer_wrapper(curl, DATA);
         long http_resp;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (http_resp == HTTP_OK) {
