@@ -15,10 +15,10 @@
 #define HTTP_PARTIAL_CONTENT 206
 #define HTTP_RANGE_NOT_SATISFIABLE 416
 
-/* ------------------------ External variables ----------------------------*/
+/* ---------------- External variables -----------------------*/
 LinkTable *ROOT_LINK_TBL;
 
-/* ------------------------ Local structs ---------------------------------*/
+/* ----------------- Local structs ---------------------------*/
 typedef struct {
     char *memory;
     size_t size;
@@ -35,7 +35,7 @@ typedef struct {
     Link *link;
 } TransferStruct;
 
-/* ------------------------ Static variable ------------------------------ */
+/* ----------------- Static variable ----------------------- */
 /** \brief curl shared interface - not sure if is being used properly. */
 static CURLSH *curl_share;
 /** \brief curl multi interface handle */
@@ -51,136 +51,54 @@ static pthread_mutex_t *crypto_lockarray;
  */
 static pthread_mutex_t curl_lock;
 
-/* -------------------------- Functions ---------------------------------- */
-static void lock_callback(int mode, int type, char *file, int line)
-{
-    (void)file;
-    (void)line;
-    if(mode & CRYPTO_LOCK) {
-        pthread_mutex_lock(&(crypto_lockarray[type]));
-    }
-    else {
-        pthread_mutex_unlock(&(crypto_lockarray[type]));
-    }
-}
-
-static unsigned long thread_id(void)
-{
-    unsigned long ret;
-
-    ret = (unsigned long)pthread_self();
-    return ret;
-}
-
-static void init_locks(void)
-{
-    int i;
-
-    crypto_lockarray = (pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
-    sizeof(pthread_mutex_t));
-    for(i = 0; i<CRYPTO_num_locks(); i++) {
-        pthread_mutex_init(&(crypto_lockarray[i]), NULL);
-    }
-
-    CRYPTO_set_id_callback((unsigned long (*)())thread_id);
-    CRYPTO_set_locking_callback((void (*)())lock_callback);
-}
-
+/* ---------------- Static function prototype ---------------*/
+static void blocking_transfer(CURL *curl);
+static int curl_multi_perform_once();
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
+static void init_locks(void);
+static Link *Link_new(const char *p_url, LinkType type);
+static CURL *Link_to_curl(Link *link);
+void Link_get_stat(Link *this_link);
+static void Link_set_stat(Link* this_link, CURL *curl);
+static void LinkTable_add(LinkTable *linktbl, Link *link);
+void LinkTable_fill(LinkTable *linktbl);
+static void LinkTable_free(LinkTable *linktbl);
+static void LinkTable_print(LinkTable *linktbl);
+static void lock_callback(int mode, int type, char *file, int line);
+static void nonblocking_transfer(CURL *curl);
+static LinkType p_url_type(const char *p_url);
+static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 static void pthread_lock_cb(CURL *handle, curl_lock_data data,
-                            curl_lock_access access, void *userptr)
-{
-    (void)access; /* unused */
-    (void)userptr; /* unused */
-    (void)handle; /* unused */
-    (void)data; /* unused */
-    pthread_mutex_lock(&curl_lock);
-}
-
+                            curl_lock_access access, void *userptr);
 static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
-                              void *userptr)
+                              void *userptr);
+static unsigned long thread_id(void);
+static char *url_append(const char *url, const char *sublink);
+static size_t
+WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
+
+
+/* -------------------- Functions -------------------------- */
+/* This uses the curl multi interface */
+static void blocking_transfer(CURL *curl)
 {
-    (void)userptr; /* unused */
-    (void)handle;  /* unused */
-    (void)data;    /* unused */
-    pthread_mutex_unlock(&curl_lock);
-}
+    volatile TransferStruct transfer;
+    transfer.type = DATA;
+    transfer.transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
 
-void network_init(const char *url)
-{
-    /*
-     * Intialise the cryptographic locks, these are shamelessly copied from
-     * https://curl.haxx.se/libcurl/c/threaded-ssl.html
-     */
-    init_locks();
+    pthread_mutex_lock(&transfer_lock);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    pthread_mutex_unlock(&transfer_lock);
 
-    /* Global related */
-    if (curl_global_init(CURL_GLOBAL_ALL)) {
-        fprintf(stderr, "network_init(): curl_global_init() failed!\n");
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
         exit(EXIT_FAILURE);
     }
 
-    /* Share related */
-    curl_share = curl_share_init();
-    if (!(curl_share)) {
-        fprintf(stderr, "network_init(): curl_share_init() failed!\n");
-        exit(EXIT_FAILURE);
-    }
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
-
-    if (pthread_mutex_init(&curl_lock, NULL) != 0)
-    {
-        printf(
-            "network_init(): curl_lock initialisation failed!\n");
-        exit(EXIT_FAILURE);
-    }
-    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
-    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
-
-    /* Multi related */
-    curl_multi = curl_multi_init();
-    if (!curl_multi) {
-        fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
-        exit(EXIT_FAILURE);
-    }
-    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-                      CURL_MULTI_MAX_CONNECTION);
-
-    /* Initialise transfer lock */
-    if (pthread_mutex_init(&transfer_lock, NULL) != 0)
-    {
-        printf(
-            "network_init(): transfer_lock initialisation failed!\n");
-        exit(EXIT_FAILURE);
-    }
-
-    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
-    printf("libcurl SSL engine: %s\n", data->ssl_version);
-
-    /* create the root link table */
-    ROOT_LINK_TBL = LinkTable_new(url);
-}
-
-static void link_set_stat(Link* this_link, CURL *curl)
-{
-    long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (http_resp == HTTP_OK) {
-        double cl = 0;
-        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-
-        if (cl == -1) {
-            /* Turns out not to be a file after all */
-            this_link->content_length = 0;
-            this_link->type = LINK_DIR;
-        } else {
-            this_link->content_length = cl;
-            this_link->type = LINK_FILE;
-        }
-    } else {
-        this_link->type = LINK_INVALID;
+    while (transfer.transferring) {
+        curl_multi_perform_once();
     }
 }
 
@@ -248,10 +166,10 @@ static int curl_multi_perform_once()
                 "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
                 max_fd + 1, timeout, errno, strerror(errno));
         exit(EXIT_FAILURE);
-    }
+        }
 
-    /* Process the message queue */
-    int n_mesgs;
+        /* Process the message queue */
+        int n_mesgs;
     CURLMsg *curl_msg;
     while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
         if (curl_msg->msg == CURLMSG_DONE) {
@@ -272,7 +190,7 @@ static int curl_multi_perform_once()
             } else {
                 /* Transfer successful, query the file size */
                 if (transfer->type == FILESTAT) {
-                    link_set_stat(transfer->link, curl);
+                    Link_set_stat(transfer->link, curl);
                 }
             }
             curl_multi_remove_handle(curl_multi, curl);
@@ -290,84 +208,45 @@ static int curl_multi_perform_once()
     return n_running_curl;
 }
 
-static void nonblocking_transfer(CURL *curl)
+/**
+ * Shamelessly copied and pasted from:
+ * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
+ */
+static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
 {
-    pthread_mutex_lock(&transfer_lock);
-    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-    pthread_mutex_unlock(&transfer_lock);
-
-    if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
-                res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
+    if (node->type != GUMBO_NODE_ELEMENT) {
+        return;
     }
+    GumboAttribute* href;
+
+    if (node->v.element.tag == GUMBO_TAG_A &&
+        (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
+        /* if it is valid, copy the link onto the heap */
+        LinkType type = p_url_type(href->value);
+    if (type) {
+        LinkTable_add(linktbl, Link_new(href->value, type));
+    }
+        }
+        /* Note the recursive call, lol. */
+        GumboVector *children = &node->v.element.children;
+        for (size_t i = 0; i < children->length; ++i) {
+            HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
+        }
+        return;
 }
 
-/* This uses the curl multi interface */
-static void blocking_transfer(CURL *curl)
+static void init_locks(void)
 {
-    volatile TransferStruct transfer;
-    transfer.type = DATA;
-    transfer.transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+    int i;
 
-    pthread_mutex_lock(&transfer_lock);
-    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-    pthread_mutex_unlock(&transfer_lock);
-
-    if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
-                res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
+    crypto_lockarray = (pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
+    sizeof(pthread_mutex_t));
+    for(i = 0; i<CRYPTO_num_locks(); i++) {
+        pthread_mutex_init(&(crypto_lockarray[i]), NULL);
     }
 
-    while (transfer.transferring) {
-        curl_multi_perform_once();
-    }
-}
-
-static char *url_append(const char *url, const char *sublink)
-{
-    int needs_separator = 0;
-    if (url[strlen(url)-1] != '/') {
-        needs_separator = 1;
-    }
-
-    char *str;
-    size_t ul = strlen(url);
-    size_t sl = strlen(sublink);
-    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
-    if (!str) {
-        fprintf(stderr, "url_append(): calloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    strncpy(str, url, ul);
-    if (needs_separator) {
-        str[ul] = '/';
-    }
-    strncat(str, sublink, sl);
-    return str;
-}
-
-static size_t
-WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
-{
-    size_t realsize = size * nmemb;
-    MemoryStruct *mem = (MemoryStruct *)userp;
-
-    mem->memory = realloc(mem->memory, mem->size + realsize + 1);
-    if(!mem->memory) {
-        /* out of memory! */
-        fprintf(stderr, "WriteMemoryCallback(): realloc failure!\n");
-        exit(EXIT_FAILURE);
-        return 0;
-    }
-
-    memmove(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->memory[mem->size] = 0;
-
-    return realsize;
+    CRYPTO_set_id_callback((unsigned long (*)())thread_id);
+    CRYPTO_set_locking_callback((void (*)())lock_callback);
 }
 
 static Link *Link_new(const char *p_url, LinkType type)
@@ -398,7 +277,7 @@ static CURL *Link_to_curl(Link *link)
 
     /* set up some basic curl stuff */
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "httpdirfs - \
-https://github.com/fangfufu/httpdirfs");
+    https://github.com/fangfufu/httpdirfs");
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     /* for following directories without the '/' */
@@ -413,125 +292,6 @@ https://github.com/fangfufu/httpdirfs");
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
 
     return curl;
-}
-
-long path_download(const char *path, char *output_buf, size_t size,
-                     off_t offset)
-{
-    Link *link;
-    link = path_to_Link(path);
-    if (!link) {
-        return -ENOENT;
-    }
-
-    size_t start = offset;
-    size_t end = start + size;
-    char range_str[64];
-    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-
-    MemoryStruct buf;
-    buf.size = 0;
-    buf.memory = NULL;
-
-    fprintf(stderr, "path_download(%s, %s);\n",
-            path, range_str);
-
-    CURL *curl = Link_to_curl(link);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
-    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
-
-    blocking_transfer(curl);
-
-    long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if ( !(
-            (http_resp != HTTP_OK) ||
-            (http_resp != HTTP_PARTIAL_CONTENT) ||
-            (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
-          )) {
-        fprintf(stderr, "path_download(): Could not download %s, HTTP %ld\n",
-        link->f_url, http_resp);
-        return -ENOENT;
-    }
-
-    double dl;
-    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
-
-    size_t recv = dl;
-    if (recv > size) {
-        recv = size;
-    }
-
-    memmove(output_buf, buf.memory, recv);
-    curl_easy_cleanup(curl);
-    free(buf.memory);
-    return recv;
-}
-
-static void LinkTable_free(LinkTable *linktbl)
-{
-    for (int i = 0; i < linktbl->num; i++) {
-        free(linktbl->links[i]);
-    }
-    free(linktbl->links);
-    free(linktbl);
-}
-
-static LinkType p_url_type(const char *p_url)
-{
-    /* The link name has to start with alphanumerical character */
-    if (!isalnum(p_url[0])) {
-        return LINK_INVALID;
-    }
-
-    /* check for http:// and https:// */
-    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
-        return LINK_INVALID;
-    }
-
-    if ( p_url[strlen(p_url) - 1] == '/' ) {
-        return LINK_DIR;
-    }
-
-    return LINK_FILE;
-}
-
-static void LinkTable_add(LinkTable *linktbl, Link *link)
-{
-    linktbl->num++;
-    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
-    if (!linktbl->links) {
-        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    linktbl->links[linktbl->num - 1] = link;
-}
-
-/**
- * Shamelessly copied and pasted from:
- * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
- */
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
-{
-    if (node->type != GUMBO_NODE_ELEMENT) {
-        return;
-    }
-    GumboAttribute* href;
-
-    if (node->v.element.tag == GUMBO_TAG_A &&
-        (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
-        /* if it is valid, copy the link onto the heap */
-        LinkType type = p_url_type(href->value);
-        if (type) {
-            LinkTable_add(linktbl, Link_new(href->value, type));
-        }
-    }
-    /* Note the recursive call, lol. */
-    GumboVector *children = &node->v.element.children;
-    for (size_t i = 0; i < children->length; ++i) {
-        HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
-    }
-    return;
 }
 
 void Link_get_stat(Link *this_link)
@@ -553,6 +313,39 @@ void Link_get_stat(Link *this_link)
 
         nonblocking_transfer(curl);
     }
+}
+
+static void Link_set_stat(Link* this_link, CURL *curl)
+{
+    long http_resp;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (http_resp == HTTP_OK) {
+        double cl = 0;
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
+
+        if (cl == -1) {
+            /* Turns out not to be a file after all */
+            this_link->content_length = 0;
+            this_link->type = LINK_DIR;
+        } else {
+            this_link->content_length = cl;
+            this_link->type = LINK_FILE;
+        }
+    } else {
+        this_link->type = LINK_INVALID;
+    }
+}
+
+static void LinkTable_add(LinkTable *linktbl, Link *link)
+{
+    linktbl->num++;
+    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
+    if (!linktbl->links) {
+        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    linktbl->links[linktbl->num - 1] = link;
 }
 
 void LinkTable_fill(LinkTable *linktbl)
@@ -581,6 +374,15 @@ void LinkTable_fill(LinkTable *linktbl)
     }
     /* Block until the LinkTable is filled up */
     while(curl_multi_perform_once());
+}
+
+static void LinkTable_free(LinkTable *linktbl)
+{
+    for (int i = 0; i < linktbl->num; i++) {
+        free(linktbl->links[i]);
+    }
+    free(linktbl->links);
+    free(linktbl);
 }
 
 LinkTable *LinkTable_new(const char *url)
@@ -654,6 +456,117 @@ static void LinkTable_print(LinkTable *linktbl)
     fprintf(stderr, "--------------------------------------------\n");
 }
 
+static void lock_callback(int mode, int type, char *file, int line)
+{
+    (void)file;
+    (void)line;
+    if(mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&(crypto_lockarray[type]));
+    }
+    else {
+        pthread_mutex_unlock(&(crypto_lockarray[type]));
+    }
+}
+
+void network_init(const char *url)
+{
+    /*
+     * Intialise the cryptographic locks, these are shamelessly copied from
+     * https://curl.haxx.se/libcurl/c/threaded-ssl.html
+     */
+    init_locks();
+
+    /* Global related */
+    if (curl_global_init(CURL_GLOBAL_ALL)) {
+        fprintf(stderr, "network_init(): curl_global_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    /* Share related */
+    curl_share = curl_share_init();
+    if (!(curl_share)) {
+        fprintf(stderr, "network_init(): curl_share_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+
+    if (pthread_mutex_init(&curl_lock, NULL) != 0)
+    {
+        printf(
+            "network_init(): curl_lock initialisation failed!\n");
+        exit(EXIT_FAILURE);
+    }
+    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
+    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
+
+    /* Multi related */
+    curl_multi = curl_multi_init();
+    if (!curl_multi) {
+        fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
+        exit(EXIT_FAILURE);
+    }
+    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+                      CURL_MULTI_MAX_CONNECTION);
+
+    /* Initialise transfer lock */
+    if (pthread_mutex_init(&transfer_lock, NULL) != 0)
+    {
+        printf(
+            "network_init(): transfer_lock initialisation failed!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
+    printf("libcurl SSL engine: %s\n", data->ssl_version);
+
+    /* create the root link table */
+    ROOT_LINK_TBL = LinkTable_new(url);
+}
+
+static void nonblocking_transfer(CURL *curl)
+{
+    pthread_mutex_lock(&transfer_lock);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    pthread_mutex_unlock(&transfer_lock);
+
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
+    }
+}
+
+static LinkType p_url_type(const char *p_url)
+{
+    /* The link name has to start with alphanumerical character */
+    if (!isalnum(p_url[0])) {
+        return LINK_INVALID;
+    }
+
+    /* check for http:// and https:// */
+    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
+        return LINK_INVALID;
+    }
+
+    if ( p_url[strlen(p_url) - 1] == '/' ) {
+        return LINK_DIR;
+    }
+
+    return LINK_FILE;
+}
+
+Link *path_to_Link(const char *path)
+{
+    char *new_path = strndup(path, URL_LEN_MAX);
+    if (!new_path) {
+        fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
+        exit(EXIT_FAILURE);
+    }
+    return path_to_Link_recursive(new_path, ROOT_LINK_TBL);
+}
+
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 {
     /* skip the leading '/' if it exists */
@@ -708,14 +621,126 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     return NULL;
 }
 
-Link *path_to_Link(const char *path)
+long path_download(const char *path, char *output_buf, size_t size,
+                   off_t offset)
 {
-    char *new_path = strndup(path, URL_LEN_MAX);
-    if (!new_path) {
-        fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
-        exit(EXIT_FAILURE);
+    Link *link;
+    link = path_to_Link(path);
+    if (!link) {
+        return -ENOENT;
     }
-    return path_to_Link_recursive(new_path, ROOT_LINK_TBL);
+
+    size_t start = offset;
+    size_t end = start + size;
+    char range_str[64];
+    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+
+    MemoryStruct buf;
+    buf.size = 0;
+    buf.memory = NULL;
+
+    fprintf(stderr, "path_download(%s, %s);\n",
+            path, range_str);
+
+    CURL *curl = Link_to_curl(link);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
+    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+
+    blocking_transfer(curl);
+
+    long http_resp;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if ( !(
+        (http_resp != HTTP_OK) ||
+        (http_resp != HTTP_PARTIAL_CONTENT) ||
+        (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
+    )) {
+        fprintf(stderr, "path_download(): Could not download %s, HTTP %ld\n",
+                link->f_url, http_resp);
+        return -ENOENT;
+    }
+
+    double dl;
+    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
+
+    size_t recv = dl;
+    if (recv > size) {
+        recv = size;
+    }
+
+    memmove(output_buf, buf.memory, recv);
+    curl_easy_cleanup(curl);
+    free(buf.memory);
+    return recv;
 }
 
+static void pthread_lock_cb(CURL *handle, curl_lock_data data,
+                            curl_lock_access access, void *userptr)
+{
+    (void)access; /* unused */
+    (void)userptr; /* unused */
+    (void)handle; /* unused */
+    (void)data; /* unused */
+    pthread_mutex_lock(&curl_lock);
+}
 
+static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
+                              void *userptr)
+{
+    (void)userptr; /* unused */
+    (void)handle;  /* unused */
+    (void)data;    /* unused */
+    pthread_mutex_unlock(&curl_lock);
+}
+
+static unsigned long thread_id(void)
+{
+    unsigned long ret;
+
+    ret = (unsigned long)pthread_self();
+    return ret;
+}
+
+static char *url_append(const char *url, const char *sublink)
+{
+    int needs_separator = 0;
+    if (url[strlen(url)-1] != '/') {
+        needs_separator = 1;
+    }
+
+    char *str;
+    size_t ul = strlen(url);
+    size_t sl = strlen(sublink);
+    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
+    if (!str) {
+        fprintf(stderr, "url_append(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    strncpy(str, url, ul);
+    if (needs_separator) {
+        str[ul] = '/';
+    }
+    strncat(str, sublink, sl);
+    return str;
+}
+
+static size_t
+WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+{
+    size_t realsize = size * nmemb;
+    MemoryStruct *mem = (MemoryStruct *)userp;
+
+    mem->memory = realloc(mem->memory, mem->size + realsize + 1);
+    if(!mem->memory) {
+        /* out of memory! */
+        fprintf(stderr, "WriteMemoryCallback(): realloc failure!\n");
+        exit(EXIT_FAILURE);
+        return 0;
+    }
+
+    memmove(&(mem->memory[mem->size]), contents, realsize);
+    mem->size += realsize;
+    mem->memory[mem->size] = 0;
+
+    return realsize;
+}
