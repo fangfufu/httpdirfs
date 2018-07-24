@@ -8,7 +8,10 @@
 
 #define URL_LEN_MAX 2048
 #define LINK_LEN_MAX 255
-#define CURL_MULTI_MAX_CONNECTION 10
+
+#ifndef HTTPDIRFS_SINGLE
+#   define CURL_MULTI_MAX_CONNECTION 10
+#endif
 
 /** \brief the link type */
 typedef enum {
@@ -34,7 +37,6 @@ struct Link {
     LinkType type;
     size_t content_length;
     LinkTable *next_table;
-    int downloading;
 };
 
 struct LinkTable {

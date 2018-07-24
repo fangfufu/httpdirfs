@@ -11,13 +11,14 @@
 
 static char *BASE_URL;
 
+static void fs_usage();
+static void *fs_init(struct fuse_conn_info *conn);
 static int fs_getattr(const char *path, struct stat *stbuf);
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
                       off_t offset, struct fuse_file_info *fi);
 static int fs_open(const char *path, struct fuse_file_info *fi);
 static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi);
-static void *fs_init(struct fuse_conn_info *conn);
 
 
 static struct fuse_operations fs_oper = {
@@ -27,20 +28,6 @@ static struct fuse_operations fs_oper = {
     .read		= fs_read,
     .init       = fs_init
 };
-
-static void *fs_init(struct fuse_conn_info *conn)
-{
-    (void) conn;
-    network_init(BASE_URL);
-    return NULL;
-}
-
-static void fs_usage()
-{
-    fprintf(stderr,
-            "usage:  mount-http-dir [options] URL mount_point\n");
-    abort();
-}
 
 int main(int argc, char **argv) {
     /*
@@ -56,6 +43,20 @@ int main(int argc, char **argv) {
     argv[argc-1] = NULL;
     argc--;
     return fuse_main(argc, argv, &fs_oper, NULL);
+}
+
+static void fs_usage()
+{
+    fprintf(stderr,
+            "usage:  mount-http-dir [options] URL mount_point\n");
+    abort();
+}
+
+static void *fs_init(struct fuse_conn_info *conn)
+{
+    (void) conn;
+    network_init(BASE_URL);
+    return NULL;
 }
 
 /** \brief return the attributes for a single file indicated by path */
@@ -87,7 +88,7 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         }
     }
 
-    fflush(stderr);
+
     return res;
 }
 
@@ -113,7 +114,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
         if (!linktbl) {
 #ifdef HTTPDIRFS_DEBUG
             fprintf(stderr, "LinkTable_new(): %s\n", link->f_url);
-            fflush(stderr);
+
 #endif
             linktbl = LinkTable_new(link->f_url);
             if(!linktbl) {
@@ -130,7 +131,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
         dir_add(buf, link->p_url, NULL, 0);
     }
 
-    fflush(stderr);
+
     return 0;
 }
 
@@ -145,7 +146,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EACCES;
     }
 
-    fflush(stderr);
+
     return 0;
 }
 
@@ -157,12 +158,12 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 #ifdef HTTPDIRFS_DEBUG
     fprintf(stderr, "fs_read(): path: %s, offset: %ld, size: %lu\n",
             path, offset, size);
-    fflush(stderr);
+
 #endif
     long received = Link_download(path, buf, size, offset);
 #ifdef HTTPDIRFS_DEBUG
     fprintf(stderr, "fs_read(): received %ld bytes.\n", received);
-    fflush(stderr);
+
 #endif
     return received;
 }
