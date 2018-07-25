@@ -36,26 +36,26 @@ typedef struct {
 } TransferStruct;
 
 /* ----------------- Static variable ----------------------- */
-/** \brief curl shared interface - not sure if is being used properly. */
+/** \brief curl shared interface */
 static CURLSH *curl_share;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
 /** \brief pthread mutex for transfer functions */
 static pthread_mutex_t transfer_lock;
-
 /** \brief the lock array for cryptographic functions */
 static pthread_mutex_t *crypto_lockarray;
-/**
- * \brief pthread mutex for curl itself
- * \note I am sure if it is being used properly
- */
+/** \brief pthread mutex for curl itself */
 static pthread_mutex_t curl_lock;
 
 /* ---------------- Static function prototype ---------------*/
-static void blocking_transfer(CURL *curl);
+static void crypto_lock_callback(int mode, int type, char *file, int line);
+static void crypto_lock_init(void);
+static void curl_lock_callback(CURL *handle, curl_lock_data data,
+                               curl_lock_access access, void *userptr);
+static void curl_unlock_callback(CURL *handle, curl_lock_data data,
+                                 void *userptr);
 static int curl_multi_perform_once();
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
-static void init_locks(void);
 static Link *Link_new(const char *p_url, LinkType type);
 static CURL *Link_to_curl(Link *link);
 void Link_get_stat(Link *this_link);
@@ -64,48 +64,65 @@ static void LinkTable_add(LinkTable *linktbl, Link *link);
 void LinkTable_fill(LinkTable *linktbl);
 static void LinkTable_free(LinkTable *linktbl);
 static void LinkTable_print(LinkTable *linktbl);
-static void lock_callback(int mode, int type, char *file, int line);
-static void nonblocking_transfer(CURL *curl);
-static LinkType p_url_type(const char *p_url);
+static void transfer_blocking(CURL *curl);
+static void transfer_nonblocking(CURL *curl);
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
-static void pthread_lock_cb(CURL *handle, curl_lock_data data,
-                            curl_lock_access access, void *userptr);
-static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
-                              void *userptr);
+static LinkType p_url_type(const char *p_url);
 static unsigned long thread_id(void);
 static char *url_append(const char *url, const char *sublink);
 static size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
 
-
 /* -------------------- Functions -------------------------- */
-/* This uses the curl multi interface */
-static void blocking_transfer(CURL *curl)
+static void crypto_lock_callback(int mode, int type, char *file, int line)
 {
-    volatile TransferStruct transfer;
-    transfer.type = DATA;
-    transfer.transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
-
-    pthread_mutex_lock(&transfer_lock);
-    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-    pthread_mutex_unlock(&transfer_lock);
-
-    if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
-                res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
-    }
-
-    while (transfer.transferring) {
-        curl_multi_perform_once();
+    (void)file;
+    (void)line;
+    if(mode & CRYPTO_LOCK) {
+        pthread_mutex_lock(&(crypto_lockarray[type]));
+    } else {
+        pthread_mutex_unlock(&(crypto_lockarray[type]));
     }
 }
 
+
+static void crypto_lock_init(void)
+{
+    int i;
+
+    crypto_lockarray = (pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
+                       sizeof(pthread_mutex_t));
+    for(i = 0; i<CRYPTO_num_locks(); i++) {
+        pthread_mutex_init(&(crypto_lockarray[i]), NULL);
+    }
+
+    CRYPTO_set_id_callback((unsigned long (*)())thread_id);
+    CRYPTO_set_locking_callback((void (*)())crypto_lock_callback);
+}
+
 /**
- * Shamelessly copy and pasted from:
+ * Adapted from:
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
+static void curl_lock_callback(CURL *handle, curl_lock_data data,
+                               curl_lock_access access, void *userptr)
+{
+    (void)access; /* unused */
+    (void)userptr; /* unused */
+    (void)handle; /* unused */
+    (void)data; /* unused */
+    pthread_mutex_lock(&curl_lock);
+}
+
+static void curl_unlock_callback(CURL *handle, curl_lock_data data,
+                                 void *userptr)
+{
+    (void)userptr; /* unused */
+    (void)handle;  /* unused */
+    (void)data;    /* unused */
+    pthread_mutex_unlock(&curl_lock);
+}
+
 static int curl_multi_perform_once()
 {
     pthread_mutex_lock(&transfer_lock);
@@ -235,20 +252,6 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     return;
 }
 
-static void init_locks(void)
-{
-    int i;
-
-    crypto_lockarray = (pthread_mutex_t *)OPENSSL_malloc(CRYPTO_num_locks() *
-                       sizeof(pthread_mutex_t));
-    for(i = 0; i<CRYPTO_num_locks(); i++) {
-        pthread_mutex_init(&(crypto_lockarray[i]), NULL);
-    }
-
-    CRYPTO_set_id_callback((unsigned long (*)())thread_id);
-    CRYPTO_set_locking_callback((void (*)())lock_callback);
-}
-
 static Link *Link_new(const char *p_url, LinkType type)
 {
     Link *link = calloc(1, sizeof(Link));
@@ -311,7 +314,7 @@ void Link_get_stat(Link *this_link)
         transfer->type = FILESTAT;
         curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
 
-        nonblocking_transfer(curl);
+        transfer_nonblocking(curl);
     }
 }
 
@@ -408,7 +411,7 @@ LinkTable *LinkTable_new(const char *url)
     buf.memory = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    blocking_transfer(curl);
+    transfer_blocking(curl);
 
     /* if downloading base URL failed */
     long http_resp;
@@ -456,24 +459,13 @@ static void LinkTable_print(LinkTable *linktbl)
     fprintf(stderr, "--------------------------------------------\n");
 }
 
-static void lock_callback(int mode, int type, char *file, int line)
-{
-    (void)file;
-    (void)line;
-    if(mode & CRYPTO_LOCK) {
-        pthread_mutex_lock(&(crypto_lockarray[type]));
-    } else {
-        pthread_mutex_unlock(&(crypto_lockarray[type]));
-    }
-}
-
 void network_init(const char *url)
 {
     /*
      * Intialise the cryptographic locks, these are shamelessly copied from
      * https://curl.haxx.se/libcurl/c/threaded-ssl.html
      */
-    init_locks();
+    crypto_lock_init();
 
     /* Global related */
     if (curl_global_init(CURL_GLOBAL_ALL)) {
@@ -496,8 +488,8 @@ void network_init(const char *url)
             "network_init(): curl_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
-    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, pthread_lock_cb);
-    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, pthread_unlock_cb);
+    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, curl_lock_callback);
+    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, curl_unlock_callback);
 
     /* Multi related */
     curl_multi = curl_multi_init();
@@ -522,7 +514,29 @@ void network_init(const char *url)
     ROOT_LINK_TBL = LinkTable_new(url);
 }
 
-static void nonblocking_transfer(CURL *curl)
+static void transfer_blocking(CURL *curl)
+{
+    volatile TransferStruct transfer;
+    transfer.type = DATA;
+    transfer.transferring = 1;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+
+    pthread_mutex_lock(&transfer_lock);
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    pthread_mutex_unlock(&transfer_lock);
+
+    if(res > 0) {
+        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+                res, curl_multi_strerror(res));
+        exit(EXIT_FAILURE);
+    }
+
+    while (transfer.transferring) {
+        curl_multi_perform_once();
+    }
+}
+
+static void transfer_nonblocking(CURL *curl)
 {
     pthread_mutex_lock(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
@@ -533,25 +547,6 @@ static void nonblocking_transfer(CURL *curl)
                 res, curl_multi_strerror(res));
         exit(EXIT_FAILURE);
     }
-}
-
-static LinkType p_url_type(const char *p_url)
-{
-    /* The link name has to start with alphanumerical character */
-    if (!isalnum(p_url[0])) {
-        return LINK_INVALID;
-    }
-
-    /* check for http:// and https:// */
-    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
-        return LINK_INVALID;
-    }
-
-    if ( p_url[strlen(p_url) - 1] == '/' ) {
-        return LINK_DIR;
-    }
-
-    return LINK_FILE;
 }
 
 Link *path_to_Link(const char *path)
@@ -643,7 +638,7 @@ long path_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    blocking_transfer(curl);
+    transfer_blocking(curl);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -671,23 +666,23 @@ long path_download(const char *path, char *output_buf, size_t size,
     return recv;
 }
 
-static void pthread_lock_cb(CURL *handle, curl_lock_data data,
-                            curl_lock_access access, void *userptr)
+static LinkType p_url_type(const char *p_url)
 {
-    (void)access; /* unused */
-    (void)userptr; /* unused */
-    (void)handle; /* unused */
-    (void)data; /* unused */
-    pthread_mutex_lock(&curl_lock);
-}
+    /* The link name has to start with alphanumerical character */
+    if (!isalnum(p_url[0])) {
+        return LINK_INVALID;
+    }
 
-static void pthread_unlock_cb(CURL *handle, curl_lock_data data,
-                              void *userptr)
-{
-    (void)userptr; /* unused */
-    (void)handle;  /* unused */
-    (void)data;    /* unused */
-    pthread_mutex_unlock(&curl_lock);
+    /* check for http:// and https:// */
+    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
+        return LINK_INVALID;
+    }
+
+    if ( p_url[strlen(p_url) - 1] == '/' ) {
+        return LINK_DIR;
+    }
+
+    return LINK_FILE;
 }
 
 static unsigned long thread_id(void)
