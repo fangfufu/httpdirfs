@@ -306,6 +306,12 @@ void Link_get_stat(Link *this_link)
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
         curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
+        /*
+         * We need to put the variable on the heap, because otherwise the
+         * variable gets popped from the stack as the function returns.
+         *
+         * It gets freed in curl_multi_perform_once();
+         */
         TransferStruct *transfer = malloc(sizeof(TransferStruct));
         if (!transfer) {
             fprintf(stderr, "Link_get_size(): malloc failed!\n");
@@ -518,6 +524,10 @@ void network_init(const char *url)
 
 static void transfer_blocking(CURL *curl)
 {
+    /*
+     * We don't need to malloc here, as the transfer is finished before
+     * the variable gets popped from the stack
+     */
     volatile TransferStruct transfer;
     transfer.type = DATA;
     transfer.transferring = 1;
@@ -559,7 +569,9 @@ Link *path_to_Link(const char *path)
         fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
         exit(EXIT_FAILURE);
     }
-    return path_to_Link_recursive(new_path, ROOT_LINK_TBL);
+    Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
+    free(new_path);
+    return link;
 }
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
