@@ -376,7 +376,9 @@ void LinkTable_fill(LinkTable *linktbl)
         }
     }
     /* Block until the LinkTable is filled up */
-    while(curl_multi_perform_once());
+    while (curl_multi_perform_once()) {
+        usleep(100*1000);
+    };
 }
 
 static void LinkTable_free(LinkTable *linktbl)
@@ -533,6 +535,7 @@ static void transfer_blocking(CURL *curl)
 
     while (transfer.transferring) {
         curl_multi_perform_once();
+        usleep(100*1000);
     }
 }
 
