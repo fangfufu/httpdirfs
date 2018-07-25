@@ -27,7 +27,7 @@ An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debi
 
 ## SSL Support
 
-If you run the program in the foreground, when it starts up, it will output the SSL engine version string. Please verify that your libcurl is linked agains OpenSSL, as the pthread mutex functions are designed for OpenSSL. 
+If you run the program in the foreground, when it starts up, it will output the SSL engine version string. Please verify that your libcurl is linked against OpenSSL, as the pthread mutex functions are designed for OpenSSL.
 
 The SSL engine version string looks something like this:
 
