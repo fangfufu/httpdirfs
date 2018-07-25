@@ -40,11 +40,11 @@ typedef struct {
 static CURLSH *curl_share;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
-/** \brief pthread mutex for transfer functions */
+/** \brief  mutex for transfer functions */
 static pthread_mutex_t transfer_lock;
 /** \brief the lock array for cryptographic functions */
 static pthread_mutex_t *crypto_lockarray;
-/** \brief pthread mutex for curl itself */
+/** \brief  mutex for curl share interface itself */
 static pthread_mutex_t curl_lock;
 
 /* ---------------- Static function prototype ---------------*/
@@ -84,7 +84,6 @@ static void crypto_lock_callback(int mode, int type, char *file, int line)
         pthread_mutex_unlock(&(crypto_lockarray[type]));
     }
 }
-
 
 static void crypto_lock_init(void)
 {
@@ -383,8 +382,8 @@ void LinkTable_fill(LinkTable *linktbl)
     }
     /* Block until the LinkTable is filled up */
     while (curl_multi_perform_once()) {
-        usleep(100*1000);
-    };
+        usleep(1000);
+    }
 }
 
 static void LinkTable_free(LinkTable *linktbl)
@@ -469,19 +468,15 @@ static void LinkTable_print(LinkTable *linktbl)
 
 void network_init(const char *url)
 {
-    /*
-     * Intialise the cryptographic locks, these are shamelessly copied from
-     * https://curl.haxx.se/libcurl/c/threaded-ssl.html
-     */
-    crypto_lock_init();
 
-    /* Global related */
+
+    /* ------- Global related ----------*/
     if (curl_global_init(CURL_GLOBAL_ALL)) {
         fprintf(stderr, "network_init(): curl_global_init() failed!\n");
         exit(EXIT_FAILURE);
     }
 
-    /* Share related */
+    /* -------- Share related ----------*/
     curl_share = curl_share_init();
     if (!(curl_share)) {
         fprintf(stderr, "network_init(): curl_share_init() failed!\n");
@@ -499,7 +494,7 @@ void network_init(const char *url)
     curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, curl_lock_callback);
     curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, curl_unlock_callback);
 
-    /* Multi related */
+    /* ------------- Multi related -----------*/
     curl_multi = curl_multi_init();
     if (!curl_multi) {
         fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
@@ -508,17 +503,24 @@ void network_init(const char *url)
     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
                       CURL_MULTI_MAX_CONNECTION);
 
-    /* Initialise transfer lock */
+    /* ------------ Initialise locks ---------*/
     if (pthread_mutex_init(&transfer_lock, NULL) != 0) {
         printf(
             "network_init(): transfer_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
 
+    /*
+     * cryptographic lock functions were shamelessly copied from
+     * https://curl.haxx.se/libcurl/c/threaded-ssl.html
+     */
+    crypto_lock_init();
+
+    /* --------- Print off SSL engine version stream --------- */
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
     printf("libcurl SSL engine: %s\n", data->ssl_version);
 
-    /* create the root link table */
+    /* ----------- create the root link table --------------*/
     ROOT_LINK_TBL = LinkTable_new(url);
 }
 
@@ -545,7 +547,7 @@ static void transfer_blocking(CURL *curl)
 
     while (transfer.transferring) {
         curl_multi_perform_once();
-        usleep(100*1000);
+        usleep(1000);
     }
 }
 
@@ -646,8 +648,8 @@ long path_download(const char *path, char *output_buf, size_t size,
     buf.size = 0;
     buf.memory = NULL;
 
-    fprintf(stderr, "path_download(%s, %s);\n",
-            path, range_str);
+    fprintf(stderr, "path_download(%s, %s, %ld);\n",
+            path, range_str, thread_id());
 
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
