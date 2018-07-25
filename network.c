@@ -50,11 +50,12 @@ static pthread_mutex_t curl_lock;
 /* ---------------- Static function prototype ---------------*/
 static void crypto_lock_callback(int mode, int type, char *file, int line);
 static void crypto_lock_init(void);
-static void curl_lock_callback(CURL *handle, curl_lock_data data,
+static void curl_callback_lock(CURL *handle, curl_lock_data data,
                                curl_lock_access access, void *userptr);
-static void curl_unlock_callback(CURL *handle, curl_lock_data data,
+static void curl_callback_unlock(CURL *handle, curl_lock_data data,
                                  void *userptr);
 static int curl_multi_perform_once();
+void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs);
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static Link *Link_new(const char *p_url, LinkType type);
 static CURL *Link_to_curl(Link *link);
@@ -103,7 +104,7 @@ static void crypto_lock_init(void)
  * Adapted from:
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
-static void curl_lock_callback(CURL *handle, curl_lock_data data,
+static void curl_callback_lock(CURL *handle, curl_lock_data data,
                                curl_lock_access access, void *userptr)
 {
     (void)access; /* unused */
@@ -113,7 +114,7 @@ static void curl_lock_callback(CURL *handle, curl_lock_data data,
     pthread_mutex_lock(&curl_lock);
 }
 
-static void curl_unlock_callback(CURL *handle, curl_lock_data data,
+static void curl_callback_unlock(CURL *handle, curl_lock_data data,
                                  void *userptr)
 {
     (void)userptr; /* unused */
@@ -188,40 +189,46 @@ static int curl_multi_perform_once()
     int n_mesgs;
     CURLMsg *curl_msg;
     while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
-        if (curl_msg->msg == CURLMSG_DONE) {
-            TransferStruct *transfer;
-            CURL *curl = curl_msg->easy_handle;
-            curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
-                              &transfer);
-            transfer->transferring = 0;
-            char *url = NULL;
-            if (curl_msg->data.result) {
-                curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, url);
-                fprintf(stderr,
-                        "curl_multi_perform_once(): %d - %s <%s>\n",
-                        curl_msg->data.result,
-                        curl_easy_strerror(curl_msg->data.result),
-                        url);
-                sleep(1);
-            } else {
-                /* Transfer successful, query the file size */
-                if (transfer->type == FILESTAT) {
-                    Link_set_stat(transfer->link, curl);
-                }
-            }
-            curl_multi_remove_handle(curl_multi, curl);
-            /* clean up the handle, if we are querying the file size */
-            if (transfer->type == FILESTAT) {
-                curl_easy_cleanup(curl);
-                free(transfer);
-            }
-        } else {
-            fprintf(stderr, "curl_multi_perform_once(): curl_msg->msg: %d\n",
-                    curl_msg->msg);
-        }
+        curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
     }
     pthread_mutex_unlock(&transfer_lock);
     return n_running_curl;
+}
+
+void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
+{
+    if (curl_msg->msg == CURLMSG_DONE) {
+        TransferStruct *transfer;
+        CURL *curl = curl_msg->easy_handle;
+        curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
+                          &transfer);
+        transfer->transferring = 0;
+        char *url = NULL;
+        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+        if (curl_msg->data.result) {
+            fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",
+                    curl_msg->data.result,
+                    curl_easy_strerror(curl_msg->data.result),
+                    url);
+            usleep(1000);
+        } else {
+            /* Transfer successful, query the file size */
+            if (transfer->type == FILESTAT) {
+                fprintf(stderr, "Link_set_stat(): %d, %d, %s\n",
+                        n_running_curl, n_mesgs, url);
+                Link_set_stat(transfer->link, curl);
+            }
+        }
+        curl_multi_remove_handle(curl_multi, curl);
+        /* clean up the handle, if we are querying the file size */
+        if (transfer->type == FILESTAT) {
+            curl_easy_cleanup(curl);
+            free(transfer);
+        }
+    } else {
+        fprintf(stderr, "curl_process_msgs(): curl_msg->msg: %d\n",
+                curl_msg->msg);
+    }
 }
 
 /**
@@ -304,6 +311,7 @@ void Link_get_stat(Link *this_link)
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
         curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
 
         /*
          * We need to put the variable on the heap, because otherwise the
@@ -491,8 +499,8 @@ void network_init(const char *url)
             "network_init(): curl_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
-    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, curl_lock_callback);
-    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, curl_unlock_callback);
+    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, curl_callback_lock);
+    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
 
     /* ------------- Multi related -----------*/
     curl_multi = curl_multi_init();
@@ -648,8 +656,8 @@ long path_download(const char *path, char *output_buf, size_t size,
     buf.size = 0;
     buf.memory = NULL;
 
-    fprintf(stderr, "path_download(%s, %s, %ld);\n",
-            path, range_str, thread_id());
+    fprintf(stderr, "path_download(%s, %s);\n",
+            path, range_str);
 
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
