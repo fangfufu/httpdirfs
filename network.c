@@ -293,6 +293,7 @@ static CURL *Link_to_curl(Link *link)
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
     curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
     curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
     /*
      * The write back function pointer has to be set at curl handle creation,
@@ -311,7 +312,6 @@ void Link_get_stat(Link *this_link)
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
         curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
 
         /*
          * We need to put the variable on the heap, because otherwise the
