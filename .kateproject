@@ -1,4 +1,4 @@
 {
-    "name": "HTTPDirFs",
+    "name": "HTTPDirFS",
     "files": [ { "git": 1 } ]
 }
