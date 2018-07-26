@@ -1,7 +1,8 @@
 #include "network.h"
 #include "fuse_local.h"
 
-#include <stdio.h>
+// #include <stdio.h>
+#include <stdlib.h>
 
 static void help();
 
