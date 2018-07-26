@@ -3,8 +3,6 @@
 
 #include "link.h"
 
-#include <curl/curl.h>
-
 #define CURL_MULTI_MAX_CONNECTION 20
 
 typedef struct {

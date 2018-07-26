@@ -1,9 +1,6 @@
 #include "network.h"
 #include "fuse_local.h"
 
-// #include <stdio.h>
-#include <stdlib.h>
-
 static void help();
 
 int main(int argc, char **argv)
