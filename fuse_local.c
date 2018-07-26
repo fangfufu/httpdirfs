@@ -1,5 +1,6 @@
 #include "fuse_local.h"
 
+#include "link.h"
 #include "network.h"
 
 #include <errno.h>
