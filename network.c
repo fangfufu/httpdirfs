@@ -1,7 +1,5 @@
 #include "network.h"
 
-#include "link.h"
-
 #include <openssl/crypto.h>
 
 #include <errno.h>
