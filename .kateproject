@@ -1,4 +1,4 @@
 {
-    "name": "mount-http-dir", 
+    "name": "HTTPDirFs",
     "files": [ { "git": 1 } ]
 }

@@ -24,15 +24,19 @@ typedef struct {
 /** \brief curl shared interface */
 extern CURLSH *curl_share;
 
+/** \brief perform one transfer cycle */
 int curl_multi_perform_once();
 
 /** \brief Initialise the network module */
 void network_init(const char *url);
 
+/** \brief blocking file transfer */
 void transfer_blocking(CURL *curl);
 
+/** \brief non blocking file transfer */
 void transfer_nonblocking(CURL *curl);
 
+/** \brief callback function for file transfer */
 size_t
 WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
 

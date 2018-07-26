@@ -9,7 +9,6 @@
 #include <string.h>
 #include <unistd.h>
 
-
 #define HTTP_OK 200
 #define HTTP_PARTIAL_CONTENT 206
 #define HTTP_RANGE_NOT_SATISFIABLE 416
@@ -83,8 +82,7 @@ static CURL *Link_to_curl(Link *link)
     }
 
     /* set up some basic curl stuff */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "httpdirfs - \
-    https://github.com/fangfufu/httpdirfs");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "HTTPDirFS");
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     /* for following directories without the '/' */

@@ -43,6 +43,7 @@ struct LinkTable {
 /** \brief root link table */
 extern LinkTable *ROOT_LINK_TBL;
 
+/** \brief set the stats for a file */
 void Link_set_stat(Link* this_link, CURL *curl);
 
 /** \brief create a new LinkTable */
