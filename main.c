@@ -151,7 +151,7 @@ static void print_http_options()
 "HTTP options:\n\
     -u   --user            HTTP authentication username\n\
     -p   --password        HTTP authentication password\n\
-    -P   --proxy           Proxy for libcurl, for details refer to\n\
+    -P   --proxy           Proxy for libcurl, for more details refer to\n\
         https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
          --proxy-user      Username for the proxy\n\
          --proxy-pass      Password for the proxy\n\
