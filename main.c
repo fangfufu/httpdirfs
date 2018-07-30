@@ -1,6 +1,7 @@
 #include "network.h"
 #include "fuse_local.h"
 
+#include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
 
@@ -9,6 +10,8 @@
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);
 static void print_http_options();
+static int
+parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
 
 int main(int argc, char **argv)
 {
@@ -27,6 +30,35 @@ int main(int argc, char **argv)
     /* initialise network configuration struct */
     network_config_init();
 
+    /* Add the last remaining argument, which is the mountpoint */
+    add_arg(&fuse_argv, &fuse_argc, argv[argc-1]);
+
+    if (parse_arg_list(argc, argv, &fuse_argv, &fuse_argc)) {
+        goto fuse_start;
+    }
+
+    /* The second last remaining argument is the URL */
+    char *base_url = argv[argc-2];
+    if (strncmp(base_url, "http://", 7) && strncmp(base_url, "https://", 8)) {
+        fprintf(stderr, "Error: Please supply a valid URL.\n");
+        print_help(argv[0], 0);
+        exit(EXIT_FAILURE);
+    } else {
+        if(!network_init(base_url)) {
+            fprintf(stderr, "Error: Network initialisation failed.\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    fuse_start:
+    fuse_local_init(fuse_argc, fuse_argv);
+
+    return 0;
+}
+
+static int
+parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
+{
     char c;
     int long_index = 0;
     const char *short_opts = "o:hVdfsp:u:P:";
@@ -46,25 +78,24 @@ int main(int argc, char **argv)
                     &long_index)) != -1) {
         switch (c) {
             case 'o':
-                add_arg(&fuse_argv, &fuse_argc, "-o");
-                add_arg(&fuse_argv, &fuse_argc, optarg);
+                add_arg(fuse_argv, fuse_argc, "-o");
+                add_arg(fuse_argv, fuse_argc, optarg);
                 break;
             case 'h':
                 print_help(argv[0], 1);
-                add_arg(&fuse_argv, &fuse_argc, "-h");
-                goto fuse_start;
-                break;
+                add_arg(fuse_argv, fuse_argc, "-h");
+                return 1;
             case 'V':
-                add_arg(&fuse_argv, &fuse_argc, "-V");
+                add_arg(fuse_argv, fuse_argc, "-V");
                 break;
             case 'd':
-                add_arg(&fuse_argv, &fuse_argc, "-d");
+                add_arg(fuse_argv, fuse_argc, "-d");
                 break;
             case 'f':
-                add_arg(&fuse_argv, &fuse_argc, "-f");
+                add_arg(fuse_argv, fuse_argc, "-f");
                 break;
             case 's':
-                add_arg(&fuse_argv, &fuse_argc, "-s");
+                add_arg(fuse_argv, fuse_argc, "-s");
                 break;
             case 'p':
                 NETWORK_CONFIG.username = strndup(optarg, ARG_LEN_MAX);
@@ -89,39 +120,17 @@ int main(int argc, char **argv)
                         break;
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
-                        add_arg(&fuse_argv, &fuse_argc, "--help");
-                        goto fuse_start;
-                        break;
+                        add_arg(fuse_argv, fuse_argc, "--help");
+                        return 1;
                 }
                 break;
-            default:
-                fprintf(stderr, "Error: Invalid option\n");
-                add_arg(&fuse_argv, &fuse_argc, "--help");
-                goto fuse_start;
-                break;
+                    default:
+                        fprintf(stderr, "Error: Invalid option\n");
+                        add_arg(fuse_argv, fuse_argc, "--help");
+                        return 1;
         }
-    };
-
-    /* Add the last remaining argument, which is the mountpoint */
-    add_arg(&fuse_argv, &fuse_argc, argv[argc-1]);
-
-    /* The second last remaining argument is the URL */
-    char *base_url = argv[argc-2];
-    if (strncmp(base_url, "http://", 7) && strncmp(base_url, "https://", 8)) {
-        fprintf(stderr, "Error: Please supply a valid URL.\n");
-        print_help(argv[0], 0);
-        exit(EXIT_FAILURE);
-    } else {
-        if(!network_init(base_url)) {
-            fprintf(stderr, "Error: Network initialisation failed.\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    fuse_start:
-    fuse_local_init(fuse_argc, fuse_argv);
-
-    return 0;
+                    };
+                    return 0;
 }
 
 /**
