@@ -27,9 +27,9 @@ An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debi
 
 Other useful options:
 
-	-u   --user            HTTP authentication username
-    	-p   --password        HTTP authentication password
-    	-P   --proxy           Proxy for libcurl, for more details refer to
+        -u   --user            HTTP authentication username
+        -p   --password        HTTP authentication password
+        -P   --proxy           Proxy for libcurl, for more details refer to
 				https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
 
 
