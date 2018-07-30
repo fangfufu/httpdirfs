@@ -4,20 +4,11 @@
 #include <getopt.h>
 #include <string.h>
 
-void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
-static void print_help(char *program_name);
+#define ARG_LEN_MAX 64
 
-/**
- * \brief add an argument to an argv array
- * \details This is basically how you add a string to an array of string
- */
-void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
-{
-    (*fuse_argc)++;
-    *fuse_argv_ptr = realloc(*fuse_argv_ptr, *fuse_argc * sizeof(char *));
-    char **fuse_argv = *fuse_argv_ptr;
-    fuse_argv[*fuse_argc - 1] = opt_string;
-}
+void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
+static void print_help(char *program_name, int long_help);
+static void print_http_options();
 
 int main(int argc, char **argv)
 {
@@ -28,17 +19,23 @@ int main(int argc, char **argv)
     add_arg(&fuse_argv, &fuse_argc, argv[0]);
     /* Automatically print help if not enough arguments are supplied */
     if (argc < 2) {
-        add_arg(&fuse_argv, &fuse_argc, "--help");
-        goto fuse_start;
+        print_help(argv[0], 0);
+        fprintf(stderr, "For more information, run \"%s --help.\"\n", argv[0]);
+        exit(EXIT_FAILURE);
     }
+
+    /* initialise network configuration struct */
+    network_config_init();
 
     char c;
     int opts_index = 0;
-    const char *short_opts = "o:hVdfs";
+    const char *short_opts = "o:hVdfsp:u:";
     const struct option long_opts[] = {
         {"help", no_argument, NULL, 'h'},
         {"version", no_argument, NULL, 'V'},
         {"debug", no_argument, NULL, 'd'},
+        {"username", required_argument, NULL, 'u'},
+        {"password", required_argument, NULL, 'p'},
         {0, 0, 0, 0}
     };
     while ((c =
@@ -50,7 +47,7 @@ int main(int argc, char **argv)
                 add_arg(&fuse_argv, &fuse_argc, optarg);
                 break;
             case 'h':
-                print_help(argv[0]);
+                print_help(argv[0], 1);
                 add_arg(&fuse_argv, &fuse_argc, "-h");
                 goto fuse_start;
                 break;
@@ -66,22 +63,33 @@ int main(int argc, char **argv)
             case 's':
                 add_arg(&fuse_argv, &fuse_argc, "-s");
                 break;
+            case 'p':
+                NETWORK_CONFIG.username = strndup(optarg, ARG_LEN_MAX);
+                break;
+            case 'u':
+                NETWORK_CONFIG.password = strndup(optarg, ARG_LEN_MAX);
+                break;
             case '?':
-                exit(EXIT_FAILURE);
+                fprintf(stderr, "Error: Invalid option\n");
+                add_arg(&fuse_argv, &fuse_argc, "--help");
+                goto fuse_start;
         }
     };
 
-    /* Add the last remaining argument, which is the mount point */
+    /* Add the last remaining argument, which is the mountpoint */
     add_arg(&fuse_argv, &fuse_argc, argv[argc-1]);
 
     /* The second last remaining argument is the URL */
     char *base_url = argv[argc-2];
     if (strncmp(base_url, "http://", 7) && strncmp(base_url, "https://", 8)) {
         fprintf(stderr, "Error: Please supply a valid URL.\n");
-        print_help(argv[0]);
+        print_help(argv[0], 0);
         exit(EXIT_FAILURE);
     } else {
-        network_init(base_url);
+        if(!network_init(base_url)) {
+            fprintf(stderr, "Error: Network initialisation failed.\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
     fuse_start:
@@ -90,9 +98,32 @@ int main(int argc, char **argv)
     return 0;
 }
 
-static void print_help(char *program_name)
+/**
+ * \brief add an argument to an argv array
+ * \details This is basically how you add a string to an array of string
+ */
+void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 {
-    fprintf(stderr,
-            "Usage: %s [options] URL mount_point\n", program_name);
+    (*fuse_argc)++;
+    *fuse_argv_ptr = realloc(*fuse_argv_ptr, *fuse_argc * sizeof(char *));
+    char **fuse_argv = *fuse_argv_ptr;
+    fuse_argv[*fuse_argc - 1] = strndup(opt_string, ARG_LEN_MAX);
 }
 
+static void print_help(char *program_name, int long_help)
+{
+    fprintf(stderr,
+            "Usage: %s [options] URL mountpoint\n", program_name);
+    if (long_help) {
+        print_http_options();
+    }
+}
+
+static void print_http_options()
+{
+    fprintf(stderr,
+"HTTP options:\n\
+    -u   --username        HTTP authentication username\n\
+    -p   --password        HTTP authentication password\n\n\
+libfuse options:\n");
+}

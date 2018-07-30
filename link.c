@@ -14,7 +14,7 @@
 #define HTTP_RANGE_NOT_SATISFIABLE 416
 
 /* ---------------- External variables -----------------------*/
-LinkTable *ROOT_LINK_TBL;
+LinkTable *ROOT_LINK_TBL = NULL;
 
 static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
 static Link *Link_new(const char *p_url, LinkType type);
@@ -90,12 +90,20 @@ static CURL *Link_to_curl(Link *link)
     curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
-    curl_easy_setopt(curl, CURLOPT_SHARE, curl_share);
+    curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
     /*
      * The write back function pointer has to be set at curl handle creation,
      * for thread safety
      */
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
+
+    if (NETWORK_CONFIG.username) {
+        curl_easy_setopt(curl, CURLOPT_USERNAME, NETWORK_CONFIG.username);
+    }
+
+    if (NETWORK_CONFIG.password) {
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, NETWORK_CONFIG.password);
+    }
 
     return curl;
 }
@@ -229,7 +237,7 @@ LinkTable *LinkTable_new(const char *url)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp != HTTP_OK) {
         fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
-        URL: %s, HTTP %ld\n", url, http_resp);
+URL: %s, HTTP %ld\n", url, http_resp);
 
         LinkTable_free(linktbl);
         linktbl = NULL;

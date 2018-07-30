@@ -8,8 +8,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
-/* ----------------- External variables ----------------------*/
-CURLSH *curl_share;
+/* ----------------- External variables ---------------------- */
+CURLSH *CURL_SHARE;
+NetworkConfigStruct NETWORK_CONFIG;
 
 /* ----------------- Static variable ----------------------- */
 /** \brief curl multi interface handle */
@@ -18,8 +19,9 @@ static CURLM *curl_multi;
 static pthread_mutex_t transfer_lock;
 /** \brief the lock array for cryptographic functions */
 static pthread_mutex_t *crypto_lockarray;
-/** \brief  mutex for curl share interface itself */
+/** \brief mutex for curl share interface itself */
 static pthread_mutex_t curl_lock;
+/** \brief network configuration */
 
 /* ---------------- Static function prototype ---------------*/
 static void crypto_lock_callback(int mode, int type, char *file, int line);
@@ -188,10 +190,18 @@ void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
     }
 }
 
-void network_init(const char *url)
+void network_config_init()
 {
+    NETWORK_CONFIG.username = NULL;
+    NETWORK_CONFIG.password = NULL;
+    NETWORK_CONFIG.proxy_url = NULL;
+    NETWORK_CONFIG.proxy_password = NULL;
+    NETWORK_CONFIG.proxy_password = NULL;
+    NETWORK_CONFIG.max_conns = NETWORK_MAX_CONNS;
+}
 
-
+LinkTable *network_init(const char *url)
+{
     /* ------- Global related ----------*/
     if (curl_global_init(CURL_GLOBAL_ALL)) {
         fprintf(stderr, "network_init(): curl_global_init() failed!\n");
@@ -199,22 +209,22 @@ void network_init(const char *url)
     }
 
     /* -------- Share related ----------*/
-    curl_share = curl_share_init();
-    if (!(curl_share)) {
+    CURL_SHARE = curl_share_init();
+    if (!(CURL_SHARE)) {
         fprintf(stderr, "network_init(): curl_share_init() failed!\n");
         exit(EXIT_FAILURE);
     }
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(curl_share, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+    curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+    curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
+    curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
 
     if (pthread_mutex_init(&curl_lock, NULL) != 0) {
         printf(
             "network_init(): curl_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
-    curl_share_setopt(curl_share, CURLSHOPT_LOCKFUNC, curl_callback_lock);
-    curl_share_setopt(curl_share, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
+    curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
+    curl_share_setopt(CURL_SHARE, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
 
     /* ------------- Multi related -----------*/
     curl_multi = curl_multi_init();
@@ -223,7 +233,7 @@ void network_init(const char *url)
         exit(EXIT_FAILURE);
     }
     curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
-                      CURL_MULTI_MAX_CONNECTION);
+                      NETWORK_CONFIG.max_conns);
 
     /* ------------ Initialise locks ---------*/
     if (pthread_mutex_init(&transfer_lock, NULL) != 0) {
@@ -244,6 +254,7 @@ void network_init(const char *url)
 
     /* ----------- create the root link table --------------*/
     ROOT_LINK_TBL = LinkTable_new(url);
+    return ROOT_LINK_TBL;
 }
 
 void transfer_blocking(CURL *curl)
@@ -295,7 +306,7 @@ static unsigned long thread_id(void)
 }
 
 size_t
-WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp)
 {
     size_t realsize = size * nmemb;
     MemoryStruct *mem = (MemoryStruct *)userp;
@@ -303,7 +314,7 @@ WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
     mem->memory = realloc(mem->memory, mem->size + realsize + 1);
     if(!mem->memory) {
         /* out of memory! */
-        fprintf(stderr, "WriteMemoryCallback(): realloc failure!\n");
+        fprintf(stderr, "write_memory_callback(): realloc failure!\n");
         exit(EXIT_FAILURE);
         return 0;
     }
