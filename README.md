@@ -21,9 +21,17 @@ Then you need to check if ``libssl1.0-dev`` had been installed properly. If you 
 
 ## Usage
 
-		./httpdirfs -f $URL $YOUR_MOUNT_POINT
+	./httpdirfs -f $URL $YOUR_MOUNT_POINT
 
 An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting. 
+
+Other useful options:
+
+	-u   --user            HTTP authentication username
+    	-p   --password        HTTP authentication password
+    	-P   --proxy           Proxy for libcurl, for more details refer to
+				https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
+
 
 ## SSL Support
 
