@@ -80,7 +80,6 @@ static CURL *Link_to_curl(Link *link)
     if (!curl) {
         fprintf(stderr, "Link_to_curl(): curl_easy_init() failed!\n");
     }
-
     /* set up some basic curl stuff */
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "HTTPDirFS");
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
@@ -91,10 +90,6 @@ static CURL *Link_to_curl(Link *link)
     curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
     curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
-    /*
-     * The write back function pointer has to be set at curl handle creation,
-     * for thread safety
-     */
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
 
     if (NETWORK_CONFIG.username) {
@@ -103,6 +98,20 @@ static CURL *Link_to_curl(Link *link)
 
     if (NETWORK_CONFIG.password) {
         curl_easy_setopt(curl, CURLOPT_PASSWORD, NETWORK_CONFIG.password);
+    }
+
+    if (NETWORK_CONFIG.proxy) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, NETWORK_CONFIG.proxy);
+    }
+
+    if (NETWORK_CONFIG.proxy_user) {
+        curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
+                         NETWORK_CONFIG.proxy_user);
+    }
+
+    if (NETWORK_CONFIG.proxy_pass) {
+        curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
+                         NETWORK_CONFIG.proxy_pass);
     }
 
     return curl;

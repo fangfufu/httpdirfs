@@ -24,9 +24,9 @@ typedef struct {
 typedef struct {
     char *username;
     char *password;
-    char *proxy_url;
-    char *proxy_username;
-    char *proxy_password;
+    char *proxy;
+    char *proxy_user;
+    char *proxy_pass;
     long max_conns;
 } NetworkConfigStruct;
 

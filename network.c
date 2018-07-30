@@ -194,9 +194,9 @@ void network_config_init()
 {
     NETWORK_CONFIG.username = NULL;
     NETWORK_CONFIG.password = NULL;
-    NETWORK_CONFIG.proxy_url = NULL;
-    NETWORK_CONFIG.proxy_password = NULL;
-    NETWORK_CONFIG.proxy_password = NULL;
+    NETWORK_CONFIG.proxy = NULL;
+    NETWORK_CONFIG.proxy_user = NULL;
+    NETWORK_CONFIG.proxy_pass = NULL;
     NETWORK_CONFIG.max_conns = NETWORK_MAX_CONNS;
 }
 
