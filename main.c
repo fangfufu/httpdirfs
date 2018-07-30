@@ -28,19 +28,22 @@ int main(int argc, char **argv)
     network_config_init();
 
     char c;
-    int opts_index = 0;
-    const char *short_opts = "o:hVdfsp:u:";
+    int long_index = 0;
+    const char *short_opts = "o:hVdfsp:u:P:";
     const struct option long_opts[] = {
-        {"help", no_argument, NULL, 'h'},
-        {"version", no_argument, NULL, 'V'},
-        {"debug", no_argument, NULL, 'd'},
-        {"username", required_argument, NULL, 'u'},
-        {"password", required_argument, NULL, 'p'},
+        {"help", no_argument, NULL, 'h'},               /* 0 */
+        {"version", no_argument, NULL, 'V'},            /* 1 */
+        {"debug", no_argument, NULL, 'd'},              /* 2 */
+        {"user", required_argument, NULL, 'u'},         /* 3 */
+        {"password", required_argument, NULL, 'p'},     /* 4 */
+        {"proxy", required_argument, NULL, 'P'},        /* 5 */
+        {"proxy-user", required_argument, NULL, 'L'},   /* 6 */
+        {"proxy-pass", required_argument, NULL, 'L'},   /* 7 */
         {0, 0, 0, 0}
     };
     while ((c =
         getopt_long(argc, argv, short_opts, long_opts,
-                    &opts_index)) != -1) {
+                    &long_index)) != -1) {
         switch (c) {
             case 'o':
                 add_arg(&fuse_argv, &fuse_argc, "-o");
@@ -69,10 +72,33 @@ int main(int argc, char **argv)
             case 'u':
                 NETWORK_CONFIG.password = strndup(optarg, ARG_LEN_MAX);
                 break;
-            case '?':
+            case 'P':
+                NETWORK_CONFIG.proxy = strndup(optarg, URL_LEN_MAX);
+                break;
+            case 'L':
+                switch (long_index) {
+                    case 6:
+                        NETWORK_CONFIG.proxy_user = strndup(optarg,
+                                                            ARG_LEN_MAX);
+                        printf("proxy_user: %s\n", optarg);
+                        break;
+                    case 7:
+                        NETWORK_CONFIG.proxy_pass = strndup(optarg,
+                                                            ARG_LEN_MAX);
+                        printf("proxy_pass: %s\n", optarg);
+                        break;
+                    default:
+                        fprintf(stderr, "Error: Invalid option\n");
+                        add_arg(&fuse_argv, &fuse_argc, "--help");
+                        goto fuse_start;
+                        break;
+                }
+                break;
+            default:
                 fprintf(stderr, "Error: Invalid option\n");
                 add_arg(&fuse_argv, &fuse_argc, "--help");
                 goto fuse_start;
+                break;
         }
     };
 
@@ -123,7 +149,12 @@ static void print_http_options()
 {
     fprintf(stderr,
 "HTTP options:\n\
-    -u   --username        HTTP authentication username\n\
-    -p   --password        HTTP authentication password\n\n\
+    -u   --user            HTTP authentication username\n\
+    -p   --password        HTTP authentication password\n\
+    -P   --proxy           Proxy for libcurl, for details refer to\n\
+        https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
+         --proxy-user      Username for the proxy\n\
+         --proxy-pass      Password for the proxy\n\
+    \n\
 libfuse options:\n");
 }
