@@ -3,7 +3,7 @@
 
 #include "link.h"
 
-#define CURL_MULTI_MAX_CONNECTION 20
+#define NETWORK_MAX_CONNS 20
 
 typedef struct {
     char *memory;
@@ -21,14 +21,29 @@ typedef struct {
     Link *link;
 } TransferStruct;
 
+typedef struct {
+    char *username;
+    char *password;
+    char *proxy_url;
+    char *proxy_username;
+    char *proxy_password;
+    long max_conns;
+} NetworkConfigStruct;
+
+/** \brief CURL configuration */
+extern NetworkConfigStruct NETWORK_CONFIG;
+
 /** \brief curl shared interface */
-extern CURLSH *curl_share;
+extern CURLSH *CURL_SHARE;
 
 /** \brief perform one transfer cycle */
 int curl_multi_perform_once();
 
-/** \brief Initialise the network module */
-void network_init(const char *url);
+/** \brief initialise network config struct */
+void network_config_init();
+
+/** \brief initialise the network module */
+LinkTable *network_init(const char *url);
 
 /** \brief blocking file transfer */
 void transfer_blocking(CURL *curl);
@@ -38,6 +53,6 @@ void transfer_nonblocking(CURL *curl);
 
 /** \brief callback function for file transfer */
 size_t
-WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp);
+write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp);
 
 #endif
