@@ -21,9 +21,24 @@ Then you need to check if ``libssl1.0-dev`` had been installed properly. If you 
 
 ## Usage
 
-		./httpdirfs -f $URL $YOUR_MOUNT_POINT
+	./httpdirfs -f $URL $YOUR_MOUNT_POINT
 
 An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting. 
+
+Other useful options:
+
+        -u   --user            HTTP authentication username
+        -p   --password        HTTP authentication password
+        -P   --proxy           Proxy for libcurl, for more details refer to
+				https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
+
+## Configuration file support
+There is now rudimentary config file support. The configuration file that the program will read is ``${HOME}/.httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example: 
+
+	$ cat ${HOME}/.httpdirfs/config
+	--username test
+	--password test
+	-f
 
 ## SSL Support
 
