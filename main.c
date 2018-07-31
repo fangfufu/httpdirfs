@@ -185,8 +185,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         add_arg(fuse_argv, fuse_argc, "--help");
                         return 1;
         }
-                    };
-                    return 0;
+    };
+    return 0;
 }
 
 /**
