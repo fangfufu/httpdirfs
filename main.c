@@ -87,7 +87,7 @@ void parse_config_file(char ***fuse_argv, int *fuse_argc)
          */
         argv[0] = "./httpdirfs";
         while (fgets(buf, buf_len, config)) {
-            if (!strncmp(buf, "--", 2)) {
+            if (buf[0] == '-') {
                 argc++;
                 buf[strnlen(buf, buf_len) - 1] = '\0';
                 char *space;
@@ -131,7 +131,6 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
     while ((c =
         getopt_long(argc, argv, short_opts, long_opts,
                     &long_index)) != -1) {
-        printf("c: %c\n", c);
         switch (c) {
             case 'o':
                 add_arg(fuse_argv, fuse_argc, "-o");
