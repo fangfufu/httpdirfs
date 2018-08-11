@@ -13,15 +13,10 @@ static void print_help(char *program_name, int long_help);
 static void print_http_options();
 static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
-void parse_config_file(char ***fuse_argv, int *fuse_argc);
+void parse_config_file(char ***argv, int *argc);
 
 int main(int argc, char **argv)
 {
-    char **fuse_argv = NULL;
-    int fuse_argc = 0;
-
-    /* Add the program's name to the fuse argument */
-    add_arg(&fuse_argv, &fuse_argc, argv[0]);
     /* Automatically print help if not enough arguments are supplied */
     if (argc < 2) {
         print_help(argv[0], 0);
@@ -29,18 +24,36 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    /* These are passed into fuse initialiser */
+    char **fuse_argv = NULL;
+    int fuse_argc = 0;
+    /* These are the combined argument with the config file */
+    char **all_argv = NULL;
+    int all_argc = 0;
+
+    /*--- Add the program's name to the combined argument list ---*/
+    add_arg(&all_argv, &all_argc, argv[0]);
+    /*--- FUSE expects the first initialisation to be the program's name ---*/
+    add_arg(&fuse_argv, &fuse_argc, argv[0]);
+
     /* initialise network configuration struct */
     network_config_init();
 
-    /* Add the last remaining argument, which is the mountpoint */
-    add_arg(&fuse_argv, &fuse_argc, argv[argc-1]);
+    /* parse the config file, if it exists, store it in all_argv and all_argc */
+    parse_config_file(&all_argv, &all_argc);
 
-    if (parse_arg_list(argc, argv, &fuse_argv, &fuse_argc)) {
+    /* Copy the command line argument list to the combined argument list */
+    for (int i = 1; i < argc; i++) {
+        add_arg(&all_argv, &all_argc, argv[i]);
+    }
+
+    /* parse the combined argument list */
+    if (parse_arg_list(all_argc, all_argv, &fuse_argv, &fuse_argc)) {
         goto fuse_start;
     }
 
-    /* parse the configuration file, if it exists */
-    parse_config_file(&fuse_argv, &fuse_argc);
+    /*--- Add the last remaining argument, which is the mountpoint ---*/
+    add_arg(&fuse_argv, &fuse_argc, argv[argc-1]);
 
     /* The second last remaining argument is the URL */
     char *base_url = argv[argc-2];
@@ -61,7 +74,7 @@ int main(int argc, char **argv)
     return 0;
 }
 
-void parse_config_file(char ***fuse_argv, int *fuse_argc)
+void parse_config_file(char ***argv, int *argc)
 {
     char *home = getenv("HOME");
     char *config_dir = "/.httpdirfs";
@@ -73,40 +86,31 @@ void parse_config_file(char ***fuse_argv, int *fuse_argc)
     strncat(full_path, config_dir, strlen(config_dir));
     strncat(full_path, main_config_name, strlen(main_config_name));
 
-    int argc = 1;
-    char **argv = NULL;
     /* The buffer has to be able to fit a URL */
     int buf_len = URL_LEN_MAX;
     char buf[buf_len];
     FILE *config = fopen(full_path, "r");
     if (config) {
-        argv = malloc(1 * sizeof(char *));
-        /*
-         * getopt_long() expects the first parameter to be the name of the
-         * program that was called.
-         */
-        argv[0] = "./httpdirfs";
         while (fgets(buf, buf_len, config)) {
             if (buf[0] == '-') {
-                argc++;
+                (*argc)++;
                 buf[strnlen(buf, buf_len) - 1] = '\0';
                 char *space;
                 space = strchr(buf, ' ');
                 if (!space) {
-                    argv = realloc(argv, argc * sizeof(char *));
-                    argv[argc - 1] = strndup(buf, buf_len);
+                    *argv = realloc(*argv, *argc * sizeof(char **));
+                    (*argv)[*argc - 1] = strndup(buf, buf_len);
                 } else {
-                    argc++;
-                    argv = realloc(argv, argc * sizeof(char *));
+                    (*argc)++;
+                    *argv = realloc(*argv, *argc * sizeof(char **));
                     /* Only copy up to the space character*/
-                    argv[argc - 2] = strndup(buf, space - buf);
+                    (*argv)[*argc - 2] = strndup(buf, space - buf);
                     /* Starts copying after the space */
-                    argv[argc - 1] = strndup(space + 1, buf_len);
+                    (*argv)[*argc - 1] = strndup(space + 1,
+                                                buf_len - (space + 1 - buf));
                 }
             }
         }
-        parse_arg_list(argc, argv, fuse_argv, fuse_argc);
-        free(argv);
     }
 }
 
@@ -139,6 +143,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 'h':
                 print_help(argv[0], 1);
                 add_arg(fuse_argv, fuse_argc, "-h");
+                /* skip everything else to print the help */
                 return 1;
             case 'V':
                 add_arg(fuse_argv, fuse_argc, "-V");
@@ -167,12 +172,10 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 6:
                         NETWORK_CONFIG.proxy_user = strndup(optarg,
                                                             ARG_LEN_MAX);
-                        printf("proxy_user: %s\n", optarg);
                         break;
                     case 7:
                         NETWORK_CONFIG.proxy_pass = strndup(optarg,
                                                             ARG_LEN_MAX);
-                        printf("proxy_pass: %s\n", optarg);
                         break;
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
@@ -180,13 +183,13 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         return 1;
                 }
                 break;
-                    default:
-                        fprintf(stderr, "Error: Invalid option\n");
-                        add_arg(fuse_argv, fuse_argc, "--help");
-                        return 1;
+            default:
+                fprintf(stderr, "Error: Invalid option\n");
+                add_arg(fuse_argv, fuse_argc, "--help");
+                return 1;
         }
-                    };
-                    return 0;
+    };
+    return 0;
 }
 
 /**

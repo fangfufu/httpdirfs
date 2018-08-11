@@ -1,4 +1,5 @@
 *.o
 *.kate-swp
-httpdirfs
 html
+mnt
+httpdirfs
