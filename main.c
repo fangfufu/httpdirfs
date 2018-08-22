@@ -157,10 +157,10 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 's':
                 add_arg(fuse_argv, fuse_argc, "-s");
                 break;
-            case 'p':
+            case 'u':
                 NETWORK_CONFIG.username = strndup(optarg, ARG_LEN_MAX);
                 break;
-            case 'u':
+            case 'p':
                 NETWORK_CONFIG.password = strndup(optarg, ARG_LEN_MAX);
                 break;
             case 'P':
