@@ -32,6 +32,13 @@ Other useful options:
         -P   --proxy           Proxy for libcurl, for more details refer to
 				https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
 
+## Configuration file support
+There is now rudimentary config file support. The configuration file that the program will read is ``${HOME}/.httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example: 
+
+	$ cat ${HOME}/.httpdirfs/config
+	--username test
+	--password test
+	-f
 
 ## SSL Support
 
