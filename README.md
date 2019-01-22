@@ -7,7 +7,7 @@ The performance of the program is excellent, due to the use of curl-multi interf
 ## Compilation
 This program was developed under Debian Stretch. If you are using the same operation system as me, you need ``libgumbo-dev``, ``libfuse-dev``, ``libssl1.0-dev`` and ``libcurl4-openssl-dev``.
 
-If you run Debian Stretch and get warnings that look like this:
+If you run Debian Stretch, and you have OpenSSL 1.0.2 installed, and you get warnings that look like below during compilation,
 
     network.c:70:22: warning: ‘thread_id’ defined but not used [-Wunused-function]
     static unsigned long thread_id(void)
@@ -17,7 +17,9 @@ If you run Debian Stretch and get warnings that look like this:
                 ^~~~~~~~~~~~~
     /usr/bin/ld: warning: libcrypto.so.1.0.2, needed by /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/libcurl.so, may conflict with libcrypto.so.1.1
 
-Then you need to check if ``libssl1.0-dev`` had been installed properly. If you get these compilation warnings, this program will ocassionally crash if you connect to HTTPS website. This is because OpenSSL 1.0.2 needs those functions for thread safety, whereas OpenSSL 1.1 does not. If you have ``libssl-dev`` rather than ``libssl1.0-dev`` installed, those call back functions will not be linked properly.
+then you need to check if ``libssl1.0-dev`` had been installed properly. If you get these compilation warnings, this program will ocassionally crash if you connect to HTTPS website. This is because OpenSSL 1.0.2 needs those functions for thread safety, whereas OpenSSL 1.1 does not. If you have ``libssl-dev`` rather than ``libssl1.0-dev`` installed, those call back functions will not be linked properly.
+
+If you have OpenSSL 1.1 and the associated development headers installed, then you can safely ignore these warning messages. If you are on Debian Buster, you will definitely get these warning messages, and you can safely ignore them. 
 
 ## Usage
 
