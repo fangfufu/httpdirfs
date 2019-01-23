@@ -5,7 +5,7 @@ Have you ever wanted to mount those HTTP directory listings as if it was a parti
 The performance of the program is excellent, due to the use of curl-multi interface. HTTP connections are reused, and HTTP pipelining is used when available. I haven't benchmarked it, but I feel this is faster than ``rclone mount``. The FUSE component itself also runs in multithreaded mode.
 
 ## Compilation
-This program was developed under Debian Stretch. If you are using the same operation system as me, you need ``libgumbo-dev``, ``libfuse-dev``, ``libssl1.0-dev`` and ``libcurl4-openssl-dev``.
+This program was developed under Debian Stretch. If you are using the same operating system as me, you need ``libgumbo-dev``, ``libfuse-dev``, ``libssl1.0-dev`` and ``libcurl4-openssl-dev``.
 
 If you run Debian Stretch, and you have OpenSSL 1.0.2 installed, and you get warnings that look like below during compilation,
 
