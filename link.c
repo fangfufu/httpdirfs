@@ -245,7 +245,7 @@ LinkTable *LinkTable_new(const char *url)
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp != HTTP_OK) {
-        fprintf(stderr, "link.c: LinkTable_new() cannot retrive the base URL, \
+        fprintf(stderr, "link.c: LinkTable_new() cannot retrieve the base URL, \
 URL: %s, HTTP %ld\n", url, http_resp);
 
         LinkTable_free(linktbl);
