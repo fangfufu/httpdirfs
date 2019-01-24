@@ -1,0 +1,186 @@
+.TH HTTPDIRFS "1" "January 2019" "HTTPDirFS version 1.0" "User Commands"
+.SH NAME
+HTTPDirFS \- filesystem client for HTTP directory listing
+.SH SYNOPSIS
+.B httpdirfs
+[\fI\,options\/\fR] \fI\,URL mountpoint\/\fR
+.SH DESCRIPTION
+HTTPDirFS is program that can be used to mount HTTP directory listings
+(generated using an Apache DirectoryIndex, for example) as a virtual filesystem
+through the FUSE interface. It supports HTTP basic authentication and proxy.
+.SH OPTIONS
+.SS "HTTP options:"
+.TP
+\fB\-u\fR   \fB\-\-username\fR
+HTTP authentication username
+.TP
+\fB\-p\fR   \fB\-\-password\fR
+HTTP authentication password
+.TP
+\fB\-P\fR   \fB\-\-proxy\fR
+Proxy for libcurl, for more details refer to
+https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
+.TP
+\fB\-\-proxy\-username\fR
+Username for the proxy
+.TP
+\fB\-\-proxy\-password\fR
+Password for the proxy
+.SS "FUSE options:"
+.TP
+\fB\-d\fR   \fB\-o\fR debug
+enable debug output (implies \fB\-f\fR)
+.TP
+\fB\-f\fR
+foreground operation
+.TP
+\fB\-s\fR
+disable multi\-threaded operation
+.TP
+\fB\-o\fR allow_other
+allow access to other users
+.TP
+\fB\-o\fR allow_root
+allow access to root
+.TP
+\fB\-o\fR auto_unmount
+auto unmount on process termination
+.TP
+\fB\-o\fR nonempty
+allow mounts over non\-empty file/dir
+.HP
+\fB\-o\fR default_permissions enable permission checking by kernel
+.TP
+\fB\-o\fR fsname=NAME
+set filesystem name
+.TP
+\fB\-o\fR subtype=NAME
+set filesystem type
+.TP
+\fB\-o\fR large_read
+issue large read requests (2.4 only)
+.TP
+\fB\-o\fR max_read=N
+set maximum size of read requests
+.TP
+\fB\-o\fR hard_remove
+immediate removal (don't hide files)
+.TP
+\fB\-o\fR use_ino
+let filesystem set inode numbers
+.TP
+\fB\-o\fR readdir_ino
+try to fill in d_ino in readdir
+.TP
+\fB\-o\fR direct_io
+use direct I/O
+.TP
+\fB\-o\fR kernel_cache
+cache files in kernel
+.TP
+\fB\-o\fR [no]auto_cache
+enable caching based on modification times (off)
+.TP
+\fB\-o\fR umask=M
+set file permissions (octal)
+.TP
+\fB\-o\fR uid=N
+set file owner
+.TP
+\fB\-o\fR gid=N
+set file group
+.TP
+\fB\-o\fR entry_timeout=T
+cache timeout for names (1.0s)
+.TP
+\fB\-o\fR negative_timeout=T
+cache timeout for deleted names (0.0s)
+.TP
+\fB\-o\fR attr_timeout=T
+cache timeout for attributes (1.0s)
+.TP
+\fB\-o\fR ac_attr_timeout=T
+auto cache timeout for attributes (attr_timeout)
+.TP
+\fB\-o\fR noforget
+never forget cached inodes
+.TP
+\fB\-o\fR remember=T
+remember cached inodes for T seconds (0s)
+.TP
+\fB\-o\fR nopath
+don't supply path if not necessary
+.TP
+\fB\-o\fR intr
+allow requests to be interrupted
+.TP
+\fB\-o\fR intr_signal=NUM
+signal to send on interrupt (10)
+.TP
+\fB\-o\fR modules=M1[:M2...]
+names of modules to push onto filesystem stack
+.TP
+\fB\-o\fR max_write=N
+set maximum size of write requests
+.TP
+\fB\-o\fR max_readahead=N
+set maximum readahead
+.TP
+\fB\-o\fR max_background=N
+set number of maximum background requests
+.TP
+\fB\-o\fR congestion_threshold=N
+set kernel's congestion threshold
+.TP
+\fB\-o\fR async_read
+perform reads asynchronously (default)
+.TP
+\fB\-o\fR sync_read
+perform reads synchronously
+.TP
+\fB\-o\fR atomic_o_trunc
+enable atomic open+truncate support
+.TP
+\fB\-o\fR big_writes
+enable larger than 4kB writes
+.TP
+\fB\-o\fR no_remote_lock
+disable remote file locking
+.TP
+\fB\-o\fR no_remote_flock
+disable remote file locking (BSD)
+.HP
+\fB\-o\fR no_remote_posix_lock disable remove file locking (POSIX)
+.TP
+\fB\-o\fR [no_]splice_write
+use splice to write to the fuse device
+.TP
+\fB\-o\fR [no_]splice_move
+move data while splicing to the fuse device
+.TP
+\fB\-o\fR [no_]splice_read
+use splice to read from the fuse device
+.PP
+.SS "Module options:"
+.TP
+[iconv]
+.TP
+\fB\-o\fR from_code=CHARSET
+original encoding of file names (default: UTF\-8)
+.TP
+\fB\-o\fR to_code=CHARSET
+new encoding of the file names (default: ANSI_X3.4\-1968)
+.PP
+[subdir]
+.TP
+\fB\-o\fR subdir=DIR
+prepend this directory to all paths (mandatory)
+.TP
+\fB\-o\fR [no]rellinks
+transform absolute symlinks to relative
+.SH AUTHORS
+.LP
+HTTPDirFS has been written by Fufu Fang <fangfufu2003@gmail.com>.
+.LP
+This manpage was written by Jerome Charaoui <jerome@riseup.net> for the
+Debian GNU/Linux distribution (but it may be used by others).
