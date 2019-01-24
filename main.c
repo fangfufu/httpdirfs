@@ -10,6 +10,7 @@
 
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);
+static void print_version();
 static void print_http_options();
 static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
@@ -146,8 +147,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                 /* skip everything else to print the help */
                 return 1;
             case 'V':
+                print_version(argv[0], 1);
                 add_arg(fuse_argv, fuse_argc, "-V");
-                break;
+                return 1;
             case 'd':
                 add_arg(fuse_argv, fuse_argc, "-d");
                 break;
@@ -211,6 +213,12 @@ static void print_help(char *program_name, int long_help)
     if (long_help) {
         print_http_options();
     }
+}
+
+static void print_version()
+{
+    fprintf(stderr,
+            "HTTPDirFS version %s\n", VERSION);
 }
 
 static void print_http_options()

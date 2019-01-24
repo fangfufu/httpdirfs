@@ -1,5 +1,6 @@
+VERSION=1.0
 CC=gcc
-CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64
+CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"
 LDFLAGS+= -lgumbo -lcurl -lfuse -lcrypto
 OBJ = main.o network.o fuse_local.o link.o
 
