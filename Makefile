@@ -7,10 +7,10 @@ OBJ = main.o network.o fuse_local.o link.o
 prefix ?= /usr/local
 
 %.o: %.c
-	$(CC) -c -o $@ $< $(CPPFLAGS) $(CFLAGS) $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
 
 httpdirfs: $(OBJ)
-	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(LDFLAGS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
 install:
 	install -m 755 -D httpdirfs \
