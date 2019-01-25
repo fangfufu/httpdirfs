@@ -6,6 +6,8 @@ OBJ = main.o network.o fuse_local.o link.o
 
 prefix ?= /usr/local
 
+all: httpdirfs
+
 %.o: %.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
 
@@ -21,7 +23,9 @@ install:
 doc:
 	doxygen Doxyfile
 
-.PHONY: clean
-
 clean:
 	rm -rf *.o httpdirfs html
+
+distclean: clean
+
+.PHONY: all install clean distclean
