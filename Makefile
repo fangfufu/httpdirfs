@@ -4,7 +4,7 @@ CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"
 LDFLAGS+= -lgumbo -lcurl -lfuse -lcrypto
 OBJ = main.o network.o fuse_local.o link.o
 
-PREFIX ?= /usr/local
+prefix ?= /usr/local
 
 %.o: %.c
 	$(CC) -c -o $@ $< $(CPPFLAGS) $(CFLAGS) $(LDFLAGS)
@@ -13,7 +13,7 @@ httpdirfs: $(OBJ)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(LDFLAGS)
 
 install:
-	install -m 755 -D httpdirfs $(DESTDIR)$(PREFIX)/bin
+	install -m 755 -D httpdirfs $(DESTDIR)$(prefix)/bin
 
 doc:
 	doxygen Doxyfile
