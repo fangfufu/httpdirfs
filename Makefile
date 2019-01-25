@@ -28,4 +28,8 @@ clean:
 
 distclean: clean
 
-.PHONY: all install clean distclean
+uninstall:
+	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
+	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+
+.PHONY: all install clean distclean uninstall
