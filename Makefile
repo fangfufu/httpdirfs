@@ -8,7 +8,7 @@ prefix ?= /usr/local
 
 all: httpdirfs
 
-%.o: %.c
+%.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
 
 httpdirfs: $(COBJS)
