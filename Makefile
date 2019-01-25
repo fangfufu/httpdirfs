@@ -13,7 +13,10 @@ httpdirfs: $(OBJ)
 	$(CC) -o $@ $^ $(CPPFLAGS) $(CFLAGS) $(LDFLAGS)
 
 install:
-	install -m 755 -D httpdirfs $(DESTDIR)$(prefix)/bin
+	install -m 755 -D httpdirfs \
+		$(DESTDIR)$(prefix)/bin/httpdirfs
+	install -m 644 -D httpdirfs.1 \
+		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 
 doc:
 	doxygen Doxyfile
