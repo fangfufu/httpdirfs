@@ -17,14 +17,16 @@ httpdirfs: $(COBJS)
 install:
 	install -m 755 -D httpdirfs \
 		$(DESTDIR)$(prefix)/bin/httpdirfs
-	install -m 644 -D httpdirfs.1 \
+	install -m 644 -D doc/man/httpdirfs.1 \
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 
 doc:
 	doxygen Doxyfile
 
 clean:
-	rm -rf *.o httpdirfs html
+	-rm -f *.o
+	-rm -f httpdirfs
+	-rm -rf doc/html
 
 distclean: clean
 
@@ -32,4 +34,4 @@ uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 
-.PHONY: all install clean distclean uninstall
+.PHONY: all doc install clean distclean uninstall
