@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
+#include <linux/limits.h>
 
 #define ARG_LEN_MAX 64
 
@@ -77,13 +78,22 @@ int main(int argc, char **argv)
 
 void parse_config_file(char ***argv, int *argc)
 {
-    char *home = getenv("HOME");
-    char *config_dir = "/.httpdirfs";
+    char *xdg_config_home = getenv("XDG_CONFIG_HOME");
+    if (!xdg_config_home) {
+        char *home = getenv("HOME");
+        char *xdg_config_home_default = "/.config";
+        xdg_config_home = calloc(
+            strnlen(home, PATH_MAX) + strnlen(xdg_config_home_default, PATH_MAX),
+                                 sizeof(char));
+        strncat(xdg_config_home, home, PATH_MAX);
+        strncat(xdg_config_home, xdg_config_home_default, PATH_MAX);
+    }
+    char *config_dir = "/httpdirfs";
     char *main_config_name = "/config";
-    int full_path_len = strnlen(home, 255) + strlen(config_dir) +
-    strlen(main_config_name) + 1;
-    char *full_path = calloc(full_path_len, sizeof(char *));
-    strncat(full_path, home, strnlen(home, 255));
+    int full_path_len = strnlen(xdg_config_home, PATH_MAX) + strlen(config_dir)
+        + strlen(main_config_name) + 1;
+    char *full_path = calloc(full_path_len, sizeof(char));
+    strncat(full_path, xdg_config_home, strnlen(xdg_config_home, PATH_MAX));
     strncat(full_path, config_dir, strlen(config_dir));
     strncat(full_path, main_config_name, strlen(main_config_name));
 
