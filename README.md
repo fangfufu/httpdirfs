@@ -35,9 +35,9 @@ Other useful options:
 				https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
 
 ## Configuration file support
-There is now rudimentary config file support. The configuration file that the program will read is ``${HOME}/.httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example: 
+There is now rudimentary config file support. The configuration file that the program will read is ``${XDG_CONFIG_HOME}/httpdirfs/config``. If ``${XDG_CONFIG_HOME}`` is not set, it will default to ``${HOME}/.config``. So by default you need to put the configuration file at ``${HOME}/.config/httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example: 
 
-	$ cat ${HOME}/.httpdirfs/config
+	$ cat ${HOME}/.config/httpdirfs/config
 	--username test
 	--password test
 	-f
