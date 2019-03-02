@@ -1,4 +1,4 @@
-VERSION=1.0.1
+VERSION=1.0.2
 
 CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"
 LDFLAGS+= -lgumbo -lcurl -lfuse -lcrypto
