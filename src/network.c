@@ -232,7 +232,7 @@ LinkTable *network_init(const char *url)
         fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
         exit(EXIT_FAILURE);
     }
-    curl_multi_setopt(curl_multi, CURLMOPT_MAXCONNECTS,
+    curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
                       NETWORK_CONFIG.max_conns);
 
     /* ------------ Initialise locks ---------*/
