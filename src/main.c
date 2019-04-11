@@ -5,11 +5,6 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
-#ifdef __FreeBSD__
-    #include <limits.h>
-#else
-    #include <linux/limits.h>
-#endif
 
 #define ARG_LEN_MAX 64
 
