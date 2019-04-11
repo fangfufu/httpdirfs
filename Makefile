@@ -1,7 +1,7 @@
 VERSION=1.0.3
 
-CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"
-LDFLAGS+= -lgumbo -lcurl -lfuse -lcrypto
+CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\" `pkg-config --cflags-only-I gumbo libcurl fuse`
+LDFLAGS+= -lgumbo -lcurl -lfuse -lcrypto `pkg-config --libs-only-L gumbo libcurl fuse`
 COBJS = main.o network.o fuse_local.o link.o
 
 prefix ?= /usr/local
