@@ -5,7 +5,6 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <string.h>
-#include <linux/limits.h>
 
 #define ARG_LEN_MAX 64
 
