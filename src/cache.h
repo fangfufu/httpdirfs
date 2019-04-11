@@ -14,22 +14,18 @@
  */
 
 /**
- * \brief cache file segment
- */
-typedef struct CacheSegment CacheSegment;
-
-struct CacheSegment {
-
-};
-
-/**
  * \brief cache metadata structure
  * \details we use linked list to store the information about fragments
+ * \note fanf2@cam.ac.uk told me to use an array rather than linked list!
  */
 typedef struct CacheFile CacheFile;
 
 struct CacheFile {
-
+    FILE *file_fd;
+    FIILE *meta_fd;
+    int seg_count;
+    off_t *start;
+    off_t *end;
 };
 
 /**
