@@ -38,13 +38,8 @@ typedef struct {
 
 /**
  * \brief read from a cache file
- * \details This is the God function which does everything, it is probably an
- * anti-pattern. This function does the following:
- * - Try and open the cache file
- *  - If the cache file does not exist,
- *  -
  */
-size_t Cache_read(const char *filepath, off_t offset, size_t size);
+off_t Cache_read(const char *filepath, off_t offset, size_t size);
 
 /**
  * \brief write to a cache file
