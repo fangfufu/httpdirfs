@@ -3,7 +3,7 @@
 
 #include "link.h"
 
-#define NETWORK_MAX_CONNS 20
+#define NETWORK_MAX_CONNS 10
 
 typedef struct {
     char *memory;

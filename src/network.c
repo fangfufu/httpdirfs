@@ -234,6 +234,7 @@ LinkTable *network_init(const char *url)
     }
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
                       NETWORK_CONFIG.max_conns);
+    curl_multi_setopt(curl_multi, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
 
     /* ------------ Initialise locks ---------*/
     if (pthread_mutex_init(&transfer_lock, NULL) != 0) {
