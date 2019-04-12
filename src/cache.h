@@ -13,35 +13,80 @@
  * but it doesn't imply that I am good at computer science or programming!
  */
 
-/**
- * \brief cache metadata structure
- * \details we use linked list to store the information about fragments
- * \note fanf2@cam.ac.uk told me to use an array rather than linked list!
- */
-typedef struct CacheFile CacheFile;
 
-struct CacheFile {
-    FILE *file_fd;
-    FIILE *meta_fd;
-    int seg_count;
+/**
+ * \brief a cache segment
+ */
+typedef struct {
     off_t *start;
     off_t *end;
-};
+} Seg;
 
 /**
- * \brief create cache file
+ * \brief cache metadata structure
+ * \note fanf2@cam.ac.uk told me to use an array rather than linked list!
  */
-int CacheFile_create(const char *filepath, size_t size);
+typedef struct {
+    const char* filepath;
+    FILE *data_fd; /**< the file descriptor for the data file */
+    FILE *meta_fd; /**< the file descriptor for the meta file */
+    int nseg; /**<the number of segments */
+    Seg *seg; /**< the detail of each segment */
+ } Cache;
+
+/**************************** External functions ******************************/
 
 /**
- * \brief read cache file
+ * \brief read from a cache file
+ * \details This is the God function which does everything, it is probably an
+ * anti-pattern. This function does the following:
+ * - Try and open the cache file
+ *  - If the cache file does not exist,
+ *  -
  */
-size_t CacheFile_read(const char *filepath, off_t offset, size_t size);
+size_t Cache_read(const char *filepath, off_t offset, size_t size);
 
 /**
- * \brief write cache file
+ * \brief write to a cache file
  */
-size_t CacheFile_write(const char *filepath, off_t offset, size_t size,
-                    uint8_t, *content);
+size_t Cache_write(const char *filepath, off_t offset, size_t size,
+                   const uint8_t *content);
 
+/**************************** Internal functions ******************************/
+
+/**
+ * \brief create a cache file
+ */
+int Cache_create(const char *filepath, size_t size);
+
+/**
+ * \brief open a cache file
+ */
+Cache *Cache_open(const char *filepath);
+
+/**
+ * \brief write a metadata file
+ */
+int Meta_write(Cache *cf);
+
+/**
+ * \brief read a metadata file
+ */
+int Meta_read(Cache *cf);
+
+/**
+ * \brief read a data file
+ */
+size_t Data_read(Cache *cf, off_t offset, size_t size);
+
+/**
+ * \brief write to a data file
+ */
+size_t Data_write(Cache *cf, off_t offset, size_t size,
+                      const uint8_t *content);
+/**
+ * \brief create a data file
+ * \details We use sparse creation here
+ */
+int Data_create(Cache *cf, size_t size);
 #endif
