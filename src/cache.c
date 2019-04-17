@@ -1,15 +1,15 @@
 #include "cache.h"
 
-off_t Cache_read(const char *filepath, off_t offset, size_t size)
+long Cache_read(const char *filepath, long offset, long len)
 {
 }
 
-size_t Cache_write(const char *filepath, off_t offset, size_t size,
+long Cache_write(const char *filepath, long offset, long len,
                    const uint8_t *content)
 {
 }
 
-int Cache_create(const char *filepath, size_t size)
+int Cache_create(const char *filepath, long len)
 {
 }
 
@@ -29,16 +29,54 @@ int Meta_read(Cache *cf)
 }
 
 
-size_t Data_read(Cache *cf, off_t offset, size_t size)
+long Data_read(Cache *cf, long offset, long len,
+                const uint8_t *buf);
+{
+    if (len == 0) {
+        fprintf(stderr, "Data_read(): fseek(): requested to read 0 byte!\n");
+        return -1;
+    }
+
+    FILE *fp;
+    fp = fopen(cf->filepath, "r");
+
+    if (!fp) {
+        /* The data file does not exist */
+        return -1;
+    }
+
+    if (fseek(fp, offset, SEEK_SET) == -1) {
+        /* fseek failed */
+        fprintf(stderr, "Data_read(): fseek(): %s\n", strerror(errno));
+        return -1;
+    }
+
+    long byte_read = fread((void*) buf, sizeof(uint8_t), len, fp);
+    if (byte_read != len) {
+        fprintf(stderr,
+                "Data_read(): fread(): requested %ld, returned %llu!\n",
+                len, byte_read);
+        if (feof(fp)) {
+            fprintf(stderr,
+                    "Data_read(): fread(): reached the end of the file!\n");
+        }
+        if (ferror(fp)) {
+            fprintf(stderr,
+                    "Data_read(): fread(): encountered error (from ferror)!\n");
+        }
+    }
+    if (fclose(fp)) {
+        fprintf(stderr, "Data_read(): fclose(): %s\n", strerror(errno));
+        return -1;
+    }
+}
+
+long Data_write(Cache *cf, long offset, long len,
+                 const uint8_t *buf);
 {
 }
 
-size_t Data_write(Cache *cf, off_t offset, size_t size,
-                  const uint8_t *content)
-{
-}
-
-int Data_create(Cache *cf, size_t size)
+int Data_create(Cache *cf, long len)
 {
     int fd;
     int mode;
@@ -49,7 +87,7 @@ int Data_create(Cache *cf, size_t size)
         fprintf(stderr, "Data_create(): %s\n", strerror(errno));
         return 0;
     }
-    if (ftruncate(fd, cf->size) == -1) {
+    if (ftruncate(fd, cf->len) == -1) {
         fprintf(stderr, "Data_create(): %s\n", strerror(errno));
         return 0;
     }
