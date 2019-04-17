@@ -40,4 +40,22 @@ size_t Data_write(Cache *cf, off_t offset, size_t size,
 
 int Data_create(Cache *cf, size_t size)
 {
+    int fd;
+    int mode;
+
+    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+    fd = open(cf->filepath, O_WRONLY | O_CREAT, mode);
+    if (fd == -1) {
+        fprintf(stderr, "Data_create(): %s\n", strerror(errno));
+        return 0;
+    }
+    if (ftruncate(fd, cf->size) == -1) {
+        fprintf(stderr, "Data_create(): %s\n", strerror(errno));
+        return 0;
+    }
+    if (close(fd) == -1) {
+        fprintf(stderr, "Data_create(): %s\n", strerror(errno));
+        return 0;
+    }
+    return 1;
 }
