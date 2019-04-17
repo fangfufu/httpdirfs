@@ -28,6 +28,7 @@ typedef struct {
  */
 typedef struct {
     const char* filepath;
+    size_t size;
     FILE *data_fd; /**< the file descriptor for the data file */
     FILE *meta_fd; /**< the file descriptor for the meta file */
     int nseg; /**<the number of segments */
@@ -82,6 +83,7 @@ size_t Data_write(Cache *cf, off_t offset, size_t size,
 /**
  * \brief create a data file
  * \details We use sparse creation here
+ * \return 1 on success, 0 on failure
  */
 int Data_create(Cache *cf, size_t size);
 #endif
