@@ -50,7 +50,7 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         /* Note the recursive call, lol. */
         GumboVector *children = &node->v.element.children;
         for (size_t i = 0; i < children->length; ++i) {
-            HTML_to_LinkTable((GumboNode*)children->data[i], linktbl);
+            HTML_to_LinkTable((GumboNode *)children->data[i], linktbl);
         }
         return;
 }
