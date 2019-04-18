@@ -3,8 +3,6 @@
 
 #include "link.h"
 
-#define NETWORK_MAX_CONNS 10
-
 typedef struct {
     char *memory;
     size_t size;
