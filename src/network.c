@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#define NETWORK_MAX_CONNS 10
+
 /* ----------------- External variables ---------------------- */
 CURLSH *CURL_SHARE;
 NetworkConfigStruct NETWORK_CONFIG;
