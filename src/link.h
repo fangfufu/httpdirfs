@@ -5,8 +5,10 @@
 
 #include <stdlib.h>
 
+/*! \brief the maximum length of the URL */
 #define URL_LEN_MAX 2048
-#define LINK_LEN_MAX 255
+/*! \brief the maximum length of a partial URL (a link) */
+#define P_URL_LEN_MAX 255
 
 /** \brief the link type */
 typedef enum {
@@ -27,7 +29,7 @@ typedef struct Link Link;
 
 
 struct Link {
-    char p_url[LINK_LEN_MAX];
+    char p_url[P_URL_LEN_MAX];
     char f_url[URL_LEN_MAX];
     LinkType type;
     size_t content_length;

@@ -62,11 +62,11 @@ static Link *Link_new(const char *p_url, LinkType type)
         fprintf(stderr, "Link_new(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
-    strncpy(link->p_url, p_url, LINK_LEN_MAX);
+    strncpy(link->p_url, p_url, P_URL_LEN_MAX);
     link->type = type;
 
     /* remove the '/' from p_url if it exists */
-    char *c = &(link->p_url[strnlen(link->p_url, LINK_LEN_MAX) - 1]);
+    char *c = &(link->p_url[strnlen(link->p_url, P_URL_LEN_MAX) - 1]);
     if ( *c == '/') {
         *c = '\0';
     }
@@ -193,7 +193,7 @@ void LinkTable_fill(LinkTable *linktbl)
             char *unescaped_p_url;
             unescaped_p_url = curl_easy_unescape(NULL, this_link->p_url, 0,
                                                  NULL);
-            strncpy(this_link->p_url, unescaped_p_url, LINK_LEN_MAX);
+            strncpy(this_link->p_url, unescaped_p_url, P_URL_LEN_MAX);
             curl_free(unescaped_p_url);
 
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
@@ -318,7 +318,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     if ( slash == NULL ) {
         /* We cannot find another '/', we have reached the last level */
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
+            if (!strncmp(path, linktbl->links[i]->p_url, P_URL_LEN_MAX)) {
                 /* We found our link */
                 return linktbl->links[i];
             }
@@ -337,7 +337,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         /* move the pointer past the '/' */
         char *next_path = slash + 1;
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->p_url, LINK_LEN_MAX)) {
+            if (!strncmp(path, linktbl->links[i]->p_url, P_URL_LEN_MAX)) {
                 /* The next sub-directory exists */
                 if (!(linktbl->links[i]->next_table)) {
                     linktbl->links[i]->next_table = LinkTable_new(
@@ -420,7 +420,7 @@ static LinkType p_url_type(const char *p_url)
         return LINK_INVALID;
     }
 
-    if ( p_url[strlen(p_url) - 1] == '/' ) {
+    if ( p_url[strnlen(p_url, P_URL_LEN_MAX) - 1] == '/' ) {
         return LINK_DIR;
     }
 
@@ -430,13 +430,13 @@ static LinkType p_url_type(const char *p_url)
 static char *url_append(const char *url, const char *sublink)
 {
     int needs_separator = 0;
-    if (url[strlen(url)-1] != '/') {
+    if (url[strnlen(url, URL_LEN_MAX)-1] != '/') {
         needs_separator = 1;
     }
 
     char *str;
-    size_t ul = strlen(url);
-    size_t sl = strlen(sublink);
+    size_t ul = strnlen(url, URL_LEN_MAX);
+    size_t sl = strnlen(sublink, P_URL_LEN_MAX);
     str = calloc(ul + sl + needs_separator + 1, sizeof(char));
     if (!str) {
         fprintf(stderr, "url_append(): calloc failure!\n");
