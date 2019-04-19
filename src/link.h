@@ -5,9 +5,9 @@
 
 #include <stdlib.h>
 
-/*! \brief the maximum length of the URL */
+/** \brief the maximum length of the URL */
 #define URL_LEN_MAX 2048
-/*! \brief the maximum length of a partial URL (a link) */
+/** \brief the maximum length of a partial URL (a link) */
 #define P_URL_LEN_MAX 255
 
 /** \brief the link type */
