@@ -1,5 +1,7 @@
 #include "cache.h"
 
+#include "util.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -20,92 +22,25 @@ char *META_DIR;
  */
 char *DATA_DIR;
 
-/**
- * \brief strndup with concatenation
- * \details This function creates a new string, and concatenate string a and
- * string b together.
- * \note The maximum length of string a and string b is half the length of the
- * maximum length of the output string.
- * \param[in] a the first string
- * \param[in] b the second string
- * \param[n] c the maximum length of the output string
- */
-char *strndupcat(const char *a, const char *b, int n)
-{
-    int na = strnlen(a, n/2);
-    int nb = strnlen(b, n/2);
-    int nc = na + nb + 1;
-    char *c = calloc(nc, sizeof(char));
-    if (!c) {
-        fprintf(stderr, "strndupcat(): calloc failure!\n");
-    }
-    strncpy(c, a, na);
-    strncat(c, b, nb);
-    return c;
-}
-
 void Cache_init(const char *dir)
 {
     META_DIR = strndupcat(dir, "meta/", MAX_PATH_LEN);
     DATA_DIR = strndupcat(dir, "data/", MAX_PATH_LEN);
 }
 
-Cache *Cache_create(const char *fn, long len)
-{
-}
-
-
-Cache *Cache_open(const char *fn)
-{
-
-    /* Check if both metadata exists */
-    char *metafn = strndupcat(META_DIR, fn);
-    if (!access(metafn, F_OK)) {
-        fprintf(stderr, "Cache_open(): access(): %s\n", strerror(errno));
-        free(metafn);
-        return NULL;
-    }
-    free(metafn);
-
-    /* Check if and the data file exists */
-    char *datafn = strndupcat(DATA_DIR, fn);
-    if (!access(datafn, F_OK) {
-        fprintf(stderr, "Cache_open(): access(): %s\n", strerror(errno));
-        free(datafn);
-        return NULL;
-    }
-    free(datafn);
-
-    /* Create the cache in-memory data structure */
-    Cache *cf = Cache_new();
-    cf->filename = strndup(fn, MAX_PATH_LEN);
-
-    if (!Meta_read(cf)) {
-        Cache_free(cf);
-        return NULL;
-    }
-
-}
-
-
-
-long Cache_read(const char *fn, long offset, long len, uint8_t *buf)
-{
-}
-
-long Cache_write(const char *fn, long offset, long len,
-                   const uint8_t *buf)
-{
-}
-
-Cache *Cache_new()
+Cache *Cache_alloc()
 {
     Cache *cf = malloc(sizeof(Cache));
+    if (!cf) {
+        fprintf(stderr, "Cache_new(): malloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
     cf->filename = NULL;
     cf->len = 0;
     cf->time = 0;
     cf->nseg = 0;
-    seg = NULL;
+    cf->seg = NULL;
+    return cf;
 }
 
 void Cache_free(Cache *cf)
@@ -119,18 +54,76 @@ void Cache_free(Cache *cf)
     free(cf);
 }
 
+int Cache_exist(const char *fn)
+{
+    int meta_exists = 1;
+    int data_exists = 1;
+    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+
+    if (access(metafn, F_OK)) {
+        fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
+        meta_exists = 0;
+    }
+
+    if (access(datafn, F_OK)) {
+        fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
+        data_exists = 0;
+    }
+
+    if (meta_exists ^ data_exists) {
+        if (meta_exists) {
+            if(unlink(metafn)) {
+                fprintf(stderr, "Cache_exist(): unlink(): %s\n",
+                        strerror(errno));
+            }
+        }
+        if (data_exists) {
+            if(unlink(datafn)) {
+                fprintf(stderr, "Cache_exist(): unlink(): %s\n",
+                        strerror(errno));
+            }
+        }
+    }
+
+    free(metafn);
+    free(datafn);
+
+    return 1;
+}
+
+Cache *Cache_open(const char *fn)
+{
+    /* Create the cache in-memory data structure */
+    Cache *cf = Cache_alloc();
+    cf->filename = strndup(fn, MAX_PATH_LEN);
+
+    if (Meta_read(cf)) {
+        Cache_free(cf);
+        return NULL;
+    }
+
+    if (cf->len != Data_size(fn)) {
+        fprintf(stderr,
+            "Cache_open(): metadata is inconsistent with the data file!\n");
+        Cache_free(cf);
+        return NULL;
+    }
+    return cf;
+}
+
 int Meta_read(Cache *cf)
 {
     FILE *fp;
     char *metafn = strndupcat(META_DIR, cf->filename, MAX_PATH_LEN);
     fp = fopen(metafn, "r");
     free(metafn);
-    int res = 1;
+    int res = 0;
 
     if (!fp) {
         /* The metadata file does not exist */
         fprintf(stderr, "Meta_read(): fopen(): %s\n", strerror(errno));
-        return 0;
+        return -1;
     }
 
     fread(&(cf->len), sizeof(long), 1, fp);
@@ -139,6 +132,10 @@ int Meta_read(Cache *cf)
 
     /* Allocate some memory for the segment */
     cf->seg = malloc(cf->nseg * sizeof(Seg));
+    if (!(cf->seg)) {
+        fprintf(stderr, "Meta_read(): malloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
 
     /* Read all the segment */
     int nmemb = fread(cf->seg, sizeof(Seg), cf->nseg, fp);
@@ -147,14 +144,14 @@ int Meta_read(Cache *cf)
     if (ferror(fp)) {
         fprintf(stderr,
                 "Meta_read(): fread(): encountered error (from ferror)!\n");
-        res = 0;
+        res = -1;
     }
 
     /* Check for inconsistent metadata file */
     if (nmemb != cf-> nseg) {
         fprintf(stderr,
                 "Meta_read(): corrupted metadata!\n");
-        res = 0;
+        res = -1;
     }
 
     if (fclose(fp)) {
@@ -170,12 +167,12 @@ int Meta_write(const Cache *cf)
     char *metafn = strndupcat(META_DIR, cf->filename, MAX_PATH_LEN);
     fp = fopen(metafn, "w");
     free(metafn);
-    int res = 1;
+    int res = 0;
 
     if (!fp) {
         /* Cannot create the metadata file */
         fprintf(stderr, "Meta_write(): fopen(): %s\n", strerror(errno));
-        return 0;
+        return -1;
     }
 
     fwrite(&(cf->len), sizeof(long), 1, fp);
@@ -189,7 +186,7 @@ int Meta_write(const Cache *cf)
     if (ferror(fp)) {
         fprintf(stderr,
                 "Meta_write(): fwrite(): encountered error (from ferror)!\n");
-        res = 0;
+        res = -1;
     }
 
     if (fclose(fp)) {
@@ -220,8 +217,21 @@ int Data_create(Cache *cf)
     return 1;
 }
 
+long Data_size(const char *fn)
+{
+    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+    struct stat st;
+    if (stat(datafn, &st) == 0) {
+        free(datafn);
+        return st.st_blksize;
+    }
+    free(datafn);
+    fprintf(stderr, "Data_size(): stat(): %s\n", strerror(errno));
+    return -1;
+}
+
 long Data_read(const Cache *cf, long offset, long len,
-                uint8_t *buf)
+               uint8_t *buf)
 {
     if (len == 0) {
         fprintf(stderr, "Data_read(): requested to read 0 byte!\n");
@@ -271,7 +281,7 @@ long Data_read(const Cache *cf, long offset, long len,
 }
 
 long Data_write(const Cache *cf, long offset, long len,
-                 const uint8_t *buf)
+                const uint8_t *buf)
 {
     if (len == 0) {
         fprintf(stderr, "Data_write(): requested to write 0 byte!\n");
@@ -319,5 +329,9 @@ long Data_write(const Cache *cf, long offset, long len,
     }
     return byte_written;
 }
+
+
+
+
 
 

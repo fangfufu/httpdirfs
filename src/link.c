@@ -137,6 +137,7 @@ void Link_get_stat(Link *this_link)
         TransferStruct *transfer = malloc(sizeof(TransferStruct));
         if (!transfer) {
             fprintf(stderr, "Link_get_size(): malloc failed!\n");
+            exit(EXIT_FAILURE);
         }
         transfer->link = this_link;
         transfer->type = FILESTAT;

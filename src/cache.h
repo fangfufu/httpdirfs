@@ -50,7 +50,7 @@ typedef struct {
 /**
  * \brief create a cache file set
  */
-Cache *Cache_create(const char *fn, long len);
+Cache *Cache_create(const char *fn, long len, long time);
 
 /**
  * \brief Read from a cache file set
@@ -70,15 +70,7 @@ long Cache_write(const char *fn, long offset, long len,
                    const uint8_t *buf);
 /****************************** Work in progress *****************************/
 
-/**
- * \brief Create a new cache data structure
- */
-Cache *Cache_new();
 
-/**
- * \brief open a cache file set
- */
-Cache *Cache_open(const char *fn);
 
 /**************************** Completed functions ****************************/
 
@@ -91,18 +83,46 @@ Cache *Cache_open(const char *fn);
 void Cache_init(const char *dir);
 
 /**
+ * \brief Allocate a new cache data structure
+ */
+Cache *Cache_alloc();
+
+/**
  * \brief free a cache data structure
  */
 void Cache_free(Cache *cf);
 
 /**
+ * \brief Check if both metadata and the data file exist, and perform cleanup.
+ * \details
+ * This function checks if both metadata file and the data file exist. If that
+ * is not the case, clean up is performed - the existing unpaired metadata file
+ * or data file is deleted.
+ * \return
+ *  -   1, if both metadata and cache file exist
+ *  -   0, otherwise
+ */
+int Cache_exist(const char *fn);
+
+/**
+ * \brief open a cache file set
+ * \warning We assume that the metadata file and the data file both exist
+ */
+Cache *Cache_open(const char *fn);
+
+/**
  * \brief write a metadata file
+ * \return
+ *  - -1 on error,
+ *  - 0 on success
  */
 int Meta_write(const Cache *cf);
 
 /**
  * \brief read a metadata file
- * \return 0 on error, 1 on success
+ * \return
+ *  - -1 on error,
+ *  - 0 on success
  */
 int Meta_read(Cache *cf);
 
@@ -115,6 +135,11 @@ int Meta_read(Cache *cf);
  *  - 0 on failure to create the data file.
  */
 int Data_create(Cache *cf);
+
+/**
+ * \brief obtain the data file size
+ */
+long Data_size(const char *fn);
 
 /**
  * \brief read a data file
