@@ -48,11 +48,6 @@ typedef struct {
 /***************************** To be completed ******************************/
 
 /**
- * \brief create a cache file set
- */
-Cache *Cache_create(const char *fn, long len, long time);
-
-/**
  * \brief Read from a cache file set
  * \details This function performs the following two things:
  *  - check again the metafile to see which segments are available
@@ -105,10 +100,20 @@ void Cache_free(Cache *cf);
 int Cache_exist(const char *fn);
 
 /**
+ * \brief create a cache file set
+ */
+Cache *Cache_create(const char *fn, long len, long time);
+
+/**
  * \brief open a cache file set
  * \warning We assume that the metadata file and the data file both exist
  */
 Cache *Cache_open(const char *fn);
+
+/**
+ * \brief create a metadata file
+ */
+int Meta_create(const Cache *cf);
 
 /**
  * \brief write a metadata file
@@ -130,9 +135,9 @@ int Meta_read(Cache *cf);
  * \brief create a data file
  * \details We use sparse creation here
  * \return
- *  - 1 on successful creation of the data file, note that the result of
+ *  - 0 on successful creation of the data file, note that the result of
  * the ftruncate() is ignored.
- *  - 0 on failure to create the data file.
+ *  - -1 on failure to create the data file.
  */
 int Data_create(Cache *cf);
 
