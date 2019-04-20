@@ -57,17 +57,34 @@ Cache *Cache_create(const char *fn, long len)
 
 Cache *Cache_open(const char *fn)
 {
-    Cache *cf = malloc(sizeof(Cache));
-    char *metafn = strndupcat(META_DIR, fn);
-    char *datafn = strndupcat(DATA_DIR, fn);
 
-    /* Check if both metadata and the data file exist */
-    if(access(cf->metafn, F_OK ) && access(cf->datafn, F_OK)) {
+    /* Check if both metadata exists */
+    char *metafn = strndupcat(META_DIR, fn);
+    if (!access(metafn, F_OK)) {
+        fprintf(stderr, "Cache_open(): access(): %s\n", strerror(errno));
+        free(metafn);
+        return NULL;
+    }
+    free(metafn);
+
+    /* Check if and the data file exists */
+    char *datafn = strndupcat(DATA_DIR, fn);
+    if (!access(datafn, F_OK) {
+        fprintf(stderr, "Cache_open(): access(): %s\n", strerror(errno));
+        free(datafn);
+        return NULL;
+    }
+    free(datafn);
+
+    /* Create the cache in-memory data structure */
+    Cache *cf = Cache_new();
+    cf->filename = strndup(fn, MAX_PATH_LEN);
+
+    if (!Meta_read(cf)) {
+        Cache_free(cf);
         return NULL;
     }
 
-    free(metafn);
-    free(datafn);
 }
 
 
@@ -81,10 +98,24 @@ long Cache_write(const char *fn, long offset, long len,
 {
 }
 
+Cache *Cache_new()
+{
+    Cache *cf = malloc(sizeof(Cache));
+    cf->filename = NULL;
+    cf->len = 0;
+    cf->time = 0;
+    cf->nseg = 0;
+    seg = NULL;
+}
+
 void Cache_free(Cache *cf)
 {
-    free(cf->filename);
-    free(cf->seg);
+    if (cf->filename) {
+        free(cf->filename);
+    }
+    if (cf->seg) {
+        free(cf->seg);
+    }
     free(cf);
 }
 

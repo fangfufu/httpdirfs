@@ -13,6 +13,7 @@
  * different folders.
  *   - The metadata file should follow the following format:
  *      - file length (long)
+ *      - CURLINFO_FILETIME
  *      - segment count (int)
  *      - individual segments (array of seg)
  *
@@ -33,7 +34,7 @@ typedef struct {
 } Seg;
 
 /**
- * \brief cache metadata structure
+ * \brief cache in-memory data structure
  * \note fanf2@cam.ac.uk told me to use an array rather than linked list!
  */
 typedef struct {
@@ -68,6 +69,11 @@ long Cache_read(const char *fn, long offset, long len, uint8_t *buf);
 long Cache_write(const char *fn, long offset, long len,
                    const uint8_t *buf);
 /****************************** Work in progress *****************************/
+
+/**
+ * \brief Create a new cache data structure
+ */
+Cache *Cache_new();
 
 /**
  * \brief open a cache file set
