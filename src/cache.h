@@ -21,26 +21,22 @@
  *   - We are using 'long' to store file size, because the offset in fseek() is
  * in long, because the way we use the cache system, you cannot seek past
  * long. So the biggest file size has to be able to be stored in long. This
- * makes this program architecturally dependent, but this is due to the
- * dependency to fseek().
+ * makes this program architecturally dependent, i.e. i386 vs amd64
  */
 
 /**
- * \brief a cache segment
+ * \brief Type definition for a cache segment
  */
-typedef struct {
-    long start;
-    long end;
-} Seg;
+typedef uint8_t Seg;
 
 /**
  * \brief cache in-memory data structure
- * \note fanf2@cam.ac.uk told me to use an array rather than linked list!
  */
 typedef struct {
     char *filename; /**< the filename from the http server */
-    long len; /**<the size of the file */
     long time; /**<the modified time of the file */
+    long len; /**<the size of the file */
+    int blksz; /**<the block size of the data file */
     int nseg; /**<the number of segments */
     Seg *seg; /**< the detail of each segment */
 } Cache;
@@ -63,6 +59,17 @@ long Cache_read(const char *fn, long offset, long len, uint8_t *buf);
  */
 long Cache_write(const char *fn, long offset, long len,
                    const uint8_t *buf);
+
+/**
+ * \brief Initialise cache directory structure
+ */
+int Cache_DirInit(const char *fn);
+
+/**
+ * \brief Create a directory within the cache structure
+ */
+int Cache_DirCreate(const char *fn);
+
 /****************************** Work in progress *****************************/
 
 
@@ -88,14 +95,14 @@ Cache *Cache_alloc();
 void Cache_free(Cache *cf);
 
 /**
- * \brief Check if both metadata and the data file exist, and perform cleanup.
+ * \brief Check if both metadata and data file exist, otherwise perform cleanup.
  * \details
  * This function checks if both metadata file and the data file exist. If that
  * is not the case, clean up is performed - the existing unpaired metadata file
  * or data file is deleted.
  * \return
- *  -   1, if both metadata and cache file exist
- *  -   0, otherwise
+ *  -   0, if both metadata and cache file exist
+ *  -   -1, otherwise
  */
 int Cache_exist(const char *fn);
 
@@ -105,13 +112,24 @@ int Cache_exist(const char *fn);
 Cache *Cache_create(const char *fn, long len, long time);
 
 /**
+ * \brief delete a cache file set
+ */
+void Cache_delete(const char *fn);
+
+/**
  * \brief open a cache file set
- * \warning We assume that the metadata file and the data file both exist
  */
 Cache *Cache_open(const char *fn);
 
 /**
  * \brief create a metadata file
+ * \details We set the followings here:
+ *  -   block size
+ *  -   the number of segments
+ *
+ * The number of segments depends on the block size. The block size is set to
+ * 128KiB for now. In future support for different block size may be
+ * implemented.
  */
 int Meta_create(const Cache *cf);
 
