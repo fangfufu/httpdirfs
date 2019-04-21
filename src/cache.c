@@ -19,8 +19,17 @@
  *
  * More information regarding block size can be found at:
  * https://wiki.vuze.com/w/Torrent_Piece_Size
+ *
+ * Note that at the current configuration, a 16GiB file uses 128MiB of memory to
+ * store the bitmap, but hey, I have 16GiB on my computer!
  */
 #define DATA_BLK_SZ         131072
+
+/**
+ * \brief the maximum length of a path
+ * \details This corresponds the maximum path length under Ext4. If you need
+ * longer path, then fuck you.
+ */
 #define MAX_PATH_LEN        4096
 
 /**
@@ -399,9 +408,3 @@ long Data_write(const Cache *cf, long offset, long len,
     }
     return byte_written;
 }
-
-
-
-
-
-
