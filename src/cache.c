@@ -10,7 +10,18 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
-#define MAX_PATH_LEN     4096
+/**
+ * \brief Data file block size
+ * \details The data file block size is set to 128KiB, for convenience. This is
+ * because the maximum requested block size by FUSE seems to be 128KiB under
+ * Debian Stretch. Note that the minimum requested block size appears to be
+ * 4KiB.
+ *
+ * More information regarding block size can be found at:
+ * https://wiki.vuze.com/w/Torrent_Piece_Size
+ */
+#define DATA_BLK_SZ         131072
+#define MAX_PATH_LEN        4096
 
 /**
  * \brief The metadata directory
@@ -22,6 +33,7 @@ char *META_DIR;
  */
 char *DATA_DIR;
 
+
 void Cache_init(const char *dir)
 {
     META_DIR = strndupcat(dir, "meta/", MAX_PATH_LEN);
@@ -30,16 +42,11 @@ void Cache_init(const char *dir)
 
 Cache *Cache_alloc()
 {
-    Cache *cf = malloc(sizeof(Cache));
+    Cache *cf = calloc(1, sizeof(Cache));
     if (!cf) {
-        fprintf(stderr, "Cache_new(): malloc failure!\n");
+        fprintf(stderr, "Cache_new(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
-    cf->filename = NULL;
-    cf->len = 0;
-    cf->time = 0;
-    cf->nseg = 0;
-    cf->seg = NULL;
     return cf;
 }
 
@@ -89,7 +96,7 @@ int Cache_exist(const char *fn)
     free(metafn);
     free(datafn);
 
-    return 1;
+    return !(meta_exists & data_exists);
 }
 
 Cache *Cache_create(const char *fn, long len, long time)
@@ -97,8 +104,8 @@ Cache *Cache_create(const char *fn, long len, long time)
     Cache *cf = Cache_alloc();
 
     cf->filename = strndup(fn, MAX_PATH_LEN);
-    cf->len = len;
     cf->time = time;
+    cf->len = len;
 
     if (Data_create(cf)) {
         Cache_free(cf);
@@ -114,8 +121,34 @@ Cache *Cache_create(const char *fn, long len, long time)
     return cf;
 }
 
+void Cache_delete(const char *fn)
+{
+    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+    if (!access(metafn, F_OK)) {
+        if(unlink(metafn)) {
+            fprintf(stderr, "Cache_delete(): unlink(): %s\n",
+                    strerror(errno));
+        }
+    }
+
+    if (!access(datafn, F_OK)) {
+        if(unlink(datafn)) {
+            fprintf(stderr, "Cache_delete(): unlink(): %s\n",
+                    strerror(errno));
+        }
+    }
+    free(metafn);
+    free(datafn);
+}
+
 Cache *Cache_open(const char *fn)
 {
+    /* Check if both metadata and data file exist */
+    if (Cache_validate(fn)) {
+        return NULL;
+    }
+
     /* Create the cache in-memory data structure */
     Cache *cf = Cache_alloc();
     cf->filename = strndup(fn, MAX_PATH_LEN);
@@ -125,17 +158,27 @@ Cache *Cache_open(const char *fn)
         return NULL;
     }
 
+    /* In consistent metadata / data file */
     if (cf->len != Data_size(fn)) {
         fprintf(stderr,
             "Cache_open(): metadata is inconsistent with the data file!\n");
+        Cache_delete(fn);
         Cache_free(cf);
         return NULL;
     }
+
     return cf;
 }
 
 int Meta_create(const Cache *cf)
 {
+    cf->blksz = DATA_BLK_SZ;
+    cf->nseg = cf->len / cf->blksz + 1;
+    cf->seg = calloc(nseg, sizeof(Seg));
+    if (!(cf->seg)) {
+        fprintf(stderr, "Meta_create(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
     return Meta_write(cf);
 }
 
@@ -154,20 +197,19 @@ int Meta_read(Cache *cf)
         return -1;
     }
 
-    fread(&(cf->len), sizeof(long), 1, fp);
     fread(&(cf->time), sizeof(long), 1, fp);
+    fread(&(cf->len), sizeof(long), 1, fp);
+    fread(&(cf->len), sizeof(int), 1, fp);
     fread(&(cf->nseg), sizeof(int), 1, fp);
 
-    if (cf->nseg) {
-        /* Allocate some memory for the segment */
-        cf->seg = malloc(cf->nseg * sizeof(Seg));
-        if (!(cf->seg)) {
-            fprintf(stderr, "Meta_read(): malloc failure!\n");
-            exit(EXIT_FAILURE);
-        }
-        /* Read all the segment */
-        nmemb = fread(cf->seg, sizeof(Seg), cf->nseg, fp);
+    /* Allocate some memory for the segment */
+    cf->seg = malloc(cf->nseg * sizeof(Seg));
+    if (!(cf->seg)) {
+        fprintf(stderr, "Meta_read(): malloc failure!\n");
+        exit(EXIT_FAILURE);
     }
+    /* Read all the segment */
+    nmemb = fread(cf->seg, sizeof(Seg), cf->nseg, fp);
 
     /* Error checking for fread */
     if (ferror(fp)) {
@@ -204,14 +246,11 @@ int Meta_write(const Cache *cf)
         return -1;
     }
 
-    fwrite(&(cf->len), sizeof(long), 1, fp);
     fwrite(&(cf->time), sizeof(long), 1, fp);
+    fwrite(&(cf->len), sizeof(long), 1, fp);
+    fwrite(&(cf->blksz), sizeof(int), 1, fp);
     fwrite(&(cf->nseg), sizeof(int), 1, fp);
-
-    /* Finally write segments to the file */
-    if (cf->nseg) {
-        fwrite(cf->seg, sizeof(Seg), cf->nseg, fp);
-    }
+    fwrite(cf->seg, sizeof(Seg), cf->nseg, fp);
 
     /* Error checking for fwrite */
     if (ferror(fp)) {
@@ -239,7 +278,7 @@ int Data_create(Cache *cf)
         fprintf(stderr, "Data_create(): open(): %s\n", strerror(errno));
         return -1;
     }
-    if (ftruncate(fd, cf->len) == -1) {
+    if (ftruncate(fd, cf->len)) {
         fprintf(stderr, "Data_create(): ftruncate(): %s\n", strerror(errno));
     }
     if (close(fd)) {
@@ -252,11 +291,11 @@ long Data_size(const char *fn)
 {
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
     struct stat st;
-    if (stat(datafn, &st) == 0) {
-        free(datafn);
+    int s = stat(datafn, &st);
+    free(datafn);
+    if (!s) {
         return st.st_blksize;
     }
-    free(datafn);
     fprintf(stderr, "Data_size(): stat(): %s\n", strerror(errno));
     return -1;
 }
@@ -281,7 +320,7 @@ long Data_read(const Cache *cf, long offset, long len,
         return -1;
     }
 
-    if (fseek(fp, offset, SEEK_SET) == -1) {
+    if (fseek(fp, offset, SEEK_SET)) {
         /* fseek failed */
         fprintf(stderr, "Data_read(): fseek(): %s\n", strerror(errno));
         goto cleanup;
@@ -331,7 +370,7 @@ long Data_write(const Cache *cf, long offset, long len,
         return -1;
     }
 
-    if (fseek(fp, offset, SEEK_SET) == -1) {
+    if (fseek(fp, offset, SEEK_SET)) {
         /* fseek failed */
         fprintf(stderr, "Data_write(): fseek(): %s\n", strerror(errno));
         goto cleanup;
