@@ -16,7 +16,6 @@
  *      - CURLINFO_FILETIME
  *      - segment count (int)
  *      - individual segments (array of seg)
- *
  * \note
  *   - We are using 'long' to store file size, because the offset in fseek() is
  * in long, because the way we use the cache system, you cannot seek past
@@ -37,7 +36,7 @@ typedef struct {
     long time; /**<the modified time of the file */
     long len; /**<the size of the file */
     int blksz; /**<the block size of the data file */
-    int nseg; /**<the number of segments */
+    long segbc; /**<segment array byte count */
     Seg *seg; /**< the detail of each segment */
 } Cache;
 
@@ -61,65 +60,37 @@ long Cache_write(const char *fn, long offset, long len,
                    const uint8_t *buf);
 
 /**
- * \brief Initialise cache directory structure
- */
-int Cache_DirInit(const char *fn);
-
-/**
  * \brief Create a directory within the cache structure
  */
-int Cache_DirCreate(const char *fn);
+int CacheDir_create(const char *fn);
 
 /****************************** Work in progress *****************************/
-
 
 
 /**************************** Completed functions ****************************/
 
 /**
- * \brief initialise the cache system
+ * \brief initialise the cache system directories
  * \details This function basically sets up the following variables:
  *  - META_DIR
  *  - DATA_DIR
+ *
+ * If these directories do not exist, they will be created.
  */
-void Cache_init(const char *dir);
+void CacheSystem_init(const char *dir);
 
 /**
- * \brief Allocate a new cache data structure
+ * \brief Check if a segment exists.
  */
-Cache *Cache_alloc();
+int Seg_exist(Cache *cf, long start);
 
 /**
- * \brief free a cache data structure
+ * \brief Set the existence of a segment
+ * \param[in] start the starting position of the segment.
+ * \param[in] i 1 for exist, 0 for doesn't exist
  */
-void Cache_free(Cache *cf);
+void Seg_set(Cache *cf, long start, int i);
 
-/**
- * \brief Check if both metadata and data file exist, otherwise perform cleanup.
- * \details
- * This function checks if both metadata file and the data file exist. If that
- * is not the case, clean up is performed - the existing unpaired metadata file
- * or data file is deleted.
- * \return
- *  -   0, if both metadata and cache file exist
- *  -   -1, otherwise
- */
-int Cache_exist(const char *fn);
-
-/**
- * \brief create a cache file set
- */
-Cache *Cache_create(const char *fn, long len, long time);
-
-/**
- * \brief delete a cache file set
- */
-void Cache_delete(const char *fn);
-
-/**
- * \brief open a cache file set
- */
-Cache *Cache_open(const char *fn);
 
 /**
  * \brief create a metadata file
@@ -131,7 +102,7 @@ Cache *Cache_open(const char *fn);
  * 128KiB for now. In future support for different block size may be
  * implemented.
  */
-int Meta_create(const Cache *cf);
+int Meta_create(Cache *cf);
 
 /**
  * \brief write a metadata file
@@ -144,7 +115,8 @@ int Meta_write(const Cache *cf);
 /**
  * \brief read a metadata file
  * \return
- *  - -1 on error,
+ *  - -1 on fread error,
+ *  - -2 on metadata internal inconsistency
  *  - 0 on success
  */
 int Meta_read(Cache *cf);
@@ -182,4 +154,40 @@ long Data_read(const Cache *cf, long offset, long len,
 long Data_write(const Cache *cf, long offset, long len,
                  const uint8_t *buf);
 
+/**
+ * \brief Allocate a new cache data structure
+ */
+Cache *Cache_alloc();
+
+/**
+ * \brief free a cache data structure
+ */
+void Cache_free(Cache *cf);
+
+/**
+ * \brief Check if both metadata and data file exist, otherwise perform cleanup.
+ * \details
+ * This function checks if both metadata file and the data file exist. If that
+ * is not the case, clean up is performed - the existing unpaired metadata file
+ * or data file is deleted.
+ * \return
+ *  -   0, if both metadata and cache file exist
+ *  -   -1, otherwise
+ */
+int Cache_exist(const char *fn);
+
+/**
+ * \brief create a cache file set
+ */
+Cache *Cache_create(const char *fn, long len, long time);
+
+/**
+ * \brief delete a cache file set
+ */
+void Cache_delete(const char *fn);
+
+/**
+ * \brief open a cache file set
+ */
+Cache *Cache_open(const char *fn);
 #endif

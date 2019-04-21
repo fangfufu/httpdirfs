@@ -2,6 +2,7 @@
 
 #include "util.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -42,148 +43,76 @@ char *META_DIR;
  */
 char *DATA_DIR;
 
-
-void Cache_init(const char *dir)
+void CacheSystem_init(const char *path)
 {
-    META_DIR = strndupcat(dir, "meta/", MAX_PATH_LEN);
-    DATA_DIR = strndupcat(dir, "data/", MAX_PATH_LEN);
-}
+    DIR* dir;
 
-Cache *Cache_alloc()
-{
-    Cache *cf = calloc(1, sizeof(Cache));
-    if (!cf) {
-        fprintf(stderr, "Cache_new(): calloc failure!\n");
+    /*
+     * Check if the top-level cache directory exists, if not, exit the
+     * program. We don't want to unintentionally create a folder
+     */
+    dir = opendir(path);
+    if (dir) {
+        closedir(dir);
+    } else {
+        fprintf(stderr,
+                "CacheSystem_init(): opendir(): %s\n", strerror(errno));
         exit(EXIT_FAILURE);
     }
-    return cf;
-}
 
-void Cache_free(Cache *cf)
-{
-    if (cf->filename) {
-        free(cf->filename);
-    }
-    if (cf->seg) {
-        free(cf->seg);
-    }
-    free(cf);
-}
-
-int Cache_exist(const char *fn)
-{
-    int meta_exists = 1;
-    int data_exists = 1;
-    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
-    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
-
-    if (access(metafn, F_OK)) {
-        fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
-        meta_exists = 0;
+    /* Handle the case of missing '/' */
+    if (path[strnlen(path, MAX_PATH_LEN) - 1] == '/') {
+        META_DIR = strndupcat(path, "meta/", MAX_PATH_LEN);
+        DATA_DIR = strndupcat(path, "data/", MAX_PATH_LEN);
+    } else {
+        META_DIR = strndupcat(path, "/meta/", MAX_PATH_LEN);
+        DATA_DIR = strndupcat(path, "/data/", MAX_PATH_LEN);
     }
 
-    if (access(datafn, F_OK)) {
-        fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
-        data_exists = 0;
-    }
-
-    if (meta_exists ^ data_exists) {
-        if (meta_exists) {
-            if(unlink(metafn)) {
-                fprintf(stderr, "Cache_exist(): unlink(): %s\n",
-                        strerror(errno));
-            }
-        }
-        if (data_exists) {
-            if(unlink(datafn)) {
-                fprintf(stderr, "Cache_exist(): unlink(): %s\n",
-                        strerror(errno));
-            }
-        }
-    }
-
-    free(metafn);
-    free(datafn);
-
-    return !(meta_exists & data_exists);
-}
-
-Cache *Cache_create(const char *fn, long len, long time)
-{
-    Cache *cf = Cache_alloc();
-
-    cf->filename = strndup(fn, MAX_PATH_LEN);
-    cf->time = time;
-    cf->len = len;
-
-    if (Data_create(cf)) {
-        Cache_free(cf);
-        fprintf(stderr, "Cache_create(): Data_create() failed!\n");
-        return NULL;
-    }
-
-    if (Meta_create(cf)) {
-        Cache_free(cf);
-        fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
-        return NULL;
-    }
-    return cf;
-}
-
-void Cache_delete(const char *fn)
-{
-    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
-    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
-    if (!access(metafn, F_OK)) {
-        if(unlink(metafn)) {
-            fprintf(stderr, "Cache_delete(): unlink(): %s\n",
+    /* Check if directories exist, if not, create them */
+    dir = opendir(META_DIR);
+    if (dir) {
+        closedir(dir);
+    } else if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
+            fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
-        }
     }
-
-    if (!access(datafn, F_OK)) {
-        if(unlink(datafn)) {
-            fprintf(stderr, "Cache_delete(): unlink(): %s\n",
-                    strerror(errno));
-        }
+    dir = opendir(DATA_DIR);
+    if (dir) {
+        closedir(dir);
+    } else if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
+        fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
+                strerror(errno));
     }
-    free(metafn);
-    free(datafn);
 }
 
-Cache *Cache_open(const char *fn)
+int Seg_exist(Cache *cf, long start)
 {
-    /* Check if both metadata and data file exist */
-    if (Cache_validate(fn)) {
-        return NULL;
-    }
+    long total_bit = start / cf->blksz;
+    long byte = total_bit / 8;
+    int bit = total_bit % 8;
 
-    /* Create the cache in-memory data structure */
-    Cache *cf = Cache_alloc();
-    cf->filename = strndup(fn, MAX_PATH_LEN);
-
-    if (Meta_read(cf)) {
-        Cache_free(cf);
-        return NULL;
-    }
-
-    /* In consistent metadata / data file */
-    if (cf->len != Data_size(fn)) {
-        fprintf(stderr,
-            "Cache_open(): metadata is inconsistent with the data file!\n");
-        Cache_delete(fn);
-        Cache_free(cf);
-        return NULL;
-    }
-
-    return cf;
+    return cf->seg[byte] & (1 << bit);
 }
 
-int Meta_create(const Cache *cf)
+void Seg_set(Cache *cf, long start, int i)
+{
+    long total_bit = start / cf->blksz;
+    long byte = total_bit / 8;
+    int bit = total_bit % 8;
+
+    if (i) {
+        cf->seg[byte] |= (1 << bit);
+    } else {
+        cf->seg[byte] &= ~(1 << bit);
+    }
+}
+
+int Meta_create(Cache *cf)
 {
     cf->blksz = DATA_BLK_SZ;
-    cf->nseg = cf->len / cf->blksz + 1;
-    cf->seg = calloc(nseg, sizeof(Seg));
+    cf->segbc = cf->len / cf->blksz / 8 + 1;
+    cf->seg = calloc(cf->segbc, sizeof(Seg));
     if (!(cf->seg)) {
         fprintf(stderr, "Meta_create(): calloc failure!\n");
         exit(EXIT_FAILURE);
@@ -209,16 +138,16 @@ int Meta_read(Cache *cf)
     fread(&(cf->time), sizeof(long), 1, fp);
     fread(&(cf->len), sizeof(long), 1, fp);
     fread(&(cf->len), sizeof(int), 1, fp);
-    fread(&(cf->nseg), sizeof(int), 1, fp);
+    fread(&(cf->segbc), sizeof(int), 1, fp);
 
     /* Allocate some memory for the segment */
-    cf->seg = malloc(cf->nseg * sizeof(Seg));
+    cf->seg = malloc(cf->segbc * sizeof(Seg));
     if (!(cf->seg)) {
         fprintf(stderr, "Meta_read(): malloc failure!\n");
         exit(EXIT_FAILURE);
     }
     /* Read all the segment */
-    nmemb = fread(cf->seg, sizeof(Seg), cf->nseg, fp);
+    nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
     /* Error checking for fread */
     if (ferror(fp)) {
@@ -228,10 +157,10 @@ int Meta_read(Cache *cf)
     }
 
     /* Check for inconsistent metadata file */
-    if (nmemb != cf-> nseg) {
+    if (nmemb != cf-> segbc) {
         fprintf(stderr,
                 "Meta_read(): corrupted metadata!\n");
-        res = -1;
+        res = -2;
     }
 
     if (fclose(fp)) {
@@ -258,8 +187,8 @@ int Meta_write(const Cache *cf)
     fwrite(&(cf->time), sizeof(long), 1, fp);
     fwrite(&(cf->len), sizeof(long), 1, fp);
     fwrite(&(cf->blksz), sizeof(int), 1, fp);
-    fwrite(&(cf->nseg), sizeof(int), 1, fp);
-    fwrite(cf->seg, sizeof(Seg), cf->nseg, fp);
+    fwrite(&(cf->segbc), sizeof(int), 1, fp);
+    fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
 
     /* Error checking for fwrite */
     if (ferror(fp)) {
@@ -407,4 +336,136 @@ long Data_write(const Cache *cf, long offset, long len,
         fprintf(stderr, "Data_write(): fclose(): %s\n", strerror(errno));
     }
     return byte_written;
+}
+
+Cache *Cache_alloc()
+{
+    Cache *cf = calloc(1, sizeof(Cache));
+    if (!cf) {
+        fprintf(stderr, "Cache_new(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    return cf;
+}
+
+void Cache_free(Cache *cf)
+{
+    if (cf->filename) {
+        free(cf->filename);
+    }
+    if (cf->seg) {
+        free(cf->seg);
+    }
+    free(cf);
+}
+
+int Cache_exist(const char *fn)
+{
+    int meta_exists = 1;
+    int data_exists = 1;
+    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+
+    if (access(metafn, F_OK)) {
+//         fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
+        meta_exists = 0;
+    }
+
+    if (access(datafn, F_OK)) {
+//         fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
+        data_exists = 0;
+    }
+
+    if (meta_exists ^ data_exists) {
+        if (meta_exists) {
+            if(unlink(metafn)) {
+                fprintf(stderr, "Cache_exist(): unlink(): %s\n",
+                        strerror(errno));
+            }
+        }
+        if (data_exists) {
+            if(unlink(datafn)) {
+                fprintf(stderr, "Cache_exist(): unlink(): %s\n",
+                        strerror(errno));
+            }
+        }
+    }
+
+    free(metafn);
+    free(datafn);
+
+    return !(meta_exists & data_exists);
+}
+
+Cache *Cache_create(const char *fn, long len, long time)
+{
+    Cache *cf = Cache_alloc();
+
+    cf->filename = strndup(fn, MAX_PATH_LEN);
+    cf->time = time;
+    cf->len = len;
+
+    if (Data_create(cf)) {
+        Cache_free(cf);
+        fprintf(stderr, "Cache_create(): Data_create() failed!\n");
+        return NULL;
+    }
+
+    if (Meta_create(cf)) {
+        Cache_free(cf);
+        fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
+        return NULL;
+    }
+    return cf;
+}
+
+void Cache_delete(const char *fn)
+{
+    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+    if (!access(metafn, F_OK)) {
+        if(unlink(metafn)) {
+            fprintf(stderr, "Cache_delete(): unlink(): %s\n",
+                    strerror(errno));
+        }
+    }
+
+    if (!access(datafn, F_OK)) {
+        if(unlink(datafn)) {
+            fprintf(stderr, "Cache_delete(): unlink(): %s\n",
+                    strerror(errno));
+        }
+    }
+    free(metafn);
+    free(datafn);
+}
+
+Cache *Cache_open(const char *fn)
+{
+    /* Check if both metadata and data file exist */
+    if (Cache_exist(fn)) {
+        return NULL;
+    }
+
+    /* Create the cache in-memory data structure */
+    Cache *cf = Cache_alloc();
+    cf->filename = strndup(fn, MAX_PATH_LEN);
+
+    /* Internal inconsistency metadata file */
+    if (Meta_read(cf) == -2) {
+        Cache_free(cf);
+        Cache_delete(fn);
+        return NULL;
+    }
+
+    /* Inconsistency between metadata and data file */
+    if (cf->len != Data_size(fn)) {
+        fprintf(stderr,
+                "Cache_open(): metadata is inconsistent with the data file!\n");
+        Cache_free(cf);
+        Cache_delete(fn);
+        return NULL;
+    }
+
+    return cf;
 }
