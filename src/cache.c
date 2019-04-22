@@ -194,7 +194,7 @@ static int Meta_write(const Cache *cf)
 static int Meta_create(Cache *cf)
 {
     cf->blksz = DATA_BLK_SZ;
-    cf->segbc = cf->content_length / cf->blksz / 8 + 1;
+    cf->segbc = cf->content_length / cf->blksz + 1;
     cf->seg = calloc(cf->segbc, sizeof(Seg));
     if (!cf->seg) {
         fprintf(stderr, "Meta_create(): calloc failure!\n");
@@ -589,11 +589,9 @@ void Cache_close(Cache *cf)
  */
 static int Seg_exist(Cache *cf, off_t offset)
 {
-    off_t total_bit = offset / cf->blksz;
-    off_t byte = total_bit / 8;
-    int bit = total_bit % 8;
+    off_t byte = offset / cf->blksz;
+    return cf->seg[byte];
 
-    return cf->seg[byte] & (1 << bit);
 }
 /**
  * \brief Set the existence of a segment
@@ -603,15 +601,8 @@ static int Seg_exist(Cache *cf, off_t offset)
  */
 static void Seg_set(Cache *cf, off_t offset, int i)
 {
-    off_t total_bit = offset / cf->blksz;
-    off_t byte = total_bit / 8;
-    int bit = total_bit % 8;
-
-    if (i) {
-        cf->seg[byte] |= (1 << bit);
-    } else {
-        cf->seg[byte] &= ~(1 << bit);
-    }
+    off_t byte = offset / cf->blksz;
+    cf->seg[byte] = i;
 }
 
 long Cache_read(Cache *cf, char *buf, size_t size, off_t offset)

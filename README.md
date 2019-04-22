@@ -9,6 +9,8 @@ Furthermore, a permanent cache system has been implemented to cache all the file
 ## BUG
 The permanent cache system seems to have problem when you have randomly seek across the file during the initial download process. I am not sure what causes the problem. It is probably some sort of concurrency issue. The mutexes I set up doesn't seem to help with the problem.
 
+This feature is also very slow. When downloading from localhost, it peaks at about 1.5 MiB/s. I am not entirely sure why. 
+
 ## Compilation
 This program was developed under Debian Stretch. If you are using the same operating system as me, you need ``libgumbo-dev``, ``libfuse-dev``, ``libssl1.0-dev`` and ``libcurl4-openssl-dev``.
 
