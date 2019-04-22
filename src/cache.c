@@ -234,7 +234,7 @@ static int Meta_read(Cache *cf)
     }
 
     fread(&(cf->time), sizeof(long), 1, fp);
-    fread(&(cf->content_length), sizeof(long), 1, fp);
+    fread(&(cf->content_length), sizeof(off_t), 1, fp);
     fread(&(cf->blksz), sizeof(int), 1, fp);
     fread(&(cf->segbc), sizeof(long), 1, fp);
 
@@ -282,7 +282,7 @@ static int Meta_write(const Cache *cf)
     }
 
     fwrite(&(cf->time), sizeof(long), 1, fp);
-    fwrite(&(cf->content_length), sizeof(long), 1, fp);
+    fwrite(&(cf->content_length), sizeof(off_t), 1, fp);
     fwrite(&(cf->blksz), sizeof(int), 1, fp);
     fwrite(&(cf->segbc), sizeof(long), 1, fp);
     fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
@@ -355,9 +355,9 @@ static long Data_read(const Cache *cf, long offset, long len,
         return -1;
     }
 
-    if (fseek(fp, offset, SEEK_SET)) {
-        /* fseek failed */
-        fprintf(stderr, "Data_read(): fseek(): %s\n", strerror(errno));
+    if (fseeko(fp, offset, SEEK_SET)) {
+        /* fseeko failed */
+        fprintf(stderr, "Data_read(): fseeko(): %s\n", strerror(errno));
         goto cleanup;
     }
 
@@ -405,9 +405,9 @@ static long Data_write(const Cache *cf, long offset, long len,
         return -1;
     }
 
-    if (fseek(fp, offset, SEEK_SET)) {
-        /* fseek failed */
-        fprintf(stderr, "Data_write(): fseek(): %s\n", strerror(errno));
+    if (fseeko(fp, offset, SEEK_SET)) {
+        /* fseeko failed */
+        fprintf(stderr, "Data_write(): fseeko(): %s\n", strerror(errno));
         goto cleanup;
     }
 
@@ -556,6 +556,7 @@ static void Cache_delete(const char *fn)
 
 Cache *Cache_open(const char *fn)
 {
+    int res = 0;
     /* Check if both metadata and data file exist */
     if (Cache_exist(fn)) {
         return NULL;
