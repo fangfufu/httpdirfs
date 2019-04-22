@@ -59,11 +59,6 @@ long Cache_read(const char *fn, long offset, long len, uint8_t *buf);
 long Cache_write(const char *fn, long offset, long len,
                    const uint8_t *buf);
 
-/**
- * \brief Create a directory within the cache structure
- */
-int CacheDir_create(const char *fn);
-
 /****************************** Work in progress *****************************/
 
 
@@ -153,6 +148,17 @@ long Data_read(const Cache *cf, long offset, long len,
  */
 long Data_write(const Cache *cf, long offset, long len,
                  const uint8_t *buf);
+
+/**
+ * \brief Create directories under the cache directory structure, if they do
+ * not already exist
+ * \return
+ *  -   -1 failed to create metadata directory.
+ *  -   -2 failed to create data directory.
+ *  -   -3 failed to create both metadata and data directory.
+ * \note This should be called every time a new LinkTable is created.
+ */
+int CacheDir_create(const char *fn);
 
 /**
  * \brief Allocate a new cache data structure
