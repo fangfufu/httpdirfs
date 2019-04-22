@@ -121,6 +121,8 @@ static int Cache_exist(const char *fn);
  */
 static void Cache_delete(const char *fn);
 
+int CACHE_SYSTEM_INIT = 0;
+
 /**
  * \brief The metadata directory
  */
@@ -130,16 +132,6 @@ static char *META_DIR;
  * \brief The data directory
  */
 static char *DATA_DIR;
-
-/**
- * \brief The array containing opened cache files
- */
-static Cache **CACHE_OPENED;
-
-/**
- * \brief The number of opened cache files
- */
-static int N_CACHE_OPENED = 0;
 
 void CacheSystem_init(const char *path)
 {
@@ -182,6 +174,8 @@ void CacheSystem_init(const char *path)
         fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                 strerror(errno));
     }
+
+    CACHE_SYSTEM_INIT = 1;
 }
 
 int Seg_exist(Cache *cf, long start)
@@ -211,7 +205,7 @@ static int Meta_create(Cache *cf)
     cf->blksz = DATA_BLK_SZ;
     cf->segbc = cf->content_length / cf->blksz / 8 + 1;
     cf->seg = calloc(cf->segbc, sizeof(Seg));
-    if (!(cf->seg)) {
+    if (!cf->seg) {
         fprintf(stderr, "Meta_create(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
@@ -240,7 +234,7 @@ static int Meta_read(Cache *cf)
 
     /* Allocate some memory for the segment */
     cf->seg = malloc(cf->segbc * sizeof(Seg));
-    if (!(cf->seg)) {
+    if (!cf->seg) {
         fprintf(stderr, "Meta_read(): malloc failure!\n");
         exit(EXIT_FAILURE);
     }
@@ -463,6 +457,11 @@ static Cache *Cache_alloc()
     return cf;
 }
 
+void Cache_close(Cache *cf)
+{
+    return Cache_free(cf);
+}
+
 static void Cache_free(Cache *cf)
 {
     if (cf->p_url) {
@@ -556,7 +555,6 @@ static void Cache_delete(const char *fn)
 
 Cache *Cache_open(const char *fn)
 {
-    int res = 0;
     /* Check if both metadata and data file exist */
     if (Cache_exist(fn)) {
         return NULL;
