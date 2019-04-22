@@ -1,5 +1,6 @@
 #include "fuse_local.h"
 
+#include "cache.h"
 #include "link.h"
 
 #include <errno.h>
@@ -39,7 +40,7 @@ static void *fs_init(struct fuse_conn_info *conn)
 /** \brief release an opened file */
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {
-    (void) fi;
+    Cache_close((Cache *)fi->fh);
     fprintf(stderr, "fs_release(): %s\n", path);
     return 0;
 }
@@ -103,6 +104,13 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if ((fi->flags & 3) != O_RDONLY) {
         return -EACCES;
     }
+
+    fi->fh = (uint64_t) Cache_open(path);
+    if (!fi->fh) {
+        return -ENOENT;
+    }
+
+    fprintf(stderr, "fs_open(): %s\n", path);
 
     return 0;
 }

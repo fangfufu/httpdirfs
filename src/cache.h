@@ -29,7 +29,6 @@ typedef struct {
     Seg *seg; /**< the detail of each segment */
 } Cache;
 
-/**************************** External functions ****************************/
 /**
  * \brief initialise the cache system directories
  * \details This function basically sets up the following variables:
@@ -37,9 +36,37 @@ typedef struct {
  *  - DATA_DIR
  *
  * If these directories do not exist, they will be created.
- * \note Call this when the program starts
+ * \note Called by parse_arg_list()
  */
 void CacheSystem_init(const char *dir);
+
+/**
+ * \brief open a cache file set
+ * \note This function is called by fs_open().
+ */
+Cache *Cache_open(const char *fn);
+
+/**
+ * \brief Close a cache data structure
+ * \note This function is called by fs_release().
+ */
+void Cache_close(Cache *cf);
+
+/***************************** Work in Progress ******************************/
+
+/**
+ * \brief Check if a segment exists.
+ * \note Call this when deciding whether to download a file
+ */
+int Seg_exist(Cache *cf, long start);
+
+/**
+ * \brief Set the existence of a segment
+ * \param[in] start the starting position of the segment.
+ * \param[in] i 1 for exist, 0 for doesn't exist
+ * \note Call this after downloading a segment.
+ */
+void Seg_set(Cache *cf, long start, int i);
 
 /**
  * \brief create a cache file set
@@ -61,34 +88,9 @@ int Cache_create(const char *fn, long len, long time);
  */
 int CacheDir_create(const char *fn);
 
-/***************************** Work in Progress ******************************/
-/**
- * \brief open a cache file set
- * \note Call this when FUSE opens a file
- */
-Cache *Cache_open(const char *fn);
-
-/**
- * \brief Check if a segment exists.
- * \note Call this when deciding whether to download a file
- */
-int Seg_exist(Cache *cf, long start);
-
-/**
- * \brief Set the existence of a segment
- * \param[in] start the starting position of the segment.
- * \param[in] i 1 for exist, 0 for doesn't exist
- * \note Call this after downloading a segment.
- */
-void Seg_set(Cache *cf, long start, int i);
-
 /***************************** To be completed ******************************/
 
-/**
- * \brief Close a cache data structure
- * \note Call this when FUSE releases a file
- */
-void Cache_close(Cache *cf);
+
 
 /**
  * \brief Read from a cache file set

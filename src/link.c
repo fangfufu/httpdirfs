@@ -340,7 +340,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->p_url, P_URL_LEN_MAX)) {
                 /* The next sub-directory exists */
-                if (!(linktbl->links[i]->next_table)) {
+                if (!linktbl->links[i]->next_table) {
                     linktbl->links[i]->next_table = LinkTable_new(
                         linktbl->links[i]->f_url);
                     fprintf(stderr, "Created new link table for %s\n",

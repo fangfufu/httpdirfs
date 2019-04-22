@@ -1,3 +1,4 @@
+#include "cache.h"
 #include "network.h"
 #include "fuse_local.h"
 
@@ -140,6 +141,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"proxy", required_argument, NULL, 'P'},            /* 5 */
         {"proxy-username", required_argument, NULL, 'L'},   /* 6 */
         {"proxy-password", required_argument, NULL, 'L'},   /* 7 */
+        {"cache", required_argument, NULL, 'L'},            /* 8 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -188,6 +190,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         NETWORK_CONFIG.proxy_pass = strndup(optarg,
                                                             ARG_LEN_MAX);
                         break;
+                    case 8:
+                        CacheSystem_init(optarg);
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
                         add_arg(fuse_argv, fuse_argc, "--help");
@@ -240,6 +244,7 @@ static void print_http_options()
         https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
          --proxy-username      Username for the proxy\n\
          --proxy-password      Password for the proxy\n\
+         --cache           Set the cache folder\n\
     \n\
 libfuse options:\n");
 }
