@@ -27,14 +27,16 @@ typedef struct LinkTable LinkTable;
 /** \brief link data type */
 typedef struct Link Link;
 
-
+/**
+ * \brief Link data structure
+ */
 struct Link {
-    char p_url[P_URL_LEN_MAX];
-    char f_url[URL_LEN_MAX];
-    LinkType type;
-    size_t content_length;
-    LinkTable *next_table;
-    long time;
+    char p_url[P_URL_LEN_MAX]; /**< */
+    char f_url[URL_LEN_MAX]; /**< The full URL of the file*/
+    LinkType type; /**< The type of the link */
+    size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
+    LinkTable *next_table; /**< The next LinkTable level, if it is a LINK_DIR */
+    long time; /**< CURLINFO_FILETIME obtained from the server*/
 };
 
 struct LinkTable {
@@ -42,24 +44,42 @@ struct LinkTable {
     Link **links;
 };
 
-/** \brief root link table */
+/**
+ * \brief root link table
+ */
 extern LinkTable *ROOT_LINK_TBL;
 
-/** \brief set the stats for a file */
+/**
+ * \brief set the stats for a file
+ */
 void Link_set_stat(Link* this_link, CURL *curl);
 
-/** \brief create a new LinkTable */
+/**
+ * \brief create a new LinkTable
+ */
 LinkTable *LinkTable_new(const char *url);
 
 /**
- * \brief download a link */
-/* \return the number of bytes downloaded
+ * \brief print a LinkTable
+ */
+void LinkTable_print(LinkTable *linktbl);
+
+/**
+ * \brief download a link
+ * \return the number of bytes downloaded
  */
 long path_download(const char *path, char *output_buf, size_t size,
                    off_t offset);
 
-/** \brief find the link associated with a path */
+/**
+ * \brief find the link associated with a path
+ */
 Link *path_to_Link(const char *path);
+
+/**
+ * \brief return the link table for the associated path
+ */
+LinkTable *path_to_Link_LinkTable_new(const char *path);
 
 
 #endif

@@ -30,6 +30,11 @@ typedef struct {
 } Cache;
 
 /**
+ * \brief whether the cache system is enabled
+ */
+extern int CACHE_SYSTEM_INIT;
+
+/**
  * \brief initialise the cache system directories
  * \details This function basically sets up the following variables:
  *  - META_DIR
