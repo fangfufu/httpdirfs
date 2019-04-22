@@ -21,7 +21,8 @@ typedef uint8_t Seg;
  * \brief cache in-memory data structure
  */
 typedef struct {
-    char *p_url; /**< the filename from the http server */
+    char *p_url; /**< the partial URL -- this is the link relative
+                    to the root link */
     long time; /**<the modified time of the file */
     off_t content_length; /**<the size of the file */
     int blksz; /**<the block size of the data file */
@@ -41,9 +42,20 @@ extern int CACHE_SYSTEM_INIT;
  *  - DATA_DIR
  *
  * If these directories do not exist, they will be created.
- * \note Called by parse_arg_list()
+ * \note Called by parse_arg_list(), verified to be working
  */
 void CacheSystem_init(const char *dir);
+
+/**
+ * \brief Create directories under the cache directory structure, if they do
+ * not already exist
+ * \return
+ *  -   -1 failed to create metadata directory.
+ *  -   -2 failed to create data directory.
+ *  -   -3 failed to create both metadata and data directory.
+ * \note Called by fs_readdir(), verified to be working
+ */
+int CacheDir_create(const char *fn);
 
 /**
  * \brief open a cache file set
@@ -81,17 +93,6 @@ void Seg_set(Cache *cf, long start, int i);
  * \note Call this when creating a new LinkTable
  */
 int Cache_create(const char *fn, long len, long time);
-
-/**
- * \brief Create directories under the cache directory structure, if they do
- * not already exist
- * \return
- *  -   -1 failed to create metadata directory.
- *  -   -2 failed to create data directory.
- *  -   -3 failed to create both metadata and data directory.
- * \note Call this when creating a new LinkTable
- */
-int CacheDir_create(const char *fn);
 
 /***************************** To be completed ******************************/
 

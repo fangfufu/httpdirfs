@@ -8,7 +8,7 @@
 /** \brief the maximum length of the URL */
 #define URL_LEN_MAX 2048
 /** \brief the maximum length of a partial URL (a link) */
-#define P_URL_LEN_MAX 255
+#define LINKNAME_LEN_MAX 255
 
 /** \brief the link type */
 typedef enum {
@@ -31,7 +31,8 @@ typedef struct Link Link;
  * \brief Link data structure
  */
 struct Link {
-    char p_url[P_URL_LEN_MAX]; /**< */
+    char linkname[LINKNAME_LEN_MAX]; /**< The link name in the last level of
+                                            the URL*/
     char f_url[URL_LEN_MAX]; /**< The full URL of the file*/
     LinkType type; /**< The type of the link */
     size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
@@ -48,6 +49,11 @@ struct LinkTable {
  * \brief root link table
  */
 extern LinkTable *ROOT_LINK_TBL;
+
+/**
+ * \brief the length of the root link
+ */
+extern int ROOT_LINK_LEN;
 
 /**
  * \brief set the stats for a file

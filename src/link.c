@@ -16,17 +16,56 @@
 
 /* ---------------- External variables -----------------------*/
 LinkTable *ROOT_LINK_TBL = NULL;
+int ROOT_LINK_LEN = 0;
 
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl);
-static Link *Link_new(const char *p_url, LinkType type);
-static CURL *Link_to_curl(Link *link);
-static void Link_get_stat(Link *this_link);
-static void LinkTable_add(LinkTable *linktbl, Link *link);
-void LinkTable_fill(LinkTable *linktbl);
-static void LinkTable_free(LinkTable *linktbl);
-static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
-static LinkType p_url_type(const char *p_url);
-static char *url_append(const char *url, const char *sublink);
+static void LinkTable_add(LinkTable *linktbl, Link *link)
+{
+    linktbl->num++;
+    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
+    if (!linktbl->links) {
+        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    linktbl->links[linktbl->num - 1] = link;
+}
+
+static Link *Link_new(const char *linkname, LinkType type)
+{
+    Link *link = calloc(1, sizeof(Link));
+    if (!link) {
+        fprintf(stderr, "Link_new(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    strncpy(link->linkname, linkname, LINKNAME_LEN_MAX);
+    link->type = type;
+
+    /* remove the '/' from linkname if it exists */
+    char *c = &(link->linkname[strnlen(link->linkname, LINKNAME_LEN_MAX) - 1]);
+    if ( *c == '/') {
+        *c = '\0';
+    }
+
+    return link;
+}
+
+static LinkType linkname_type(const char *linkname)
+{
+    /* The link name has to start with alphanumerical character */
+    if (!isalnum(linkname[0])) {
+        return LINK_INVALID;
+    }
+
+    /* check for http:// and https:// */
+    if ( !strncmp(linkname, "http://", 7) || !strncmp(linkname, "https://", 8) ) {
+        return LINK_INVALID;
+    }
+
+    if ( linkname[strnlen(linkname, LINKNAME_LEN_MAX) - 1] == '/' ) {
+        return LINK_DIR;
+    }
+
+    return LINK_FILE;
+}
 
 /**
  * Shamelessly copied and pasted from:
@@ -42,7 +81,7 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     if (node->v.element.tag == GUMBO_TAG_A &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
-        LinkType type = p_url_type(href->value);
+        LinkType type = linkname_type(href->value);
     if (type) {
         LinkTable_add(linktbl, Link_new(href->value, type));
     }
@@ -53,25 +92,6 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
             HTML_to_LinkTable((GumboNode *)children->data[i], linktbl);
         }
         return;
-}
-
-static Link *Link_new(const char *p_url, LinkType type)
-{
-    Link *link = calloc(1, sizeof(Link));
-    if (!link) {
-        fprintf(stderr, "Link_new(): calloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    strncpy(link->p_url, p_url, P_URL_LEN_MAX);
-    link->type = type;
-
-    /* remove the '/' from p_url if it exists */
-    char *c = &(link->p_url[strnlen(link->p_url, P_URL_LEN_MAX) - 1]);
-    if ( *c == '/') {
-        *c = '\0';
-    }
-
-    return link;
 }
 
 static CURL *Link_to_curl(Link *link)
@@ -157,7 +177,6 @@ void Link_set_stat(Link* this_link, CURL *curl)
         curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
 
         if (cl == -1) {
-            /* Turns out not to be a file after all */
             this_link->content_length = 0;
             this_link->type = LINK_DIR;
         } else {
@@ -169,33 +188,45 @@ void Link_set_stat(Link* this_link, CURL *curl)
     }
 }
 
-static void LinkTable_add(LinkTable *linktbl, Link *link)
+static char *url_append(const char *url, const char *sublink)
 {
-    linktbl->num++;
-    linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
-    if (!linktbl->links) {
-        fprintf(stderr, "LinkTable_add(): realloc failure!\n");
+    int needs_separator = 0;
+    if (url[strnlen(url, URL_LEN_MAX)-1] != '/') {
+        needs_separator = 1;
+    }
+
+    char *str;
+    size_t ul = strnlen(url, URL_LEN_MAX);
+    size_t sl = strnlen(sublink, LINKNAME_LEN_MAX);
+    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
+    if (!str) {
+        fprintf(stderr, "url_append(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
-    linktbl->links[linktbl->num - 1] = link;
+    strncpy(str, url, ul);
+    if (needs_separator) {
+        str[ul] = '/';
+    }
+    strncat(str, sublink, sl);
+    return str;
 }
 
-void LinkTable_fill(LinkTable *linktbl)
+static void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         if (this_link->type) {
             char *url;
-            url = url_append(head_link->f_url, this_link->p_url);
+            url = url_append(head_link->f_url, this_link->linkname);
             strncpy(this_link->f_url, url, URL_LEN_MAX);
             free(url);
 
-            char *unescaped_p_url;
-            unescaped_p_url = curl_easy_unescape(NULL, this_link->p_url, 0,
+            char *unescaped_linkname;
+            unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname, 0,
                                                  NULL);
-            strncpy(this_link->p_url, unescaped_p_url, P_URL_LEN_MAX);
-            curl_free(unescaped_p_url);
+            strncpy(this_link->linkname, unescaped_linkname, LINKNAME_LEN_MAX);
+            curl_free(unescaped_linkname);
 
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
                 Link_get_stat(this_link);
@@ -221,7 +252,7 @@ static void LinkTable_free(LinkTable *linktbl)
 
 LinkTable *LinkTable_new(const char *url)
 {
-    fprintf(stderr, "%d: LinkTable_new(%s);\n",i, url);
+    fprintf(stderr, "LinkTable_new(%s);\n", url);
 
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
@@ -266,7 +297,7 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
     /* Fill in the link table */
     LinkTable_fill(linktbl);
-    fprintf(stderr, "%d: LinkTable_new(): returning LinkTable %p\n", i, linktbl);
+    fprintf(stderr, "LinkTable_new(): returning LinkTable %p\n", linktbl);
     return linktbl;
 }
 
@@ -282,24 +313,12 @@ void LinkTable_print(LinkTable *linktbl)
                 i,
                 this_link->type,
                 this_link->content_length,
-                this_link->p_url,
+                this_link->linkname,
                 this_link->f_url
         );
 
     }
     fprintf(stderr, "--------------------------------------------\n");
-}
-
-Link *path_to_Link(const char *path)
-{
-    char *new_path = strndup(path, URL_LEN_MAX);
-    if (!new_path) {
-        fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
-        exit(EXIT_FAILURE);
-    }
-    Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
-    free(new_path);
-    return link;
 }
 
 LinkTable *path_to_Link_LinkTable_new(const char *path)
@@ -326,7 +345,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     if ( slash == NULL ) {
         /* We cannot find another '/', we have reached the last level */
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->p_url, P_URL_LEN_MAX)) {
+            if (!strncmp(path, linktbl->links[i]->linkname, LINKNAME_LEN_MAX)) {
                 /* We found our link */
                 return linktbl->links[i];
             }
@@ -345,7 +364,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         /* move the pointer past the '/' */
         char *next_path = slash + 1;
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->p_url, P_URL_LEN_MAX)) {
+            if (!strncmp(path, linktbl->links[i]->linkname, LINKNAME_LEN_MAX)) {
                 /* The next sub-directory exists */
                 return path_to_Link_recursive(
                     next_path, linktbl->links[i]->next_table);
@@ -353,6 +372,18 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         }
     }
     return NULL;
+}
+
+Link *path_to_Link(const char *path)
+{
+    char *new_path = strndup(path, URL_LEN_MAX);
+    if (!new_path) {
+        fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
+        exit(EXIT_FAILURE);
+    }
+    Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
+    free(new_path);
+    return link;
 }
 
 long path_download(const char *path, char *output_buf, size_t size,
@@ -406,46 +437,4 @@ long path_download(const char *path, char *output_buf, size_t size,
     curl_easy_cleanup(curl);
     free(buf.memory);
     return recv;
-}
-
-static LinkType p_url_type(const char *p_url)
-{
-    /* The link name has to start with alphanumerical character */
-    if (!isalnum(p_url[0])) {
-        return LINK_INVALID;
-    }
-
-    /* check for http:// and https:// */
-    if ( !strncmp(p_url, "http://", 7) || !strncmp(p_url, "https://", 8) ) {
-        return LINK_INVALID;
-    }
-
-    if ( p_url[strnlen(p_url, P_URL_LEN_MAX) - 1] == '/' ) {
-        return LINK_DIR;
-    }
-
-    return LINK_FILE;
-}
-
-static char *url_append(const char *url, const char *sublink)
-{
-    int needs_separator = 0;
-    if (url[strnlen(url, URL_LEN_MAX)-1] != '/') {
-        needs_separator = 1;
-    }
-
-    char *str;
-    size_t ul = strnlen(url, URL_LEN_MAX);
-    size_t sl = strnlen(sublink, P_URL_LEN_MAX);
-    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
-    if (!str) {
-        fprintf(stderr, "url_append(): calloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    strncpy(str, url, ul);
-    if (needs_separator) {
-        str[ul] = '/';
-    }
-    strncat(str, sublink, sl);
-    return str;
 }

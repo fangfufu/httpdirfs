@@ -160,17 +160,13 @@ void CacheSystem_init(const char *path)
     }
 
     /* Check if directories exist, if not, create them */
-    dir = opendir(META_DIR);
-    if (dir) {
-        closedir(dir);
-    } else if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
-            fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
+    if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        && (errno != EEXIST)) {
+        fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
     }
-    dir = opendir(DATA_DIR);
-    if (dir) {
-        closedir(dir);
-    } else if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)) {
+    if (mkdir(DATA_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        && (errno != EEXIST)) {
         fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                 strerror(errno));
     }
@@ -459,6 +455,8 @@ static Cache *Cache_alloc()
 
 void Cache_close(Cache *cf)
 {
+    fprintf(stderr, "Cache_close(): Creating cache files for %p.\n", cf);
+
     return Cache_free(cf);
 }
 
@@ -513,6 +511,8 @@ static int Cache_exist(const char *fn)
 
 int Cache_create(const char *fn, long len, long time)
 {
+    fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
+
     Cache *cf = Cache_alloc();
 
     cf->p_url = strndup(fn, MAX_PATH_LEN);

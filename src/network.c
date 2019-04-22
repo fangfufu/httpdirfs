@@ -25,16 +25,6 @@ static pthread_mutex_t *crypto_lockarray;
 static pthread_mutex_t curl_lock;
 /** \brief network configuration */
 
-/* ---------------- Static function prototype ---------------*/
-static void crypto_lock_callback(int mode, int type, char *file, int line);
-static void crypto_lock_init(void);
-static void curl_callback_lock(CURL *handle, curl_lock_data data,
-                               curl_lock_access access, void *userptr);
-static void curl_callback_unlock(CURL *handle, curl_lock_data data,
-                                 void *userptr);
-void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs);
-static unsigned long thread_id(void);
-
 /* -------------------- Functions -------------------------- */
 static void crypto_lock_callback(int mode, int type, char *file, int line)
 {
@@ -45,6 +35,14 @@ static void crypto_lock_callback(int mode, int type, char *file, int line)
     } else {
         pthread_mutex_unlock(&(crypto_lockarray[type]));
     }
+}
+
+static unsigned long thread_id(void)
+{
+    unsigned long ret;
+
+    ret = (unsigned long)pthread_self();
+    return ret;
 }
 
 static void crypto_lock_init(void)
@@ -82,6 +80,42 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
     (void)handle;  /* unused */
     (void)data;    /* unused */
     pthread_mutex_unlock(&curl_lock);
+}
+
+static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
+{
+    if (curl_msg->msg == CURLMSG_DONE) {
+        TransferStruct *transfer;
+        CURL *curl = curl_msg->easy_handle;
+        curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
+                          &transfer);
+        transfer->transferring = 0;
+        char *url = NULL;
+        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+        if (curl_msg->data.result) {
+            fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",
+                    curl_msg->data.result,
+                    curl_easy_strerror(curl_msg->data.result),
+                    url);
+            usleep(1000);
+        } else {
+            /* Transfer successful, query the file size */
+            if (transfer->type == FILESTAT) {
+                fprintf(stderr, "Link_set_stat(): %d, %d, %s\n",
+                        n_running_curl, n_mesgs, url);
+                Link_set_stat(transfer->link, curl);
+            }
+        }
+        curl_multi_remove_handle(curl_multi, curl);
+        /* clean up the handle, if we are querying the file size */
+        if (transfer->type == FILESTAT) {
+            curl_easy_cleanup(curl);
+            free(transfer);
+        }
+    } else {
+        fprintf(stderr, "curl_process_msgs(): curl_msg->msg: %d\n",
+                curl_msg->msg);
+    }
 }
 
 int curl_multi_perform_once()
@@ -156,41 +190,7 @@ int curl_multi_perform_once()
     return n_running_curl;
 }
 
-void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
-{
-    if (curl_msg->msg == CURLMSG_DONE) {
-        TransferStruct *transfer;
-        CURL *curl = curl_msg->easy_handle;
-        curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
-                          &transfer);
-        transfer->transferring = 0;
-        char *url = NULL;
-        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
-        if (curl_msg->data.result) {
-            fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",
-                    curl_msg->data.result,
-                    curl_easy_strerror(curl_msg->data.result),
-                    url);
-            usleep(1000);
-        } else {
-            /* Transfer successful, query the file size */
-            if (transfer->type == FILESTAT) {
-                fprintf(stderr, "Link_set_stat(): %d, %d, %s\n",
-                        n_running_curl, n_mesgs, url);
-                Link_set_stat(transfer->link, curl);
-            }
-        }
-        curl_multi_remove_handle(curl_multi, curl);
-        /* clean up the handle, if we are querying the file size */
-        if (transfer->type == FILESTAT) {
-            curl_easy_cleanup(curl);
-            free(transfer);
-        }
-    } else {
-        fprintf(stderr, "curl_process_msgs(): curl_msg->msg: %d\n",
-                curl_msg->msg);
-    }
-}
+
 
 void network_config_init()
 {
@@ -255,7 +255,13 @@ LinkTable *network_init(const char *url)
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
     printf("libcurl SSL engine: %s\n", data->ssl_version);
 
-    /* ----------- create the root link table --------------*/
+    /* --------- Set the length of the root link ----------- */
+    ROOT_LINK_LEN = strnlen(url, URL_LEN_MAX);
+    if (url[ROOT_LINK_LEN - 1] == '/') {
+        ROOT_LINK_LEN++;
+    }
+
+    /* ----------- Create the root link table --------------*/
     ROOT_LINK_TBL = LinkTable_new(url);
     return ROOT_LINK_TBL;
 }
@@ -298,14 +304,6 @@ void transfer_nonblocking(CURL *curl)
                 res, curl_multi_strerror(res));
         exit(EXIT_FAILURE);
     }
-}
-
-static unsigned long thread_id(void)
-{
-    unsigned long ret;
-
-    ret = (unsigned long)pthread_self();
-    return ret;
 }
 
 size_t

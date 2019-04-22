@@ -192,6 +192,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         break;
                     case 8:
                         CacheSystem_init(optarg);
+                        break;
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
                         add_arg(fuse_argv, fuse_argc, "--help");
