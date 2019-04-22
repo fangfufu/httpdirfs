@@ -84,6 +84,8 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
 
 static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
 {
+    (void) n_running_curl;
+    (void) n_mesgs;
     if (curl_msg->msg == CURLMSG_DONE) {
         TransferStruct *transfer;
         CURL *curl = curl_msg->easy_handle;
@@ -101,8 +103,8 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
         } else {
             /* Transfer successful, query the file size */
             if (transfer->type == FILESTAT) {
-                fprintf(stderr, "Link_set_stat(): %d, %d, %s\n",
-                        n_running_curl, n_mesgs, url);
+//                 fprintf(stderr, "Link_set_stat(): %d, %d, %s\n",
+//                         n_running_curl, n_mesgs, url);
                 Link_set_stat(transfer->link, curl);
             }
         }
@@ -253,12 +255,20 @@ LinkTable *network_init(const char *url)
 
     /* --------- Print off SSL engine version stream --------- */
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
-    printf("libcurl SSL engine: %s\n", data->ssl_version);
+    fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
 
     /* --------- Set the length of the root link ----------- */
-    ROOT_LINK_LEN = strnlen(url, URL_LEN_MAX);
-    if (url[ROOT_LINK_LEN - 1] == '/') {
-        ROOT_LINK_LEN++;
+    /* This is where the '/' should be */
+    ROOT_LINK_OFFSET = strnlen(url, URL_LEN_MAX) - 1;
+    if (url[ROOT_LINK_OFFSET] != '/') {
+        /*
+         * If '/' is not there, it is automatically added, so we need to skip 2
+         * characters
+         */
+        ROOT_LINK_OFFSET += 2;
+    } else {
+        /* If '/' is there, we need to skip it */
+        ROOT_LINK_OFFSET += 1;
     }
 
     /* ----------- Create the root link table --------------*/

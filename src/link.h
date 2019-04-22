@@ -51,9 +51,9 @@ struct LinkTable {
 extern LinkTable *ROOT_LINK_TBL;
 
 /**
- * \brief the length of the root link
+ * \brief the offset for calculating partial URL
  */
-extern int ROOT_LINK_LEN;
+extern int ROOT_LINK_OFFSET;
 
 /**
  * \brief set the stats for a file
@@ -64,11 +64,6 @@ void Link_set_stat(Link* this_link, CURL *curl);
  * \brief create a new LinkTable
  */
 LinkTable *LinkTable_new(const char *url);
-
-/**
- * \brief print a LinkTable
- */
-void LinkTable_print(LinkTable *linktbl);
 
 /**
  * \brief download a link

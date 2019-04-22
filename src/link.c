@@ -16,7 +16,7 @@
 
 /* ---------------- External variables -----------------------*/
 LinkTable *ROOT_LINK_TBL = NULL;
-int ROOT_LINK_LEN = 0;
+int ROOT_LINK_OFFSET = 0;
 
 static void LinkTable_add(LinkTable *linktbl, Link *link)
 {
@@ -77,21 +77,20 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         return;
     }
     GumboAttribute* href;
-
     if (node->v.element.tag == GUMBO_TAG_A &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         LinkType type = linkname_type(href->value);
-    if (type) {
-        LinkTable_add(linktbl, Link_new(href->value, type));
+        if (type) {
+            LinkTable_add(linktbl, Link_new(href->value, type));
+        }
     }
-        }
-        /* Note the recursive call, lol. */
-        GumboVector *children = &node->v.element.children;
-        for (size_t i = 0; i < children->length; ++i) {
-            HTML_to_LinkTable((GumboNode *)children->data[i], linktbl);
-        }
-        return;
+    /* Note the recursive call, lol. */
+    GumboVector *children = &node->v.element.children;
+    for (size_t i = 0; i < children->length; ++i) {
+        HTML_to_LinkTable((GumboNode *)children->data[i], linktbl);
+    }
+    return;
 }
 
 static CURL *Link_to_curl(Link *link)
@@ -169,6 +168,7 @@ void Link_get_stat(Link *this_link)
 
 void Link_set_stat(Link* this_link, CURL *curl)
 {
+    fprintf(stderr, "Link_set_stat(): processing %s\n", this_link->f_url);
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp == HTTP_OK) {
@@ -182,6 +182,17 @@ void Link_set_stat(Link* this_link, CURL *curl)
         } else {
             this_link->content_length = cl;
             this_link->type = LINK_FILE;
+            fprintf(stderr, "Link_set_stat(): Cache_create(%s, %lu, %ld)\n",
+                    this_link->f_url + ROOT_LINK_OFFSET,
+                    this_link->content_length,
+                    this_link->time);
+            if (CACHE_SYSTEM_INIT) {
+                if (Cache_create(this_link->f_url + ROOT_LINK_OFFSET,
+                            this_link->content_length, this_link->time)) {
+                    fprintf(stderr,
+                            "Link_set_stat(): Cache_create() failure!\n");
+                };
+            }
         }
     } else {
         this_link->type = LINK_INVALID;
@@ -250,6 +261,26 @@ static void LinkTable_free(LinkTable *linktbl)
     free(linktbl);
 }
 
+static void LinkTable_print(LinkTable *linktbl)
+{
+    fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, " LinkTable %p for %s\n", linktbl,
+            linktbl->links[0]->f_url);
+    fprintf(stderr, "--------------------------------------------\n");
+    for (int i = 0; i < linktbl->num; i++) {
+        Link *this_link = linktbl->links[i];
+        fprintf(stderr, "%d %c %lu %s %s\n",
+                i,
+                this_link->type,
+                this_link->content_length,
+                this_link->linkname,
+                this_link->f_url
+        );
+
+    }
+    fprintf(stderr, "--------------------------------------------\n");
+}
+
 LinkTable *LinkTable_new(const char *url)
 {
     fprintf(stderr, "LinkTable_new(%s);\n", url);
@@ -295,36 +326,23 @@ URL: %s, HTTP %ld\n", url, http_resp);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
     free(buf.memory);
 
+    if (CACHE_SYSTEM_INIT) {
+        CacheDir_create(url + ROOT_LINK_OFFSET);
+    }
+
     /* Fill in the link table */
     LinkTable_fill(linktbl);
+    LinkTable_print(linktbl);
     fprintf(stderr, "LinkTable_new(): returning LinkTable %p\n", linktbl);
     return linktbl;
-}
-
-void LinkTable_print(LinkTable *linktbl)
-{
-    fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, " LinkTable %p for %s\n", linktbl,
-            linktbl->links[0]->f_url);
-    fprintf(stderr, "--------------------------------------------\n");
-    for (int i = 0; i < linktbl->num; i++) {
-        Link *this_link = linktbl->links[i];
-        fprintf(stderr, "%d %c %lu %s %s\n",
-                i,
-                this_link->type,
-                this_link->content_length,
-                this_link->linkname,
-                this_link->f_url
-        );
-
-    }
-    fprintf(stderr, "--------------------------------------------\n");
 }
 
 LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
     Link *link = path_to_Link(path);
-    link->next_table = LinkTable_new(link->f_url);
+    if (!link->next_table) {
+        link->next_table = LinkTable_new(link->f_url);
+    }
     return link->next_table;
 }
 
@@ -366,6 +384,10 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->linkname, LINKNAME_LEN_MAX)) {
                 /* The next sub-directory exists */
+                if (!linktbl->links[i]->next_table) {
+                    linktbl->links[i]->next_table = LinkTable_new(
+                        linktbl->links[i]->f_url);
+                }
                 return path_to_Link_recursive(
                     next_path, linktbl->links[i]->next_table);
             }
@@ -404,8 +426,7 @@ long path_download(const char *path, char *output_buf, size_t size,
     buf.size = 0;
     buf.memory = NULL;
 
-    fprintf(stderr, "path_download(%s, %s);\n",
-            path, range_str);
+    fprintf(stderr, "path_download(%s, %s);\n", path, range_str);
 
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);

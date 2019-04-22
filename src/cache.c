@@ -297,6 +297,7 @@ static int Data_create(Cache *cf)
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
+    fprintf(stderr, "Data_create(): Creating %s\n", datafn);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     free(datafn);
     if (fd == -1) {
@@ -319,7 +320,8 @@ static long Data_size(const char *fn)
     int s = stat(datafn, &st);
     free(datafn);
     if (!s) {
-        return st.st_blksize;
+        fprintf(stderr, "Data_size(): %s is %ld bytes.\n", fn, st.st_size);
+        return st.st_size;
     }
     fprintf(stderr, "Data_size(): stat(): %s\n", strerror(errno));
     return -1;
@@ -455,7 +457,7 @@ static Cache *Cache_alloc()
 
 void Cache_close(Cache *cf)
 {
-    fprintf(stderr, "Cache_close(): Creating cache files for %p.\n", cf);
+    fprintf(stderr, "Cache_close(): Closed cache file %p.\n", cf);
 
     return Cache_free(cf);
 }
@@ -511,6 +513,10 @@ static int Cache_exist(const char *fn)
 
 int Cache_create(const char *fn, long len, long time)
 {
+    if (!Cache_exist(fn)) {
+        return 0;
+    }
+
     fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
@@ -564,7 +570,7 @@ Cache *Cache_open(const char *fn)
     Cache *cf = Cache_alloc();
     cf->p_url = strndup(fn, MAX_PATH_LEN);
 
-    /* Internal inconsistency metadata file */
+    /* Internal inconsistency in metadata file */
     if (Meta_read(cf) == -2) {
         Cache_free(cf);
         Cache_delete(fn);
@@ -574,11 +580,15 @@ Cache *Cache_open(const char *fn)
     /* Inconsistency between metadata and data file */
     if (cf->content_length != Data_size(fn)) {
         fprintf(stderr,
-                "Cache_open(): metadata is inconsistent with the data file!\n");
+                "Cache_open(): Metadata inconsistency: \
+cf->content_length: %ld, Data_size(fn): %ld\n",
+                cf->content_length, Data_size(fn));
         Cache_free(cf);
         Cache_delete(fn);
         return NULL;
     }
+
+    fprintf(stderr, "Cache_open(): Opened cache file %p.\n", cf);
 
     return cf;
 }

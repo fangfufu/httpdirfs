@@ -53,21 +53,30 @@ void CacheSystem_init(const char *dir);
  *  -   -1 failed to create metadata directory.
  *  -   -2 failed to create data directory.
  *  -   -3 failed to create both metadata and data directory.
- * \note Called by fs_readdir(), verified to be working
+ * \note Called by LinkTable_new(), verified to be working
  */
 int CacheDir_create(const char *fn);
 
 /**
  * \brief open a cache file set
- * \note This function is called by fs_open().
+ * \note This function is called by fs_open(), verified to be working.
  */
 Cache *Cache_open(const char *fn);
 
 /**
  * \brief Close a cache data structure
- * \note This function is called by fs_release().
+ * \note This function is called by fs_release(), verified to be working.
  */
 void Cache_close(Cache *cf);
+
+/**
+ * \brief create a cache file set if it doesn't exist already
+ * \return
+ *  -   0, if the cache file already exists, or was created succesfully.
+ *  -   -1, otherwise
+ * \note Called by Link_set_stat(), verified to be working
+ */
+int Cache_create(const char *fn, long len, long time);
 
 /***************************** Work in Progress ******************************/
 
@@ -85,18 +94,7 @@ int Seg_exist(Cache *cf, long start);
  */
 void Seg_set(Cache *cf, long start, int i);
 
-/**
- * \brief create a cache file set
- *  * \return
- *  -   0, if the cache file was created succesfully
- *  -   -1, otherwise
- * \note Call this when creating a new LinkTable
- */
-int Cache_create(const char *fn, long len, long time);
-
 /***************************** To be completed ******************************/
-
-
 
 /**
  * \brief Read from a cache file set
