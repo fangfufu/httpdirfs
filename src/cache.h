@@ -32,9 +32,9 @@ typedef uint8_t Seg;
  * \brief cache in-memory data structure
  */
 typedef struct {
-    char *filename; /**< the filename from the http server */
+    char *p_url; /**< the filename from the http server */
     long time; /**<the modified time of the file */
-    long len; /**<the size of the file */
+    long content_length; /**<the size of the file */
     int blksz; /**<the block size of the data file */
     long segbc; /**<segment array byte count */
     Seg *seg; /**< the detail of each segment */
