@@ -1,5 +1,6 @@
 #include "link.h"
 
+#include "cache.h"
 #include "network.h"
 
 #include <gumbo.h>
@@ -23,7 +24,6 @@ static void Link_get_stat(Link *this_link);
 static void LinkTable_add(LinkTable *linktbl, Link *link);
 void LinkTable_fill(LinkTable *linktbl);
 static void LinkTable_free(LinkTable *linktbl);
-static void LinkTable_print(LinkTable *linktbl);
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl);
 static LinkType p_url_type(const char *p_url);
 static char *url_append(const char *url, const char *sublink);
@@ -221,7 +221,7 @@ static void LinkTable_free(LinkTable *linktbl)
 
 LinkTable *LinkTable_new(const char *url)
 {
-    fprintf(stderr, "LinkTable_new(%s);\n", url);
+    fprintf(stderr, "%d: LinkTable_new(%s);\n",i, url);
 
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
@@ -266,11 +266,11 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
     /* Fill in the link table */
     LinkTable_fill(linktbl);
+    fprintf(stderr, "%d: LinkTable_new(): returning LinkTable %p\n", i, linktbl);
     return linktbl;
 }
 
-/** \brief print a LinkTable */
-static void LinkTable_print(LinkTable *linktbl)
+void LinkTable_print(LinkTable *linktbl)
 {
     fprintf(stderr, "--------------------------------------------\n");
     fprintf(stderr, " LinkTable %p for %s\n", linktbl,
@@ -300,6 +300,13 @@ Link *path_to_Link(const char *path)
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
     free(new_path);
     return link;
+}
+
+LinkTable *path_to_Link_LinkTable_new(const char *path)
+{
+    Link *link = path_to_Link(path);
+    link->next_table = LinkTable_new(link->f_url);
+    return link->next_table;
 }
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
@@ -340,16 +347,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->p_url, P_URL_LEN_MAX)) {
                 /* The next sub-directory exists */
-                if (!linktbl->links[i]->next_table) {
-                    linktbl->links[i]->next_table = LinkTable_new(
-                        linktbl->links[i]->f_url);
-                    fprintf(stderr, "Created new link table for %s\n",
-                            linktbl->links[i]->f_url);
-                    LinkTable_print(linktbl->links[i]->next_table);
-                }
-
-                return path_to_Link_recursive(next_path,
-                                              linktbl->links[i]->next_table);
+                return path_to_Link_recursive(
+                    next_path, linktbl->links[i]->next_table);
             }
         }
     }

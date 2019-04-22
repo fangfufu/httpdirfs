@@ -40,7 +40,9 @@ static void *fs_init(struct fuse_conn_info *conn)
 /** \brief release an opened file */
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {
-    Cache_close((Cache *)fi->fh);
+    if (CACHE_SYSTEM_INIT) {
+        Cache_close((Cache *)fi->fh);
+    }
     fprintf(stderr, "fs_release(): %s\n", path);
     return 0;
 }
@@ -105,9 +107,11 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EACCES;
     }
 
-    fi->fh = (uint64_t) Cache_open(path);
-    if (!fi->fh) {
-        return -ENOENT;
+    if (CACHE_SYSTEM_INIT) {
+        fi->fh = (uint64_t) Cache_open(path);
+        if (!fi->fh) {
+            return -ENOENT;
+        }
     }
 
     fprintf(stderr, "fs_open(): %s\n", path);
@@ -128,16 +132,11 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     if (!strcmp(path, "/")) {
         linktbl = ROOT_LINK_TBL;
     } else {
-        link = path_to_Link(path);
-        if (!link) {
+        linktbl = path_to_Link_LinkTable_new(path);
+        fprintf(stderr, "Created new link table for %s\n", path);
+        LinkTable_print(linktbl);
+        if(!linktbl) {
             return -ENOENT;
-        }
-        linktbl = link->next_table;
-        if (!linktbl) {
-            linktbl = LinkTable_new(link->f_url);
-            if(!linktbl) {
-                return -ENOENT;
-            }
         }
     }
 
