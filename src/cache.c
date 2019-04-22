@@ -139,7 +139,7 @@ static Cache **CACHE_OPENED;
 /**
  * \brief The number of opened cache files
  */
-static int N_CACHE_OPENED;
+static int N_CACHE_OPENED = 0;
 
 void CacheSystem_init(const char *path)
 {
@@ -512,7 +512,7 @@ static int Cache_exist(const char *fn)
     return !(meta_exists & data_exists);
 }
 
-Cache *Cache_create(const char *fn, long len, long time)
+int Cache_create(const char *fn, long len, long time)
 {
     Cache *cf = Cache_alloc();
 
@@ -521,17 +521,16 @@ Cache *Cache_create(const char *fn, long len, long time)
     cf->content_length = len;
 
     if (Data_create(cf)) {
-        Cache_free(cf);
         fprintf(stderr, "Cache_create(): Data_create() failed!\n");
-        return NULL;
     }
 
     if (Meta_create(cf)) {
-        Cache_free(cf);
         fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
-        return NULL;
     }
-    return cf;
+
+    Cache_free(cf);
+
+    return Cache_exist(fn);
 }
 
 static void Cache_delete(const char *fn)
