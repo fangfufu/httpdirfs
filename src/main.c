@@ -242,9 +242,9 @@ static void print_http_options()
     -u   --username        HTTP authentication username\n\
     -p   --password        HTTP authentication password\n\
     -P   --proxy           Proxy for libcurl, for more details refer to\n\
-        https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
-         --proxy-username      Username for the proxy\n\
-         --proxy-password      Password for the proxy\n\
+                           https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
+         --proxy-username  Username for the proxy\n\
+         --proxy-password  Password for the proxy\n\
          --cache           Set the cache folder\n\
     \n\
 libfuse options:\n");

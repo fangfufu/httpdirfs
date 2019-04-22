@@ -218,7 +218,7 @@ static int Data_create(Cache *cf)
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     char *datafn = strndupcat(DATA_DIR, cf->path, MAX_PATH_LEN);
-    fprintf(stderr, "Data_create(): Creating %s\n", datafn);
+//     fprintf(stderr, "Data_create(): Creating %s\n", datafn);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     free(datafn);
     if (fd == -1) {
@@ -244,7 +244,7 @@ static long Data_size(const char *fn)
     int s = stat(datafn, &st);
     free(datafn);
     if (!s) {
-        fprintf(stderr, "Data_size(): %s is %ld bytes.\n", fn, st.st_size);
+//         fprintf(stderr, "Data_size(): %s is %ld bytes.\n", fn, st.st_size);
         return st.st_size;
     }
     fprintf(stderr, "Data_size(): stat(): %s\n", strerror(errno));
@@ -439,34 +439,7 @@ static int Cache_exist(const char *fn)
     free(metafn);
     free(datafn);
 
-    return !(meta_exists & data_exists);
-}
-
-int Cache_create(const char *fn, long len, long time)
-{
-    if (!Cache_exist(fn)) {
-        return 0;
-    }
-
-    fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
-
-    Cache *cf = Cache_alloc();
-
-    cf->path = strndup(fn, MAX_PATH_LEN);
-    cf->time = time;
-    cf->content_length = len;
-
-    if (Data_create(cf)) {
-        fprintf(stderr, "Cache_create(): Data_create() failed!\n");
-    }
-
-    if (Meta_create(cf)) {
-        fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
-    }
-
-    Cache_free(cf);
-
-    return Cache_exist(fn);
+    return meta_exists & data_exists;
 }
 
 /**
@@ -512,10 +485,47 @@ static int Data_open(Cache *cf)
     return 0;
 }
 
+int Cache_create(const char *fn, long len, long time)
+{
+    if (Cache_exist(fn)) {
+        /* We make sure that the cache files are not outdated */
+        Cache *cf = Cache_open(fn);
+        if (cf->time == time) {
+            Cache_close(cf);
+            return 0;
+        }
+        Cache_delete(fn);
+    }
+
+    fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
+
+    Cache *cf = Cache_alloc();
+
+    cf->path = strndup(fn, MAX_PATH_LEN);
+    cf->time = time;
+    cf->content_length = len;
+
+    if (Data_create(cf)) {
+        fprintf(stderr, "Cache_create(): Data_create() failed!\n");
+    }
+
+    if (Meta_create(cf)) {
+        fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
+    }
+
+    Cache_free(cf);
+
+    /*
+     * Cache_exist() returns 1, if cache files exist and valid. Whereas this
+     * function returns 0 on success.
+     */
+    return !Cache_exist(fn);
+}
+
 Cache *Cache_open(const char *fn)
 {
     /* Check if both metadata and data file exist */
-    if (Cache_exist(fn)) {
+    if (!Cache_exist(fn)) {
         return NULL;
     }
 
@@ -523,15 +533,22 @@ Cache *Cache_open(const char *fn)
     Cache *cf = Cache_alloc();
     cf->path = strndup(fn, MAX_PATH_LEN);
 
-    /* Internal inconsistency in metadata file */
+    /*
+     * Internal inconsistency in metadata file, note that Meta_read() returns
+     * -2 on internal metadata inconsistency
+     */
     if (Meta_read(cf) == -2) {
         Cache_free(cf);
         Cache_delete(fn);
         return NULL;
     }
 
-    /* Inconsistency between metadata and data file */
-    if (cf->content_length != Data_size(fn)) {
+    /*
+     * Inconsistency between metadata and data file, note that on disk file
+     * size might be bigger than content_length, due to on-disk filesystem
+     * allocation policy.
+     */
+    if (cf->content_length > Data_size(fn)) {
         fprintf(stderr,
                 "Cache_open(): Metadata inconsistency: \
 cf->content_length: %ld, Data_size(fn): %ld\n",
@@ -577,7 +594,6 @@ static int Seg_exist(Cache *cf, off_t offset)
     int bit = total_bit % 8;
 
     return cf->seg[byte] & (1 << bit);
-
 }
 /**
  * \brief Set the existence of a segment
@@ -619,7 +635,6 @@ long Cache_read(Cache *cf, char *buf, size_t size, off_t offset)
         Seg_set(cf, offset, 1);
     }
 
-    /* This is how you download from the web server */
     pthread_mutex_unlock(&(cf->rw_lock));
     return received;
 }
