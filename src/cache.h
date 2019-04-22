@@ -40,29 +40,32 @@ typedef struct {
     Seg *seg; /**< the detail of each segment */
 } Cache;
 
-/***************************** To be completed ******************************/
+/**************************** External functions ****************************/
+/**
+ * \brief open a cache file set
+ * \note fs_open()
+ */
+Cache *Cache_open(const char *fn);
 
 /**
- * \brief Read from a cache file set
- * \details This function performs the following two things:
- *  - check again the metafile to see which segments are available
- *  - return the available segments
+ * \brief create a cache file set
+ * \note fs_readdir() / LinkTable_new()
  */
-long Cache_read(const char *fn, long offset, long len, uint8_t *buf);
+Cache *Cache_create(const char *fn, long len, long time);
 
 /**
- * \brief Write to a cache file set
- * \details This function performs the following two things:
- *  - Write to the data file
- *  - Update the metadata file
+ * \brief Check if a segment exists.
+ * \note path_download()
  */
-long Cache_write(const char *fn, long offset, long len,
-                   const uint8_t *buf);
+int Seg_exist(Cache *cf, long start);
 
-/****************************** Work in progress *****************************/
-
-
-/**************************** Completed functions ****************************/
+/**
+ * \brief Set the existence of a segment
+ * \param[in] start the starting position of the segment.
+ * \param[in] i 1 for exist, 0 for doesn't exist
+ * \note path_download()
+ */
+void Seg_set(Cache *cf, long start, int i);
 
 /**
  * \brief initialise the cache system directories
@@ -71,20 +74,42 @@ long Cache_write(const char *fn, long offset, long len,
  *  - DATA_DIR
  *
  * If these directories do not exist, they will be created.
+ * \note somewhere in main.c?
  */
 void CacheSystem_init(const char *dir);
 
 /**
- * \brief Check if a segment exists.
+ * \brief Create directories under the cache directory structure, if they do
+ * not already exist
+ * \return
+ *  -   -1 failed to create metadata directory.
+ *  -   -2 failed to create data directory.
+ *  -   -3 failed to create both metadata and data directory.
+ * \note This should be called every time a new LinkTable is created.
  */
-int Seg_exist(Cache *cf, long start);
+int CacheDir_create(const char *fn);
+
+/***************************** To be completed ******************************/
 
 /**
- * \brief Set the existence of a segment
- * \param[in] start the starting position of the segment.
- * \param[in] i 1 for exist, 0 for doesn't exist
+ * \brief Read from a cache file set
+ * \details This function performs the following two things:
+ *  - check again the metafile to see which segments are available
+ *  - return the available segments
+ * \note fs_read()
  */
-void Seg_set(Cache *cf, long start, int i);
+long Cache_read(const char *fn, long offset, long len, uint8_t *buf);
+
+/**
+ * \brief Write to a cache file set
+ * \details This function performs the following two things:
+ *  - Write to the data file
+ *  - Update the metadata file
+ * \note path_download()
+ */
+long Cache_write(const char *fn, long offset, long len, const uint8_t *buf);
+
+/**************************** Internal functions ****************************/
 
 
 /**
@@ -150,17 +175,6 @@ long Data_write(const Cache *cf, long offset, long len,
                  const uint8_t *buf);
 
 /**
- * \brief Create directories under the cache directory structure, if they do
- * not already exist
- * \return
- *  -   -1 failed to create metadata directory.
- *  -   -2 failed to create data directory.
- *  -   -3 failed to create both metadata and data directory.
- * \note This should be called every time a new LinkTable is created.
- */
-int CacheDir_create(const char *fn);
-
-/**
  * \brief Allocate a new cache data structure
  */
 Cache *Cache_alloc();
@@ -183,17 +197,9 @@ void Cache_free(Cache *cf);
 int Cache_exist(const char *fn);
 
 /**
- * \brief create a cache file set
- */
-Cache *Cache_create(const char *fn, long len, long time);
-
-/**
  * \brief delete a cache file set
  */
 void Cache_delete(const char *fn);
 
-/**
- * \brief open a cache file set
- */
-Cache *Cache_open(const char *fn);
+
 #endif
