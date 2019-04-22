@@ -331,7 +331,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
          */
 
         /*
-         * add termination mark to  the current string,
+         * add termination mark to the current string,
          * effective create two substrings
          */
         *slash = '\0';
