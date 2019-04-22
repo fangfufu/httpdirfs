@@ -53,16 +53,13 @@ typedef struct {
 void CacheSystem_init(const char *dir);
 
 /**
- * \brief open a cache file set
- * \note Call this when FUSE opens a file
- */
-Cache *Cache_open(const char *fn);
-
-/**
  * \brief create a cache file set
+ *  * \return
+ *  -   0, if the cache file was created succesfully
+ *  -   -1, otherwise
  * \note Call this when creating a new LinkTable
  */
-Cache *Cache_create(const char *fn, long len, long time);
+int Cache_create(const char *fn, long len, long time);
 
 /**
  * \brief Create directories under the cache directory structure, if they do
@@ -74,6 +71,13 @@ Cache *Cache_create(const char *fn, long len, long time);
  * \note Call this when creating a new LinkTable
  */
 int CacheDir_create(const char *fn);
+
+/***************************** Work in Progress ******************************/
+/**
+ * \brief open a cache file set
+ * \note Call this when FUSE opens a file
+ */
+Cache *Cache_open(const char *fn);
 
 /**
  * \brief Check if a segment exists.
@@ -88,8 +92,6 @@ int Seg_exist(Cache *cf, long start);
  * \note Call this after downloading a segment.
  */
 void Seg_set(Cache *cf, long start, int i);
-
-
 
 /***************************** To be completed ******************************/
 
