@@ -209,7 +209,7 @@ void Seg_set(Cache *cf, long start, int i)
 static int Meta_create(Cache *cf)
 {
     cf->blksz = DATA_BLK_SZ;
-    cf->segbc = cf->len / cf->blksz / 8 + 1;
+    cf->segbc = cf->content_length / cf->blksz / 8 + 1;
     cf->seg = calloc(cf->segbc, sizeof(Seg));
     if (!(cf->seg)) {
         fprintf(stderr, "Meta_create(): calloc failure!\n");
@@ -221,7 +221,7 @@ static int Meta_create(Cache *cf)
 static int Meta_read(Cache *cf)
 {
     FILE *fp;
-    char *metafn = strndupcat(META_DIR, cf->filename, MAX_PATH_LEN);
+    char *metafn = strndupcat(META_DIR, cf->p_url, MAX_PATH_LEN);
     fp = fopen(metafn, "r");
     free(metafn);
     int res = 0;
@@ -234,9 +234,9 @@ static int Meta_read(Cache *cf)
     }
 
     fread(&(cf->time), sizeof(long), 1, fp);
-    fread(&(cf->len), sizeof(long), 1, fp);
-    fread(&(cf->len), sizeof(int), 1, fp);
-    fread(&(cf->segbc), sizeof(int), 1, fp);
+    fread(&(cf->content_length), sizeof(long), 1, fp);
+    fread(&(cf->blksz), sizeof(int), 1, fp);
+    fread(&(cf->segbc), sizeof(long), 1, fp);
 
     /* Allocate some memory for the segment */
     cf->seg = malloc(cf->segbc * sizeof(Seg));
@@ -264,14 +264,13 @@ static int Meta_read(Cache *cf)
     if (fclose(fp)) {
         fprintf(stderr, "Meta_read(): fclose(): %s\n", strerror(errno));
     }
-
     return res;
 }
 
 static int Meta_write(const Cache *cf)
 {
     FILE *fp;
-    char *metafn = strndupcat(META_DIR, cf->filename, MAX_PATH_LEN);
+    char *metafn = strndupcat(META_DIR, cf->p_url, MAX_PATH_LEN);
     fp = fopen(metafn, "w");
     free(metafn);
     int res = 0;
@@ -283,9 +282,9 @@ static int Meta_write(const Cache *cf)
     }
 
     fwrite(&(cf->time), sizeof(long), 1, fp);
-    fwrite(&(cf->len), sizeof(long), 1, fp);
+    fwrite(&(cf->content_length), sizeof(long), 1, fp);
     fwrite(&(cf->blksz), sizeof(int), 1, fp);
-    fwrite(&(cf->segbc), sizeof(int), 1, fp);
+    fwrite(&(cf->segbc), sizeof(long), 1, fp);
     fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
 
     /* Error checking for fwrite */
@@ -307,14 +306,14 @@ static int Data_create(Cache *cf)
     int mode;
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    char *datafn = strndupcat(DATA_DIR, cf->filename, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     free(datafn);
     if (fd == -1) {
         fprintf(stderr, "Data_create(): open(): %s\n", strerror(errno));
         return -1;
     }
-    if (ftruncate(fd, cf->len)) {
+    if (ftruncate(fd, cf->content_length)) {
         fprintf(stderr, "Data_create(): ftruncate(): %s\n", strerror(errno));
     }
     if (close(fd)) {
@@ -345,7 +344,7 @@ static long Data_read(const Cache *cf, long offset, long len,
     }
 
     FILE *fp;
-    char *datafn = strndupcat(DATA_DIR, cf->filename, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
     fp = fopen(datafn, "r");
     free(datafn);
     long byte_read = -1;
@@ -395,7 +394,7 @@ static long Data_write(const Cache *cf, long offset, long len,
     }
 
     FILE *fp;
-    char *datafn = strndupcat(DATA_DIR, cf->filename, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
     fp = fopen(datafn, "r+");
     free(datafn);
     long byte_written = -1;
@@ -466,8 +465,8 @@ static Cache *Cache_alloc()
 
 static void Cache_free(Cache *cf)
 {
-    if (cf->filename) {
-        free(cf->filename);
+    if (cf->p_url) {
+        free(cf->p_url);
     }
     if (cf->seg) {
         free(cf->seg);
@@ -517,9 +516,9 @@ Cache *Cache_create(const char *fn, long len, long time)
 {
     Cache *cf = Cache_alloc();
 
-    cf->filename = strndup(fn, MAX_PATH_LEN);
+    cf->p_url = strndup(fn, MAX_PATH_LEN);
     cf->time = time;
-    cf->len = len;
+    cf->content_length = len;
 
     if (Data_create(cf)) {
         Cache_free(cf);
@@ -565,7 +564,7 @@ Cache *Cache_open(const char *fn)
 
     /* Create the cache in-memory data structure */
     Cache *cf = Cache_alloc();
-    cf->filename = strndup(fn, MAX_PATH_LEN);
+    cf->p_url = strndup(fn, MAX_PATH_LEN);
 
     /* Internal inconsistency metadata file */
     if (Meta_read(cf) == -2) {
@@ -575,7 +574,7 @@ Cache *Cache_open(const char *fn)
     }
 
     /* Inconsistency between metadata and data file */
-    if (cf->len != Data_size(fn)) {
+    if (cf->content_length != Data_size(fn)) {
         fprintf(stderr,
                 "Cache_open(): metadata is inconsistent with the data file!\n");
         Cache_free(cf);
