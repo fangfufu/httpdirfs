@@ -67,14 +67,18 @@ static int fs_getattr(const char *path, struct stat *stbuf)
 static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi)
 {
-    (void) fi;
-    size_t start = offset;
-    size_t end = start + size;
-    char range_str[64];
-    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    fprintf(stderr, "fs_read(%s, %s);\n", path, range_str);
+//     size_t start = offset;
+//     size_t end = start + size;
+//     char range_str[64];
+//     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+//     fprintf(stderr, "fs_read(%s, %s);\n", path, range_str);
 
-    long received = path_download(path, buf, size, offset);
+    long received;
+    if (CACHE_SYSTEM_INIT) {
+        received = Cache_read((Cache *)fi->fh, buf, size, offset);
+    } else {
+        received = path_download(path, buf, size, offset);
+    }
     return received;
 }
 

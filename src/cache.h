@@ -1,6 +1,8 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+#include <pthread.h>
+#include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
 
@@ -21,10 +23,11 @@ typedef uint8_t Seg;
  * \brief cache in-memory data structure
  */
 typedef struct {
-    char *p_url; /**< the partial URL -- this is the link relative
-                    to the root link */
+    char *path; /**< the path to the file on the web server */
     long time; /**<the modified time of the file */
     off_t content_length; /**<the size of the file */
+    pthread_mutex_t rw_lock; /**< mutex for disk operation */
+    FILE *dfp; /**< The FILE pointer for the cache data file*/
     int blksz; /**<the block size of the data file */
     long segbc; /**<segment array byte count */
     Seg *seg; /**< the detail of each segment */
@@ -78,40 +81,19 @@ void Cache_close(Cache *cf);
  */
 int Cache_create(const char *fn, long len, long time);
 
-/***************************** Work in Progress ******************************/
-
-/**
- * \brief Check if a segment exists.
- * \note Call this when deciding whether to download a file
- */
-int Seg_exist(Cache *cf, long start);
-
-/**
- * \brief Set the existence of a segment
- * \param[in] start the starting position of the segment.
- * \param[in] i 1 for exist, 0 for doesn't exist
- * \note Call this after downloading a segment.
- */
-void Seg_set(Cache *cf, long start, int i);
-
 /***************************** To be completed ******************************/
 
 /**
- * \brief Read from a cache file set
- * \details This function performs the following two things:
- *  - check again the metafile to see which segments are available
- *  - return the available segments
- * \note Call this when it is not necessary to download a segment
+ * \brief Intelligently read from the cache system
+ * \details If the segment does not exist on the local hard disk, download from
+ * the Internet
+ * \param[in] cf the cache in-memory data structure
+ * \param[out] buf the output buffer
+ * \param[in] size the requested segment size
+ * \param[in] offset the start of the segment
+ * \return the length of the segment the cache system managed to obtain.
+ * \note Called by fs_read()
  */
-long Cache_read(const char *fn, long offset, long len, uint8_t *buf);
-
-/**
- * \brief Write to a cache file set
- * \details This function performs the following two things:
- *  - Write to the data file
- *  - Update the metadata file
- * \note Call this after downloading a segment.
- */
-long Cache_write(const char *fn, long offset, long len, const uint8_t *buf);
+long Cache_read(Cache *cf, char *buf, size_t size, off_t offset);
 
 #endif

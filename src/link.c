@@ -140,8 +140,6 @@ static CURL *Link_to_curl(Link *link)
 
 void Link_get_stat(Link *this_link)
 {
-    fprintf(stderr, "Link_get_size(%s);\n", this_link->f_url);
-
     if (this_link->type == LINK_FILE) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
@@ -168,7 +166,6 @@ void Link_get_stat(Link *this_link)
 
 void Link_set_stat(Link* this_link, CURL *curl)
 {
-    fprintf(stderr, "Link_set_stat(): processing %s\n", this_link->f_url);
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (http_resp == HTTP_OK) {
@@ -182,10 +179,6 @@ void Link_set_stat(Link* this_link, CURL *curl)
         } else {
             this_link->content_length = cl;
             this_link->type = LINK_FILE;
-            fprintf(stderr, "Link_set_stat(): Cache_create(%s, %lu, %ld)\n",
-                    this_link->f_url + ROOT_LINK_OFFSET,
-                    this_link->content_length,
-                    this_link->time);
             if (CACHE_SYSTEM_INIT) {
                 if (Cache_create(this_link->f_url + ROOT_LINK_OFFSET,
                             this_link->content_length, this_link->time)) {

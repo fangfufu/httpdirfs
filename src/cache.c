@@ -1,5 +1,6 @@
 #include "cache.h"
 
+#include "link.h"
 #include "util.h"
 
 #include <dirent.h>
@@ -31,95 +32,6 @@
  * \details This corresponds the maximum path length under Ext4.
  */
 #define MAX_PATH_LEN        4096
-
-/**
- * \brief create a metadata file
- * \details We set the followings here:
- *  -   block size
- *  -   the number of segments
- *
- * The number of segments depends on the block size. The block size is set to
- * 128KiB for now. In future support for different block size may be
- * implemented.
- */
-static int Meta_create(Cache *cf);
-
-/**
- * \brief write a metadata file
- * \return
- *  - -1 on error,
- *  - 0 on success
- */
-static int Meta_write(const Cache *cf);
-
-/**
- * \brief read a metadata file
- * \return
- *  - -1 on fread error,
- *  - -2 on metadata internal inconsistency
- *  - 0 on success
- */
-static int Meta_read(Cache *cf);
-
-/**
- * \brief create a data file
- * \details We use sparse creation here
- * \return
- *  - 0 on successful creation of the data file, note that the result of
- * the ftruncate() is ignored.
- *  - -1 on failure to create the data file.
- */
-static int Data_create(Cache *cf);
-
-/**
- * \brief obtain the data file size
- */
-static long Data_size(const char *fn);
-
-/**
- * \brief read a data file
- * \return
- *  - -1 when the data file does not exist
- *  - otherwise, the number of bytes read.
- */
-static long Data_read(const Cache *cf, long offset, long len,
-                      uint8_t *buf);
-
-/**
- * \brief write to a data file
- * \return
- *  - -1 when the data file does not exist
- *  - otherwise, the number of bytes written.
- */
-static long Data_write(const Cache *cf, long offset, long len,
-                       const uint8_t *buf);
-
-/**
- * \brief Allocate a new cache data structure
- */
-static Cache *Cache_alloc();
-
-/**
- * \brief free a cache data structure
- */
-static void Cache_free(Cache *cf);
-
-/**
- * \brief Check if both metadata and data file exist, otherwise perform cleanup.
- * \details
- * This function checks if both metadata file and the data file exist. If that
- * is not the case, clean up is performed - the existing unpaired metadata file
- * or data file is deleted.
- * \return
- *  -   0, if both metadata and cache file exist
- *  -   -1, otherwise
- */
-static int Cache_exist(const char *fn);
-
-/**
- * \brief delete a cache file set
- */
-static void Cache_delete(const char *fn);
 
 int CACHE_SYSTEM_INIT = 0;
 
@@ -174,44 +86,17 @@ void CacheSystem_init(const char *path)
     CACHE_SYSTEM_INIT = 1;
 }
 
-int Seg_exist(Cache *cf, long start)
-{
-    long total_bit = start / cf->blksz;
-    long byte = total_bit / 8;
-    int bit = total_bit % 8;
-
-    return cf->seg[byte] & (1 << bit);
-}
-
-void Seg_set(Cache *cf, long start, int i)
-{
-    long total_bit = start / cf->blksz;
-    long byte = total_bit / 8;
-    int bit = total_bit % 8;
-
-    if (i) {
-        cf->seg[byte] |= (1 << bit);
-    } else {
-        cf->seg[byte] &= ~(1 << bit);
-    }
-}
-
-static int Meta_create(Cache *cf)
-{
-    cf->blksz = DATA_BLK_SZ;
-    cf->segbc = cf->content_length / cf->blksz / 8 + 1;
-    cf->seg = calloc(cf->segbc, sizeof(Seg));
-    if (!cf->seg) {
-        fprintf(stderr, "Meta_create(): calloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    return Meta_write(cf);
-}
-
+/**
+ * \brief read a metadata file
+ * \return
+ *  - -1 on fread error,
+ *  - -2 on metadata internal inconsistency
+ *  - 0 on success
+ */
 static int Meta_read(Cache *cf)
 {
     FILE *fp;
-    char *metafn = strndupcat(META_DIR, cf->p_url, MAX_PATH_LEN);
+    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
     fp = fopen(metafn, "r");
     free(metafn);
     int res = 0;
@@ -257,10 +142,16 @@ static int Meta_read(Cache *cf)
     return res;
 }
 
+/**
+ * \brief write a metadata file
+ * \return
+ *  - -1 on error,
+ *  - 0 on success
+ */
 static int Meta_write(const Cache *cf)
 {
     FILE *fp;
-    char *metafn = strndupcat(META_DIR, cf->p_url, MAX_PATH_LEN);
+    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
     fp = fopen(metafn, "w");
     free(metafn);
     int res = 0;
@@ -290,13 +181,43 @@ static int Meta_write(const Cache *cf)
     return res;
 }
 
+/**
+ * \brief create a metadata file
+ * \details We set the followings here:
+ *  -   block size
+ *  -   the number of segments
+ *
+ * The number of segments depends on the block size. The block size is set to
+ * 128KiB for now. In future support for different block size may be
+ * implemented.
+ */
+static int Meta_create(Cache *cf)
+{
+    cf->blksz = DATA_BLK_SZ;
+    cf->segbc = cf->content_length / cf->blksz / 8 + 1;
+    cf->seg = calloc(cf->segbc, sizeof(Seg));
+    if (!cf->seg) {
+        fprintf(stderr, "Meta_create(): calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+    return Meta_write(cf);
+}
+
+/**
+ * \brief create a data file
+ * \details We use sparse creation here
+ * \return
+ *  - 0 on successful creation of the data file, note that the result of
+ * the ftruncate() is ignored.
+ *  - -1 on failure to create the data file.
+ */
 static int Data_create(Cache *cf)
 {
     int fd;
     int mode;
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
+    char *datafn = strndupcat(DATA_DIR, cf->path, MAX_PATH_LEN);
     fprintf(stderr, "Data_create(): Creating %s\n", datafn);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     free(datafn);
@@ -313,6 +234,9 @@ static int Data_create(Cache *cf)
     return 0;
 }
 
+/**
+ * \brief obtain the data file size
+ */
 static long Data_size(const char *fn)
 {
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
@@ -327,103 +251,101 @@ static long Data_size(const char *fn)
     return -1;
 }
 
-static long Data_read(const Cache *cf, long offset, long len,
-               uint8_t *buf)
+/**
+ * \brief read a data file
+ * \param[in] cf the pointer to the cache in-memory data structure
+ * \param[out] buf the output buffer
+ * \param[in] len the length of the segment
+ * \param[in] offset the offset of the segment
+ * \return
+ *  - negative values on error,
+ *  - otherwise, the number of bytes read.
+ */
+static long Data_read(const Cache *cf, uint8_t *buf, off_t len, off_t offset)
 {
     if (len == 0) {
         fprintf(stderr, "Data_read(): requested to read 0 byte!\n");
-        return -1;
+        return -EINVAL;
     }
 
-    FILE *fp;
-    char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
-    fp = fopen(datafn, "r");
-    free(datafn);
-    long byte_read = -1;
+    size_t start = offset;
+    size_t end = start + len;
+    char range_str[64];
+    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+    fprintf(stderr, "Data_read(%s, %s);\n", cf->path, range_str);
 
-    if (!fp) {
-        /* Failed to open the data file */
-        fprintf(stderr, "Data_read(): fopen(): %s\n", strerror(errno));
-        return -1;
-    }
+    long byte_read = -EIO;
 
-    if (fseeko(fp, offset, SEEK_SET)) {
+    if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
         fprintf(stderr, "Data_read(): fseeko(): %s\n", strerror(errno));
-        goto cleanup;
+        goto end;
     }
 
-    byte_read = fread(buf, sizeof(uint8_t), len, fp);
+    byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_read != len) {
         fprintf(stderr,
                 "Data_read(): fread(): requested %ld, returned %ld!\n",
                 len, byte_read);
-        if (feof(fp)) {
+        if (feof(cf->dfp)) {
             /* reached EOF */
             fprintf(stderr,
                     "Data_read(): fread(): reached the end of the file!\n");
         }
-        if (ferror(fp)) {
+        if (ferror(cf->dfp)) {
             /* filesystem error */
             fprintf(stderr,
-                    "Data_read(): fread(): encountered error (from ferror)!\n");
+                "Data_read(): fread(): encountered error (from ferror)!\n");
         }
     }
-
-    cleanup:
-    if (fclose(fp)) {
-        fprintf(stderr, "Data_read(): fclose(): %s\n", strerror(errno));
-    }
+    end:
     return byte_read;
 }
 
-static long Data_write(const Cache *cf, long offset, long len,
-                const uint8_t *buf)
+/**
+ * \brief write to a data file
+ * \param[in] cf the pointer to the cache in-memory data structure
+ * \param[in] buf the input buffer
+ * \param[in] len the length of the segment
+ * \param[in] offset the offset of the segment
+ * \return
+ *  - -1 when the data file does not exist
+ *  - otherwise, the number of bytes written.
+ */
+
+static long Data_write(const Cache *cf, const uint8_t *buf, off_t len,
+                       off_t offset)
 {
     if (len == 0) {
         fprintf(stderr, "Data_write(): requested to write 0 byte!\n");
-        return -1;
+        return -EINVAL;
     }
 
-    FILE *fp;
-    char *datafn = strndupcat(DATA_DIR, cf->p_url, MAX_PATH_LEN);
-    fp = fopen(datafn, "r+");
-    free(datafn);
-    long byte_written = -1;
+    long byte_written = -EIO;
 
-    if (!fp) {
-        /* Failed to open the data file */
-        fprintf(stderr, "Data_write(): fopen(): %s\n", strerror(errno));
-        return -1;
-    }
-
-    if (fseeko(fp, offset, SEEK_SET)) {
+    if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
         fprintf(stderr, "Data_write(): fseeko(): %s\n", strerror(errno));
-        goto cleanup;
+        goto end;
     }
 
-    byte_written = fwrite(buf, sizeof(uint8_t), len, fp);
+    byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_written != len) {
         fprintf(stderr,
                 "Data_write(): fwrite(): requested %ld, returned %ld!\n",
                 len, byte_written);
-        if (feof(fp)) {
+        if (feof(cf->dfp)) {
             /* reached EOF */
             fprintf(stderr,
                     "Data_write(): fwrite(): reached the end of the file!\n");
         }
-        if (ferror(fp)) {
+        if (ferror(cf->dfp)) {
             /* filesystem error */
             fprintf(stderr,
                 "Data_write(): fwrite(): encountered error (from ferror)!\n");
         }
     }
-
-    cleanup:
-    if (fclose(fp)) {
-        fprintf(stderr, "Data_write(): fclose(): %s\n", strerror(errno));
-    }
+    end:
     return byte_written;
 }
 
@@ -445,6 +367,9 @@ int CacheDir_create(const char *dirn)
     return -i;
 }
 
+/**
+ * \brief Allocate a new cache data structure
+ */
 static Cache *Cache_alloc()
 {
     Cache *cf = calloc(1, sizeof(Cache));
@@ -455,17 +380,13 @@ static Cache *Cache_alloc()
     return cf;
 }
 
-void Cache_close(Cache *cf)
-{
-    fprintf(stderr, "Cache_close(): Closed cache file %p.\n", cf);
-
-    return Cache_free(cf);
-}
-
+/**
+ * \brief free a cache data structure
+ */
 static void Cache_free(Cache *cf)
 {
-    if (cf->p_url) {
-        free(cf->p_url);
+    if (cf->path) {
+        free(cf->path);
     }
     if (cf->seg) {
         free(cf->seg);
@@ -473,6 +394,16 @@ static void Cache_free(Cache *cf)
     free(cf);
 }
 
+/**
+ * \brief Check if both metadata and data file exist, otherwise perform cleanup.
+ * \details
+ * This function checks if both metadata file and the data file exist. If that
+ * is not the case, clean up is performed - the existing unpaired metadata file
+ * or data file is deleted.
+ * \return
+ *  -   0, if both metadata and cache file exist
+ *  -   -1, otherwise
+ */
 static int Cache_exist(const char *fn)
 {
     int meta_exists = 1;
@@ -521,7 +452,7 @@ int Cache_create(const char *fn, long len, long time)
 
     Cache *cf = Cache_alloc();
 
-    cf->p_url = strndup(fn, MAX_PATH_LEN);
+    cf->path = strndup(fn, MAX_PATH_LEN);
     cf->time = time;
     cf->content_length = len;
 
@@ -538,6 +469,9 @@ int Cache_create(const char *fn, long len, long time)
     return Cache_exist(fn);
 }
 
+/**
+ * \brief delete a cache file set
+ */
 static void Cache_delete(const char *fn)
 {
     char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
@@ -559,6 +493,25 @@ static void Cache_delete(const char *fn)
     free(datafn);
 }
 
+/**
+ * \brief Open the data file of a cache data set
+ * \return
+ *  -   0 on success
+ *  -   -1 on failure, with appropriate errno set.
+ */
+static int Data_open(Cache *cf)
+{
+    char *datafn = strndupcat(DATA_DIR, cf->path, MAX_PATH_LEN);
+    cf->dfp = fopen(datafn, "r+");
+    free(datafn);
+    if (!cf->dfp) {
+        /* Failed to open the data file */
+        fprintf(stderr, "Data_open(): fopen(): %s\n", strerror(errno));
+        return -1;
+    }
+    return 0;
+}
+
 Cache *Cache_open(const char *fn)
 {
     /* Check if both metadata and data file exist */
@@ -568,7 +521,7 @@ Cache *Cache_open(const char *fn)
 
     /* Create the cache in-memory data structure */
     Cache *cf = Cache_alloc();
-    cf->p_url = strndup(fn, MAX_PATH_LEN);
+    cf->path = strndup(fn, MAX_PATH_LEN);
 
     /* Internal inconsistency in metadata file */
     if (Meta_read(cf) == -2) {
@@ -588,7 +541,85 @@ cf->content_length: %ld, Data_size(fn): %ld\n",
         return NULL;
     }
 
+    if (Data_open(cf)) {
+        Cache_free(cf);
+        return NULL;
+    }
+
     fprintf(stderr, "Cache_open(): Opened cache file %p.\n", cf);
 
     return cf;
+}
+
+void Cache_close(Cache *cf)
+{
+    fprintf(stderr, "Cache_close(): Closing cache file %p.\n", cf);
+
+    if (Meta_write(cf)) {
+        fprintf(stderr, "Cache_close(): Meta_write() error.");
+    }
+
+    if (fclose(cf->dfp)) {
+        fprintf(stderr, "Data_write(): fclose(): %s\n", strerror(errno));
+    }
+
+    return Cache_free(cf);
+}
+
+/**
+ * \brief Check if a segment exists.
+ * \return 1 if the segment exists
+ */
+static int Seg_exist(Cache *cf, off_t offset)
+{
+    off_t total_bit = offset / cf->blksz;
+    off_t byte = total_bit / 8;
+    int bit = total_bit % 8;
+
+    return cf->seg[byte] & (1 << bit);
+
+}
+/**
+ * \brief Set the existence of a segment
+ * \param[in] offset the starting position of the segment.
+ * \param[in] i 1 for exist, 0 for doesn't exist
+ * \note Call this after downloading a segment.
+ */
+static void Seg_set(Cache *cf, off_t offset, int i)
+{
+    off_t total_bit = offset / cf->blksz;
+    off_t byte = total_bit / 8;
+    int bit = total_bit % 8;
+
+    if (i) {
+        cf->seg[byte] |= (1 << bit);
+    } else {
+        cf->seg[byte] &= ~(1 << bit);
+    }
+}
+
+long Cache_read(Cache *cf, char *buf, size_t size, off_t offset)
+{
+    pthread_mutex_lock(&(cf->rw_lock));
+//     size_t start = offset;
+//     size_t end = start + size;
+//     char range_str[64];
+//     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+//     fprintf(stderr, "Cache_read(%s, %s);\n", cf->path, range_str);
+
+    long received;
+
+    if (Seg_exist(cf, offset)) {
+        /* The metadata shows the segment already exists */
+        received = Data_read(cf, (uint8_t *) buf, size, offset);
+    } else {
+        /* The metadata shows the segment doesn't already exist */
+        received = path_download(cf->path, buf, size, offset);
+        Data_write(cf, (uint8_t *) buf, received, offset);
+        Seg_set(cf, offset, 1);
+    }
+
+    /* This is how you download from the web server */
+    pthread_mutex_unlock(&(cf->rw_lock));
+    return received;
 }
