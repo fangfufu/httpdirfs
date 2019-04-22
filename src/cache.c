@@ -33,14 +33,113 @@
 #define MAX_PATH_LEN        4096
 
 /**
+ * \brief create a metadata file
+ * \details We set the followings here:
+ *  -   block size
+ *  -   the number of segments
+ *
+ * The number of segments depends on the block size. The block size is set to
+ * 128KiB for now. In future support for different block size may be
+ * implemented.
+ */
+static int Meta_create(Cache *cf);
+
+/**
+ * \brief write a metadata file
+ * \return
+ *  - -1 on error,
+ *  - 0 on success
+ */
+static int Meta_write(const Cache *cf);
+
+/**
+ * \brief read a metadata file
+ * \return
+ *  - -1 on fread error,
+ *  - -2 on metadata internal inconsistency
+ *  - 0 on success
+ */
+static int Meta_read(Cache *cf);
+
+/**
+ * \brief create a data file
+ * \details We use sparse creation here
+ * \return
+ *  - 0 on successful creation of the data file, note that the result of
+ * the ftruncate() is ignored.
+ *  - -1 on failure to create the data file.
+ */
+static int Data_create(Cache *cf);
+
+/**
+ * \brief obtain the data file size
+ */
+static long Data_size(const char *fn);
+
+/**
+ * \brief read a data file
+ * \return
+ *  - -1 when the data file does not exist
+ *  - otherwise, the number of bytes read.
+ */
+static long Data_read(const Cache *cf, long offset, long len,
+                      uint8_t *buf);
+
+/**
+ * \brief write to a data file
+ * \return
+ *  - -1 when the data file does not exist
+ *  - otherwise, the number of bytes written.
+ */
+static long Data_write(const Cache *cf, long offset, long len,
+                       const uint8_t *buf);
+
+/**
+ * \brief Allocate a new cache data structure
+ */
+static Cache *Cache_alloc();
+
+/**
+ * \brief free a cache data structure
+ */
+static void Cache_free(Cache *cf);
+
+/**
+ * \brief Check if both metadata and data file exist, otherwise perform cleanup.
+ * \details
+ * This function checks if both metadata file and the data file exist. If that
+ * is not the case, clean up is performed - the existing unpaired metadata file
+ * or data file is deleted.
+ * \return
+ *  -   0, if both metadata and cache file exist
+ *  -   -1, otherwise
+ */
+static int Cache_exist(const char *fn);
+
+/**
+ * \brief delete a cache file set
+ */
+static void Cache_delete(const char *fn);
+
+/**
  * \brief The metadata directory
  */
-char *META_DIR;
+static char *META_DIR;
 
 /**
  * \brief The data directory
  */
-char *DATA_DIR;
+static char *DATA_DIR;
+
+/**
+ * \brief The array containing opened cache files
+ */
+static Cache **CACHE_OPENED;
+
+/**
+ * \brief The number of opened cache files
+ */
+static int N_CACHE_OPENED;
 
 void CacheSystem_init(const char *path)
 {
@@ -107,7 +206,7 @@ void Seg_set(Cache *cf, long start, int i)
     }
 }
 
-int Meta_create(Cache *cf)
+static int Meta_create(Cache *cf)
 {
     cf->blksz = DATA_BLK_SZ;
     cf->segbc = cf->len / cf->blksz / 8 + 1;
@@ -119,7 +218,7 @@ int Meta_create(Cache *cf)
     return Meta_write(cf);
 }
 
-int Meta_read(Cache *cf)
+static int Meta_read(Cache *cf)
 {
     FILE *fp;
     char *metafn = strndupcat(META_DIR, cf->filename, MAX_PATH_LEN);
@@ -169,7 +268,7 @@ int Meta_read(Cache *cf)
     return res;
 }
 
-int Meta_write(const Cache *cf)
+static int Meta_write(const Cache *cf)
 {
     FILE *fp;
     char *metafn = strndupcat(META_DIR, cf->filename, MAX_PATH_LEN);
@@ -202,7 +301,7 @@ int Meta_write(const Cache *cf)
     return res;
 }
 
-int Data_create(Cache *cf)
+static int Data_create(Cache *cf)
 {
     int fd;
     int mode;
@@ -224,7 +323,7 @@ int Data_create(Cache *cf)
     return 0;
 }
 
-long Data_size(const char *fn)
+static long Data_size(const char *fn)
 {
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
     struct stat st;
@@ -237,7 +336,7 @@ long Data_size(const char *fn)
     return -1;
 }
 
-long Data_read(const Cache *cf, long offset, long len,
+static long Data_read(const Cache *cf, long offset, long len,
                uint8_t *buf)
 {
     if (len == 0) {
@@ -287,7 +386,7 @@ long Data_read(const Cache *cf, long offset, long len,
     return byte_read;
 }
 
-long Data_write(const Cache *cf, long offset, long len,
+static long Data_write(const Cache *cf, long offset, long len,
                 const uint8_t *buf)
 {
     if (len == 0) {
@@ -355,7 +454,7 @@ int CacheDir_create(const char *dirn)
     return -i;
 }
 
-Cache *Cache_alloc()
+static Cache *Cache_alloc()
 {
     Cache *cf = calloc(1, sizeof(Cache));
     if (!cf) {
@@ -365,7 +464,7 @@ Cache *Cache_alloc()
     return cf;
 }
 
-void Cache_free(Cache *cf)
+static void Cache_free(Cache *cf)
 {
     if (cf->filename) {
         free(cf->filename);
@@ -376,7 +475,7 @@ void Cache_free(Cache *cf)
     free(cf);
 }
 
-int Cache_exist(const char *fn)
+static int Cache_exist(const char *fn)
 {
     int meta_exists = 1;
     int data_exists = 1;
@@ -436,7 +535,7 @@ Cache *Cache_create(const char *fn, long len, long time)
     return cf;
 }
 
-void Cache_delete(const char *fn)
+static void Cache_delete(const char *fn)
 {
     char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
