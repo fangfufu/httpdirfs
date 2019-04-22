@@ -31,7 +31,7 @@ typedef struct Link Link;
  * \brief Link data structure
  */
 struct Link {
-    char p_url[P_URL_LEN_MAX]; /**< */
+    char p_url[P_URL_LEN_MAX]; /**< The name in the last level of the URL*/
     char f_url[URL_LEN_MAX]; /**< The full URL of the file*/
     LinkType type; /**< The type of the link */
     size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
