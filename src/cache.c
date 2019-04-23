@@ -608,11 +608,9 @@ int Cache_create(Link *this_link)
 
 Cache *Cache_open(const char *fn)
 {
-    fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
-
     /* Check if both metadata and data file exist */
     if (!Cache_exist(fn)) {
-        fprintf(stderr, "dataset does not exist!\n");
+//         fprintf(stderr, "dataset does not exist!\n");
         return NULL;
     }
 
@@ -637,6 +635,7 @@ Cache *Cache_open(const char *fn)
      */
     if ((rtn == EINCONSIST) || (rtn == EZERO) || (rtn == EMEM)) {
         Cache_free(cf);
+        fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
         fprintf(stderr, "metadata error!\n");
         return NULL;
     }
@@ -647,6 +646,7 @@ Cache *Cache_open(const char *fn)
      * allocation policy.
      */
     if (cf->content_length > Data_size(fn)) {
+        fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
         fprintf(stderr,
                 "metadata inconsistency: cf->content_length: %ld, \
 Data_size(fn): %ld\n",
@@ -657,17 +657,18 @@ Data_size(fn): %ld\n",
 
     if (Data_open(cf)) {
         Cache_free(cf);
+        fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
         fprintf(stderr, "Data_open() failed!\n");
         return NULL;
     }
 
-    fprintf(stderr, "Success!\n");
+//     fprintf(stderr, "Success!\n");
     return cf;
 }
 
 void Cache_close(Cache *cf)
 {
-    fprintf(stderr, "Cache_close(): Closing cache file %s.\n", cf->path);
+//     fprintf(stderr, "Cache_close(): Closing cache file %s.\n", cf->path);
 
     pthread_mutex_lock(&cf->meta_lock);
     if (Meta_write(cf)) {
