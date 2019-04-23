@@ -608,7 +608,6 @@ static void Seg_set(Cache *cf, off_t offset, int i)
 long Cache_read(Cache *cf, char *output_buf, off_t size, off_t offset)
 {
     pthread_mutex_lock(&(cf->rw_lock));
-
     long sent;
     if (Seg_exist(cf, offset)) {
         /*
@@ -620,7 +619,8 @@ long Cache_read(Cache *cf, char *output_buf, off_t size, off_t offset)
         /* Calculate the aligned offset */
         off_t dl_offset = offset / cf->blksz * cf->blksz;
         /* Download the segment */
-        long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz, dl_offset);
+        long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz,
+                                  dl_offset);
         /* Send it off */
         memmove(output_buf, RECV_BUF + (offset-dl_offset), size);
         sent = size;
