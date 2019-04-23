@@ -21,6 +21,13 @@
 #define DATA_BLK_SZ         1048576
 
 /**
+ * \brief Maximum segment block count
+ * \details This is set to 1024*1024*1024 = 1 GiB, which allows the user to
+ * access a 1TB file.
+ */
+#define MAX_SEGBC           1073741824
+
+/**
  * \brief the maximum length of a path
  * \details This corresponds the maximum path length under Ext4.
  */
@@ -30,10 +37,11 @@
  * \brief error associated with metadata
  */
 typedef enum {
-    SUCCESS = 0,    /**< Metadata read successful */
-    EFREAD  = -1,   /**< Fread failed */
-    EINCON  = -2,   /**< Inconsistency in metadata */
-    EZEROS  = -3    /**< Unexpected zeros in metadata */
+    SUCCESS     =  0,   /**< Metadata read successful */
+    EFREAD      = -1,   /**< Fread failed */
+    EINCONSIST  = -2,   /**< Inconsistency in metadata */
+    EZERO       = -3,   /**< Unexpected zeros in metadata */
+    EMEM        = -4,   /**< Memory allocation failure */
 } MetaError;
 
 int CACHE_SYSTEM_INIT = 0;
@@ -132,16 +140,21 @@ static int Meta_read(Cache *cf)
         fprintf(stderr,
                 "Meta_read:() Warning corrupt metadata: content_length: %ld, \
 blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
-        res = EZEROS;
+        res = EZERO;
         goto end;
     }
 
     /* Allocate some memory for the segment */
+    if (cf->segbc > MAX_SEGBC) {
+        fprintf(stderr, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
+        res = EMEM;
+        goto end;
+    }
     cf->seg = calloc(cf->segbc, sizeof(Seg));
     if (!cf->seg) {
-        fprintf(stderr, "Meta_read(): segbc: %ld, calloc failure: %s\n",
-                cf->segbc, strerror(errno));
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "Meta_read(): calloc failure: %s\n", strerror(errno));
+        res = EMEM;
+        goto end;
     }
     /* Read all the segment */
     nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
@@ -157,7 +170,7 @@ blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
     if (nmemb != cf-> segbc) {
         fprintf(stderr,
                 "Meta_read(): corrupted metadata!\n");
-        res = EINCON;
+        res = EINCONSIST;
     }
 
     end:
@@ -588,7 +601,7 @@ Cache *Cache_open(const char *fn)
      * Internally inconsistent or corrupt metadata
      */
     int rtn = Meta_read(cf);
-    if ((rtn == EINCON) || rtn == EZEROS) {
+    if ((rtn == EINCONSIST) || (rtn == EZERO) || (rtn == EMEM)) {
         Cache_free(cf);
         fprintf(stderr, "Failure!\nMetadata inconsistent or corrupt!\n");
         return NULL;
