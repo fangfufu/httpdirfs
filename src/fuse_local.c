@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 static pthread_mutex_t open_lock;
+static pthread_mutex_t close_lock;
 
 static void *fs_init(struct fuse_conn_info *conn)
 {
@@ -21,7 +22,9 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 {
     (void) path;
     if (CACHE_SYSTEM_INIT) {
+        pthread_mutex_lock(&close_lock);
         Cache_close((Cache *)fi->fh);
+        pthread_mutex_unlock(&close_lock);
     }
     return 0;
 }
