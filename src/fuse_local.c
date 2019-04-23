@@ -16,10 +16,10 @@ static void *fs_init(struct fuse_conn_info *conn)
 /** \brief release an opened file */
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {
+    fprintf(stderr, "fs_release(): %s\n", path);
     if (CACHE_SYSTEM_INIT) {
         Cache_close((Cache *)fi->fh);
     }
-    fprintf(stderr, "fs_release(): %s\n", path);
     return 0;
 }
 
@@ -85,6 +85,8 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 /** \brief open a file indicated by the path */
 static int fs_open(const char *path, struct fuse_file_info *fi)
 {
+    fprintf(stderr, "fs_open(): %s\n", path);
+
     if (!path_to_Link(path)) {
         return -ENOENT;
     }
@@ -100,7 +102,6 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         }
     }
 
-    fprintf(stderr, "fs_open(): %s\n", path);
 
     return 0;
 }

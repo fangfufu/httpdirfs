@@ -14,18 +14,9 @@
 
 /**
  * \brief Data file block size
- * \details The data file block size is set to 128KiB, for convenience. This is
- * because the maximum requested block size by FUSE seems to be 128KiB under
- * Debian Stretch. Note that the minimum requested block size appears to be
- * 4KiB.
- *
- * More information regarding block size can be found at:
- * https://wiki.vuze.com/w/Torrent_Piece_Size
- *
- * Note that at the current configuration, a 16GiB file uses 16MiB of memory to
- * store the bitmap
+ * \details We set it to 1024*1024 = 1048576 bytes
  */
-#define DATA_BLK_SZ         131072
+#define DATA_BLK_SZ         1048576
 
 /**
  * \brief the maximum length of a path
@@ -34,6 +25,11 @@
 #define MAX_PATH_LEN        4096
 
 int CACHE_SYSTEM_INIT = 0;
+
+/**
+ * \brief the receive buffer
+ */
+uint8_t RECV_BUF[DATA_BLK_SZ];
 
 /**
  * \brief The metadata directory
@@ -321,6 +317,12 @@ static long Data_write(const Cache *cf, const uint8_t *buf, off_t len,
         return -EINVAL;
     }
 
+    size_t start = offset;
+    size_t end = start + len;
+    char range_str[64];
+    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+    fprintf(stderr, "Data_write(%s, %s);\n", cf->path, range_str);
+
     long byte_written = -EIO;
 
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
@@ -563,14 +565,13 @@ cf->content_length: %ld, Data_size(fn): %ld\n",
         return NULL;
     }
 
-    fprintf(stderr, "Cache_open(): Opened cache file %p.\n", cf);
-
+    fprintf(stderr, "Cache_open(): Opened cache file %s.\n", cf->path);
     return cf;
 }
 
 void Cache_close(Cache *cf)
 {
-    fprintf(stderr, "Cache_close(): Closing cache file %p.\n", cf);
+    fprintf(stderr, "Cache_close(): Closing cache file %s.\n", cf->path);
 
     if (Meta_write(cf)) {
         fprintf(stderr, "Cache_close(): Meta_write() error.");
@@ -579,7 +580,6 @@ void Cache_close(Cache *cf)
     if (fclose(cf->dfp)) {
         fprintf(stderr, "Data_write(): fclose(): %s\n", strerror(errno));
     }
-
     return Cache_free(cf);
 }
 
@@ -605,27 +605,39 @@ static void Seg_set(Cache *cf, off_t offset, int i)
     cf->seg[byte] = i;
 }
 
-long Cache_read(Cache *cf, char *buf, size_t size, off_t offset)
+long Cache_read(Cache *cf, char *output_buf, off_t size, off_t offset)
 {
     pthread_mutex_lock(&(cf->rw_lock));
-//     size_t start = offset;
-//     size_t end = start + size;
-//     char range_str[64];
-//     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-//     fprintf(stderr, "Cache_read(%s, %s);\n", cf->path, range_str);
 
-    long received;
-
+    long sent;
     if (Seg_exist(cf, offset)) {
-        /* The metadata shows the segment already exists */
-        received = Data_read(cf, (uint8_t *) buf, size, offset);
+        /*
+         * The metadata shows the segment already exists. This part is easy,
+         * as you don't have to worry about alignment
+         */
+        sent = Data_read(cf, (uint8_t *) output_buf, size, offset);
     } else {
-        /* The metadata shows the segment doesn't already exist */
-        received = path_download(cf->path, buf, size, offset);
-        Data_write(cf, (uint8_t *) buf, received, offset);
-        Seg_set(cf, offset, 1);
+        /* Calculate the aligned offset */
+        off_t dl_offset = offset / cf->blksz * cf->blksz;
+        /* Download the segment */
+        long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz, dl_offset);
+        /* Send it off */
+        memmove(output_buf, RECV_BUF + (offset-dl_offset), size);
+        sent = size;
+        /* Write it to the disk, check if we haven't received enough data*/
+        if (recv == cf->blksz) {
+            Data_write(cf, RECV_BUF, cf->blksz, dl_offset);
+            Seg_set(cf, dl_offset, 1);
+        } else if (dl_offset == (cf->content_length / cf->blksz * cf->blksz)) {
+            /* Check if we are at the last block */
+            Data_write(cf, RECV_BUF, cf->blksz, dl_offset);
+            Seg_set(cf, dl_offset, 1);
+        } else {
+            fprintf(stderr,
+            "Cache_read(): recv (%ld) < cf->blksz! Possible network error?\n",
+                recv);
+        }
     }
-
     pthread_mutex_unlock(&(cf->rw_lock));
-    return received;
+    return sent;
 }

@@ -1,15 +1,10 @@
-# HTTPDirFS
 
+# HTTPDirFS - now with a permanent cache
 Have you ever wanted to mount those HTTP directory listings as if it was a partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper Text Transfer Protocol Directory Filesystem
 
 The performance of the program is excellent, due to the use of curl-multi interface. HTTP connections are reused, and HTTP pipelining is used when available. I haven't benchmarked it, but I feel this is faster than ``rclone mount``. The FUSE component itself also runs in multithreaded mode.
 
-Furthermore, a permanent cache system has been implemented to cache all the files you have downloaded. This is triggered by the ``--cache`` flag
-
-## BUG
-The permanent cache system seems to have problem when you have randomly seek across the file during the initial download process. I am not sure what causes the problem. It is probably some sort of concurrency issue. The mutexes I set up doesn't seem to help with the problem.
-
-This feature is also very slow. When downloading from localhost, it peaks at about 1.5 MiB/s. I am not entirely sure why. 
+Furthermore, a permanent cache system has been implemented to cache all the files you have downloaded, so you don't need to download those files if you want to access them again.  This is triggered by the ``--cache`` flag
 
 ## Compilation
 This program was developed under Debian Stretch. If you are using the same operating system as me, you need ``libgumbo-dev``, ``libfuse-dev``, ``libssl1.0-dev`` and ``libcurl4-openssl-dev``.
@@ -26,13 +21,13 @@ If you run Debian Stretch, and you have OpenSSL 1.0.2 installed, and you get war
 
 then you need to check if ``libssl1.0-dev`` had been installed properly. If you get these compilation warnings, this program will ocassionally crash if you connect to HTTPS website. This is because OpenSSL 1.0.2 needs those functions for thread safety, whereas OpenSSL 1.1 does not. If you have ``libssl-dev`` rather than ``libssl1.0-dev`` installed, those call back functions will not be linked properly.
 
-If you have OpenSSL 1.1 and the associated development headers installed, then you can safely ignore these warning messages. If you are on Debian Buster, you will definitely get these warning messages, and you can safely ignore them. 
+If you have OpenSSL 1.1 and the associated development headers installed, then you can safely ignore these warning messages. If you are on Debian Buster, you will definitely get these warning messages, and you can safely ignore them.
 
 ## Usage
 
 	./httpdirfs -f $URL $YOUR_MOUNT_POINT
 
-An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting. 
+An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting.
 
 Other useful options:
 
@@ -50,10 +45,16 @@ drive by using the ``--cache`` flag. The file it caches persist across sessions 
     mkdir cache mnt
     httpdirfs --cache cache http://cdimage.debian.org/debian-cd/ mnt
 
-Once a segment of the file has been downloaded once, it won't be downloaded again. So the first time you use the file it is slow, the subsequent access is fast. You can also retrieve your partially or fully downloaded file from ``cache/metadata``.
+Once a segment of the file has been downloaded once, it won't be downloaded again. You can also retrieve your partially or fully downloaded file from ``cache/metadata``.
+
+Please note that due to the way the permanent cache system is implemented. The maximum download speed is around 6MiB/s, as measured using my localhost as the web server. If you have a fast connection, you might be better off not to run the permanent cache system. If you have any patches to make it run faster, feel free to submit a pull request.
+
+The permanent cache system also heavily relies on sparse allocation. Please make sure your filesystem supports it. Otherwise your hard drive / SSD might grind to a halt.
+
+The permanent cache system also appears to be slightly buggy. This software seems to crash less if I don't turn it on. Your mileage may vary.
 
 ## Configuration file support
-There is now rudimentary config file support. The configuration file that the program will read is ``${XDG_CONFIG_HOME}/httpdirfs/config``. If ``${XDG_CONFIG_HOME}`` is not set, it will default to ``${HOME}/.config``. So by default you need to put the configuration file at ``${HOME}/.config/httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example: 
+There is now rudimentary config file support. The configuration file that the program will read is ``${XDG_CONFIG_HOME}/httpdirfs/config``. If ``${XDG_CONFIG_HOME}`` is not set, it will default to ``${HOME}/.config``. So by default you need to put the configuration file at ``${HOME}/.config/httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example:
 
 	$ cat ${HOME}/.config/httpdirfs/config
 	--username test
@@ -68,6 +69,12 @@ The SSL engine version string looks something like this:
         libcurl SSL engine: OpenSSL/1.0.2l
 
 ## The Technical Details
-I noticed that most HTTP directory listings don't provide the file size for the web page itself. I suppose this makes perfect sense, as they are generated on the fly. Whereas the actual files have got file sizes. So the listing pages can be treated as folders, and the rest are files. 
+I noticed that most HTTP directory listings don't provide the file size for the web page itself. I suppose this makes perfect sense, as they are generated on the fly. Whereas the actual files have got file sizes. So the listing pages can be treated as folders, and the rest are files.
 
-This program downloads the HTML web pages/files using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using [Gumbo](https://github.com/google/gumbo-parser), and presents them using [libfuse](https://github.com/libfuse/libfuse)
+This program downloads the HTML web pages/files using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using [Gumbo](https://github.com/google/gumbo-parser), and presents them using [libfuse](https://github.com/libfuse/libfuse).
+
+I wrote the cache system myself. It was a Herculean effort. I am immensely proud of it.
+
+## Acknowledgement
+- I would like to thank [Cosmin Gorgovan](https://scholar.google.co.uk/citations?user=S7UZ6MAAAAAJ&hl=en) for the technical and moral support.
+- I would like to thank [-Archivist]([https://www.reddit.com/user/-Archivist/](https://www.reddit.com/user/-Archivist/)) for not providing FTP or WebDAV access to his server. This piece of software was written in direct response to his appalling behaviour.
