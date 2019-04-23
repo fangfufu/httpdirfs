@@ -4,8 +4,11 @@
 #include "link.h"
 
 #include <errno.h>
+#include <pthread.h>
 #include <string.h>
 #include <unistd.h>
+
+static pthread_mutex_t open_lock;
 
 static void *fs_init(struct fuse_conn_info *conn)
 {
@@ -89,13 +92,24 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     }
 
     if (CACHE_SYSTEM_INIT) {
+        pthread_mutex_lock(&open_lock);
         fi->fh = (uint64_t) Cache_open(path);
         if (!fi->fh) {
-            /* The link clearly exists, the cache cannot be opened */
+            /*
+             * The link clearly exists, the cache cannot be opened, attempt
+             * cache creation
+             */
             Cache_delete(path);
             Cache_create(link);
-            return -ENOENT;
+            fi->fh = (uint64_t) Cache_open(path);
+            /*
+             * The cache definitely cannot be opened for some reason.
+             */
+            if (!fi->fh) {
+                return -ENOENT;
+            }
         }
+        pthread_mutex_unlock(&open_lock);
     }
 
 

@@ -41,7 +41,7 @@ int CACHE_SYSTEM_INIT = 0;
 /**
  * \brief the receive buffer
  */
-uint8_t RECV_BUF[DATA_BLK_SZ];
+static uint8_t RECV_BUF[DATA_BLK_SZ];
 
 /**
  * \brief The metadata directory
