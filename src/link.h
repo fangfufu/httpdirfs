@@ -3,8 +3,6 @@
 
 #include <curl/curl.h>
 
-#include <stdlib.h>
-
 /** \brief the maximum length of the URL */
 #define URL_LEN_MAX 2048
 /** \brief the maximum length of a partial URL (a link) */

@@ -1,10 +1,12 @@
 #include "fuse_local.h"
 
 #include "cache.h"
-#include "link.h"
+
+/* must be included before including <fuse.h> */
+#define FUSE_USE_VERSION 26
+#include <fuse.h>
 
 #include <errno.h>
-#include <pthread.h>
 #include <string.h>
 #include <unistd.h>
 

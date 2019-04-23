@@ -3,8 +3,8 @@
 #include "fuse_local.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <getopt.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define ARG_LEN_MAX 64
