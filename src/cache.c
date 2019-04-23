@@ -109,10 +109,19 @@ static int Meta_read(Cache *cf)
     fread(&(cf->blksz), sizeof(int), 1, fp);
     fread(&(cf->segbc), sizeof(long), 1, fp);
 
+    /* WARNING: These things really should not be zero!!! */
+    if (!cf->content_length || !cf->blksz || !cf->segbc) {
+        fprintf(stderr,
+                "Meta_read:() Warning corrupt metadata: content_length: %ld, \
+blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
+        goto end;
+    }
+
     /* Allocate some memory for the segment */
-    cf->seg = malloc(cf->segbc * sizeof(Seg));
+    cf->seg = calloc(cf->segbc, sizeof(Seg));
     if (!cf->seg) {
-        fprintf(stderr, "Meta_read(): malloc failure!\n");
+        fprintf(stderr, "Meta_read(): segbc: %ld, calloc failure: %s\n",
+                cf->segbc, strerror(errno));
         exit(EXIT_FAILURE);
     }
     /* Read all the segment */
@@ -132,6 +141,7 @@ static int Meta_read(Cache *cf)
         res = -2;
     }
 
+    end:
     if (fclose(fp)) {
         fprintf(stderr, "Meta_read(): fclose(): %s\n", strerror(errno));
     }
@@ -156,6 +166,13 @@ static int Meta_write(const Cache *cf)
         /* Cannot create the metadata file */
         fprintf(stderr, "Meta_write(): fopen(): %s\n", strerror(errno));
         return -1;
+    }
+
+    /* WARNING: These things really should not be zero!!! */
+    if (!cf->content_length || !cf->blksz || !cf->segbc) {
+        fprintf(stderr,
+                "Meta_write:() Warning: content_length: %ld, blksz: %d, segbc: \
+%ld\n", cf->content_length, cf->blksz, cf->segbc);
     }
 
     fwrite(&(cf->time), sizeof(long), 1, fp);
@@ -184,7 +201,7 @@ static int Meta_write(const Cache *cf)
  *  -   the number of segments
  *
  * The number of segments depends on the block size. The block size is set to
- * 128KiB for now. In future support for different block size may be
+ * DATA_BLK_SZ for now. In future support for different block size may be
  * implemented.
  */
 static int Meta_create(Cache *cf)
@@ -214,7 +231,6 @@ static int Data_create(Cache *cf)
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     char *datafn = strndupcat(DATA_DIR, cf->path, MAX_PATH_LEN);
-//     fprintf(stderr, "Data_create(): Creating %s\n", datafn);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     free(datafn);
     if (fd == -1) {
@@ -240,7 +256,6 @@ static long Data_size(const char *fn)
     int s = stat(datafn, &st);
     free(datafn);
     if (!s) {
-//         fprintf(stderr, "Data_size(): %s is %ld bytes.\n", fn, st.st_size);
         return st.st_size;
     }
     fprintf(stderr, "Data_size(): stat(): %s\n", strerror(errno));
@@ -526,8 +541,11 @@ int Cache_create(const char *fn, long len, long time)
 
 Cache *Cache_open(const char *fn)
 {
+    fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
+
     /* Check if both metadata and data file exist */
     if (!Cache_exist(fn)) {
+        fprintf(stderr, "Failure!\n");
         return NULL;
     }
 
@@ -552,7 +570,7 @@ Cache *Cache_open(const char *fn)
      */
     if (cf->content_length > Data_size(fn)) {
         fprintf(stderr,
-                "Cache_open(): Metadata inconsistency: \
+                "Metadata inconsistency: \
 cf->content_length: %ld, Data_size(fn): %ld\n",
                 cf->content_length, Data_size(fn));
         Cache_free(cf);
@@ -565,7 +583,7 @@ cf->content_length: %ld, Data_size(fn): %ld\n",
         return NULL;
     }
 
-    fprintf(stderr, "Cache_open(): Opened cache file %s.\n", cf->path);
+    fprintf(stderr, "Success!\n");
     return cf;
 }
 
@@ -591,7 +609,6 @@ static int Seg_exist(Cache *cf, off_t offset)
 {
     off_t byte = offset / cf->blksz;
     return cf->seg[byte];
-
 }
 /**
  * \brief Set the existence of a segment
@@ -605,16 +622,23 @@ static void Seg_set(Cache *cf, off_t offset, int i)
     cf->seg[byte] = i;
 }
 
-long Cache_read(Cache *cf, char *output_buf, off_t size, off_t offset)
+long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 {
-    pthread_mutex_lock(&(cf->rw_lock));
     long sent;
+    /*
+     * WARNING: Quick fix for SIGFPE,
+     *this shouldn't happen in the first place!
+     */
+    if (!cf->blksz) {
+        return path_download(cf->path, output_buf, len, offset);
+    }
+    pthread_mutex_lock(&(cf->rw_lock));
     if (Seg_exist(cf, offset)) {
         /*
          * The metadata shows the segment already exists. This part is easy,
          * as you don't have to worry about alignment
          */
-        sent = Data_read(cf, (uint8_t *) output_buf, size, offset);
+        sent = Data_read(cf, (uint8_t *) output_buf, len, offset);
     } else {
         /* Calculate the aligned offset */
         off_t dl_offset = offset / cf->blksz * cf->blksz;
@@ -622,8 +646,8 @@ long Cache_read(Cache *cf, char *output_buf, off_t size, off_t offset)
         long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz,
                                   dl_offset);
         /* Send it off */
-        memmove(output_buf, RECV_BUF + (offset-dl_offset), size);
-        sent = size;
+        memmove(output_buf, RECV_BUF + (offset-dl_offset), len);
+        sent = len;
         /* Write it to the disk, check if we haven't received enough data*/
         if (recv == cf->blksz) {
             Data_write(cf, RECV_BUF, cf->blksz, dl_offset);

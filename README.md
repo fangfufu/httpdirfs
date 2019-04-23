@@ -75,9 +75,6 @@ This program downloads the HTML web pages/files using [libcurl](https://curl.hax
 
 I wrote the cache system myself. It was a Herculean effort. I am immensely proud of it.
 
-## Bugs
-HTTPDirFS is particularly bad at handling any web servers that use percent-encoding. If anyone has got a quick fix, please submit a pull request.
-
 ## Acknowledgement
 - First of all, I would like to thank [Jerome Charaoui](https://github.com/jcharaoui) for being the Debian Maintainer for this piece of software. Thank you so much for packaging it! 
 - I would like to thank [Cosmin Gorgovan](https://scholar.google.co.uk/citations?user=S7UZ6MAAAAAJ&hl=en) for the technical and moral support. Your wisdom is much appreciated! 

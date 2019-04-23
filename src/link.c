@@ -172,7 +172,6 @@ void Link_set_stat(Link* this_link, CURL *curl)
         double cl = 0;
         curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
         curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-
         if (cl == -1) {
             this_link->content_length = 0;
             this_link->type = LINK_DIR;
@@ -180,11 +179,16 @@ void Link_set_stat(Link* this_link, CURL *curl)
             this_link->content_length = cl;
             this_link->type = LINK_FILE;
             if (CACHE_SYSTEM_INIT) {
-                if (Cache_create(this_link->f_url + ROOT_LINK_OFFSET,
-                            this_link->content_length, this_link->time)) {
+                char *unescaped_path;
+                unescaped_path = curl_easy_unescape(
+                    NULL, this_link->f_url + ROOT_LINK_OFFSET, 0, NULL);
+                if (Cache_create(unescaped_path, this_link->content_length,
+                    this_link->time)) {
                     fprintf(stderr,
-                            "Link_set_stat(): Cache_create() failure!\n");
+                        "Link_set_stat(): Cache_create() failure for %s!\n",
+                            unescaped_path);
                 };
+                curl_free(unescaped_path);
             }
         }
     } else {
@@ -320,7 +324,11 @@ URL: %s, HTTP %ld\n", url, http_resp);
     free(buf.memory);
 
     if (CACHE_SYSTEM_INIT) {
-        CacheDir_create(url + ROOT_LINK_OFFSET);
+        char *unescaped_path;
+        unescaped_path = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0,
+                                            NULL);
+        CacheDir_create(unescaped_path);
+        curl_free(unescaped_path);
     }
 
     /* Fill in the link table */
