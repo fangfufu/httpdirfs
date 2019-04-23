@@ -159,6 +159,14 @@ blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
     /* Read all the segment */
     nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
+    /* We shouldn't have gone past the end of the file */
+    if (feof(fp)) {
+        /* reached EOF */
+        fprintf(stderr,
+                "Meta_read(): attempted to read past the end of the file!\n");
+        res = EINCONSIST;
+    }
+
     /* Error checking for fread */
     if (ferror(fp)) {
         fprintf(stderr,
