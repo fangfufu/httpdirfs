@@ -730,7 +730,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz,
                                   dl_offset);
         /* Send it off */
-        memmove(output_buf, RECV_BUF + (offset-dl_offset), len);
+        memmove(output_buf, RECV_BUF + (offset - dl_offset), len);
         sent = len;
         /* Write it to the disk, check if we haven't received enough data*/
         if (recv == cf->blksz) {

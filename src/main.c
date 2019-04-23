@@ -1,9 +1,9 @@
 #include "cache.h"
-#include "network.h"
 #include "fuse_local.h"
+#include "network.h"
 
-#include <stdio.h>
 #include <getopt.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
