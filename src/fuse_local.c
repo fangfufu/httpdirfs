@@ -8,9 +8,6 @@
 #include <string.h>
 #include <unistd.h>
 
-static pthread_mutex_t open_lock;
-static pthread_mutex_t close_lock;
-
 static void *fs_init(struct fuse_conn_info *conn)
 {
     (void) conn;
@@ -22,9 +19,7 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 {
     (void) path;
     if (CACHE_SYSTEM_INIT) {
-        pthread_mutex_lock(&close_lock);
         Cache_close((Cache *)fi->fh);
-        pthread_mutex_unlock(&close_lock);
     }
     return 0;
 }
@@ -89,13 +84,10 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (!link) {
         return -ENOENT;
     }
-
     if ((fi->flags & 3) != O_RDONLY) {
         return -EACCES;
     }
-
     if (CACHE_SYSTEM_INIT) {
-        pthread_mutex_lock(&open_lock);
         fi->fh = (uint64_t) Cache_open(path);
         if (!fi->fh) {
             /*
@@ -112,10 +104,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
                 return -ENOENT;
             }
         }
-        pthread_mutex_unlock(&open_lock);
     }
-
-
     return 0;
 }
 

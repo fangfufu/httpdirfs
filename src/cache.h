@@ -29,6 +29,7 @@ typedef struct {
     long time; /**<the modified time of the file */
     off_t content_length; /**<the size of the file */
     pthread_mutex_t rw_lock; /**< mutex for disk operation */
+    pthread_mutex_t meta_lock; /**< mutex for metadata operation */
     FILE *dfp; /**< The FILE pointer for the cache data file*/
     Link *link; /**< The Link associated with this cache data set */
     int blksz; /**<the block size of the data file */

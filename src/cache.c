@@ -124,10 +124,10 @@ static int Meta_read(Cache *cf)
         return EFREAD;
     }
 
-    fread(&(cf->time), sizeof(long), 1, fp);
-    fread(&(cf->content_length), sizeof(off_t), 1, fp);
-    fread(&(cf->blksz), sizeof(int), 1, fp);
-    fread(&(cf->segbc), sizeof(long), 1, fp);
+    fread(&cf->time, sizeof(long), 1, fp);
+    fread(&cf->content_length, sizeof(off_t), 1, fp);
+    fread(&cf->blksz, sizeof(int), 1, fp);
+    fread(&cf->segbc, sizeof(long), 1, fp);
 
     /* Error checking for fread */
     if (ferror(fp)) {
@@ -194,7 +194,7 @@ blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
  *  - -1 on error,
  *  - 0 on success
  */
-static int Meta_write(const Cache *cf)
+static int Meta_write(Cache *cf)
 {
     FILE *fp;
     char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
@@ -215,10 +215,10 @@ static int Meta_write(const Cache *cf)
 %ld\n", cf->content_length, cf->blksz, cf->segbc);
     }
 
-    fwrite(&(cf->time), sizeof(long), 1, fp);
-    fwrite(&(cf->content_length), sizeof(off_t), 1, fp);
-    fwrite(&(cf->blksz), sizeof(int), 1, fp);
-    fwrite(&(cf->segbc), sizeof(long), 1, fp);
+    fwrite(&cf->time, sizeof(long), 1, fp);
+    fwrite(&cf->content_length, sizeof(off_t), 1, fp);
+    fwrite(&cf->blksz, sizeof(int), 1, fp);
+    fwrite(&cf->segbc, sizeof(long), 1, fp);
     fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
 
     /* Error checking for fwrite */
@@ -434,6 +434,17 @@ static Cache *Cache_alloc()
         fprintf(stderr, "Cache_new(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
+
+    if (pthread_mutex_init(&cf->rw_lock, NULL)) {
+        printf(
+            "Cache_alloc(): rw_lock initialisation failed!\n");
+    }
+
+    if (pthread_mutex_init(&cf->meta_lock, NULL)) {
+        printf(
+            "Cache_alloc(): cf->meta_lock initialisation failed!\n");
+    }
+
     return cf;
 }
 
@@ -442,6 +453,14 @@ static Cache *Cache_alloc()
  */
 static void Cache_free(Cache *cf)
 {
+    if (pthread_mutex_destroy(&cf->rw_lock)) {
+        fprintf(stderr, "Cache_free(): could not destroy rw_lock!\n");
+    }
+
+    if (pthread_mutex_destroy(&cf->meta_lock)) {
+        fprintf(stderr, "Cache_free(): could not destroy meta_lock!\n");
+    }
+
     if (cf->path) {
         free(cf->path);
     }
@@ -504,6 +523,7 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
+    fprintf(stderr, "Cache_delete(): deleting %s\n", fn);
     char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
     if (!access(metafn, F_OK)) {
@@ -569,9 +589,12 @@ int Cache_create(Link *this_link)
         fprintf(stderr, "Cache_create(): Data_create() failed!\n");
     }
 
+    pthread_mutex_lock(&cf->meta_lock);
     if (Meta_create(cf)) {
         fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
     }
+    pthread_mutex_unlock(&cf->meta_lock);
+
 
     Cache_free(cf);
 
@@ -590,7 +613,7 @@ Cache *Cache_open(const char *fn)
 
     /* Check if both metadata and data file exist */
     if (!Cache_exist(fn)) {
-        fprintf(stderr, "Failure!\n");
+        fprintf(stderr, "dataset does not exist!\n");
         return NULL;
     }
 
@@ -605,13 +628,17 @@ Cache *Cache_open(const char *fn)
         return NULL;
     }
 
+
+    pthread_mutex_lock(&cf->meta_lock);
+    int rtn = Meta_read(cf);
+    pthread_mutex_unlock(&cf->meta_lock);
+
     /*
      * Internally inconsistent or corrupt metadata
      */
-    int rtn = Meta_read(cf);
     if ((rtn == EINCONSIST) || (rtn == EZERO) || (rtn == EMEM)) {
         Cache_free(cf);
-        fprintf(stderr, "Failure!\nMetadata inconsistent or corrupt!\n");
+        fprintf(stderr, "metadata error!\n");
         return NULL;
     }
 
@@ -622,8 +649,8 @@ Cache *Cache_open(const char *fn)
      */
     if (cf->content_length > Data_size(fn)) {
         fprintf(stderr,
-                "Failure!\nMetadata inconsistency: \
-cf->content_length: %ld, Data_size(fn): %ld\n",
+                "metadata inconsistency: cf->content_length: %ld, \
+Data_size(fn): %ld\n",
                 cf->content_length, Data_size(fn));
         Cache_free(cf);
         return NULL;
@@ -631,7 +658,7 @@ cf->content_length: %ld, Data_size(fn): %ld\n",
 
     if (Data_open(cf)) {
         Cache_free(cf);
-        fprintf(stderr, "Failure!\n");
+        fprintf(stderr, "Data_open() failed!\n");
         return NULL;
     }
 
@@ -643,13 +670,16 @@ void Cache_close(Cache *cf)
 {
     fprintf(stderr, "Cache_close(): Closing cache file %s.\n", cf->path);
 
+    pthread_mutex_lock(&cf->meta_lock);
     if (Meta_write(cf)) {
         fprintf(stderr, "Cache_close(): Meta_write() error.");
     }
+    pthread_mutex_unlock(&cf->meta_lock);
 
     if (fclose(cf->dfp)) {
         fprintf(stderr, "Data_write(): fclose(): %s\n", strerror(errno));
     }
+
     return Cache_free(cf);
 }
 
@@ -687,7 +717,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
                 cf->blksz);
         return path_download(cf->path, output_buf, len, offset);
     }
-    pthread_mutex_lock(&(cf->rw_lock));
+    pthread_mutex_lock(&cf->rw_lock);
     if (Seg_exist(cf, offset)) {
         /*
          * The metadata shows the segment already exists. This part is easy,
@@ -717,6 +747,6 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
                 recv);
         }
     }
-    pthread_mutex_unlock(&(cf->rw_lock));
+    pthread_mutex_unlock(&cf->rw_lock);
     return sent;
 }

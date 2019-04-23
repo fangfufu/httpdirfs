@@ -241,9 +241,9 @@ LinkTable *network_init(const char *url)
     curl_multi_setopt(curl_multi, CURLMOPT_PIPELINING, CURLPIPE_MULTIPLEX);
 
     /* ------------ Initialise locks ---------*/
-    if (pthread_mutex_init(&transfer_lock, NULL) != 0) {
-        printf(
-            "network_init(): transfer_lock initialisation failed!\n");
+    if (pthread_mutex_init(&transfer_lock, NULL)) {
+        fprintf(stderr,
+                "network_init(): transfer_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
 
