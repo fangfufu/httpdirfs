@@ -178,18 +178,6 @@ void Link_set_stat(Link* this_link, CURL *curl)
         } else {
             this_link->content_length = cl;
             this_link->type = LINK_FILE;
-            if (CACHE_SYSTEM_INIT) {
-                char *unescaped_path;
-                unescaped_path = curl_easy_unescape(
-                    NULL, this_link->f_url + ROOT_LINK_OFFSET, 0, NULL);
-                if (Cache_create(unescaped_path, this_link->content_length,
-                    this_link->time)) {
-                    fprintf(stderr,
-                        "Link_set_stat(): Cache_create() failure for %s!\n",
-                            unescaped_path);
-                };
-                curl_free(unescaped_path);
-            }
         }
     } else {
         this_link->type = LINK_INVALID;

@@ -1,6 +1,8 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+#include "link.h"
+
 #include <pthread.h>
 #include <stdio.h>
 #include <stdint.h>
@@ -28,6 +30,7 @@ typedef struct {
     off_t content_length; /**<the size of the file */
     pthread_mutex_t rw_lock; /**< mutex for disk operation */
     FILE *dfp; /**< The FILE pointer for the cache data file*/
+    Link *link; /**< The Link associated with this cache data set */
     int blksz; /**<the block size of the data file */
     long segbc; /**<segment array byte count */
     Seg *seg; /**< the detail of each segment */
@@ -56,19 +59,19 @@ void CacheSystem_init(const char *dir);
  *  -   -1 failed to create metadata directory.
  *  -   -2 failed to create data directory.
  *  -   -3 failed to create both metadata and data directory.
- * \note Called by LinkTable_new(), verified to be working
+ * \note Called by LinkTable_new()
  */
 int CacheDir_create(const char *fn);
 
 /**
  * \brief open a cache file set
- * \note This function is called by fs_open(), verified to be working.
+ * \note This function is called by fs_open()
  */
 Cache *Cache_open(const char *fn);
 
 /**
  * \brief Close a cache data structure
- * \note This function is called by fs_release(), verified to be working.
+ * \note This function is called by fs_release()
  */
 void Cache_close(Cache *cf);
 
@@ -77,9 +80,15 @@ void Cache_close(Cache *cf);
  * \return
  *  -   0, if the cache file already exists, or was created succesfully.
  *  -   -1, otherwise
- * \note Called by Link_set_stat(), verified to be working
+ * \note Called by fs_open()
  */
-int Cache_create(const char *fn, long len, long time);
+int Cache_create(Link *this_link);
+
+/**
+ * \brief delete a cache file set
+ * \note Called by fs_open()
+ */
+void Cache_delete(const char *fn);
 
 /**
  * \brief Intelligently read from the cache system

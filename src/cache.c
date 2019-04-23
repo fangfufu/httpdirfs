@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include <curl/curl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -23,6 +25,16 @@
  * \details This corresponds the maximum path length under Ext4.
  */
 #define MAX_PATH_LEN        4096
+
+/**
+ * \brief error associated with metadata
+ */
+typedef enum {
+    SUCCESS = 0,    /**< Metadata read successful */
+    EFREAD  = -1,   /**< Fread failed */
+    EINCON  = -2,   /**< Inconsistency in metadata */
+    EZEROS  = -3    /**< Unexpected zeros in metadata */
+} MetaError;
 
 int CACHE_SYSTEM_INIT = 0;
 
@@ -101,7 +113,7 @@ static int Meta_read(Cache *cf)
     if (!fp) {
         /* The metadata file does not exist */
         fprintf(stderr, "Meta_read(): fopen(): %s\n", strerror(errno));
-        return -1;
+        return EFREAD;
     }
 
     fread(&(cf->time), sizeof(long), 1, fp);
@@ -109,11 +121,18 @@ static int Meta_read(Cache *cf)
     fread(&(cf->blksz), sizeof(int), 1, fp);
     fread(&(cf->segbc), sizeof(long), 1, fp);
 
-    /* WARNING: These things really should not be zero!!! */
+    /* Error checking for fread */
+    if (ferror(fp)) {
+        fprintf(stderr,
+                "Meta_read(): error reading core metadata!\n");
+    }
+
+    /* These things really should not be zero!!! */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
         fprintf(stderr,
                 "Meta_read:() Warning corrupt metadata: content_length: %ld, \
 blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
+        res = EZEROS;
         goto end;
     }
 
@@ -130,15 +149,15 @@ blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
     /* Error checking for fread */
     if (ferror(fp)) {
         fprintf(stderr,
-                "Meta_read(): fread(): encountered error (from ferror)!\n");
-        res = -1;
+                "Meta_read(): error reading bitmap!\n");
+        res = EFREAD;
     }
 
     /* Check for inconsistent metadata file */
     if (nmemb != cf-> segbc) {
         fprintf(stderr,
                 "Meta_read(): corrupted metadata!\n");
-        res = -2;
+        res = EINCON;
     }
 
     end:
@@ -462,7 +481,7 @@ static int Cache_exist(const char *fn)
 /**
  * \brief delete a cache file set
  */
-static void Cache_delete(const char *fn)
+void Cache_delete(const char *fn)
 {
     char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
@@ -502,13 +521,17 @@ static int Data_open(Cache *cf)
     return 0;
 }
 
-int Cache_create(const char *fn, long len, long time)
+int Cache_create(Link *this_link)
 {
+    char *fn;
+    fn = curl_easy_unescape(
+        NULL, this_link->f_url + ROOT_LINK_OFFSET, 0, NULL);
     if (Cache_exist(fn)) {
         /* We make sure that the cache files are not outdated */
         Cache *cf = Cache_open(fn);
-        if (cf->time == time) {
+        if (cf->time == this_link->time) {
             Cache_close(cf);
+            curl_free(fn);
             return 0;
         }
         Cache_delete(fn);
@@ -517,10 +540,9 @@ int Cache_create(const char *fn, long len, long time)
     fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
-
     cf->path = strndup(fn, MAX_PATH_LEN);
-    cf->time = time;
-    cf->content_length = len;
+    cf->time = this_link->time;
+    cf->content_length = this_link->content_length;
 
     if (Data_create(cf)) {
         fprintf(stderr, "Cache_create(): Data_create() failed!\n");
@@ -536,7 +558,9 @@ int Cache_create(const char *fn, long len, long time)
      * Cache_exist() returns 1, if cache files exist and valid. Whereas this
      * function returns 0 on success.
      */
-    return !Cache_exist(fn);
+    int res = -(!Cache_exist(fn));
+    curl_free(fn);
+    return res;
 }
 
 Cache *Cache_open(const char *fn)
@@ -553,13 +577,20 @@ Cache *Cache_open(const char *fn)
     Cache *cf = Cache_alloc();
     cf->path = strndup(fn, MAX_PATH_LEN);
 
-    /*
-     * Internal inconsistency in metadata file, note that Meta_read() returns
-     * -2 on internal metadata inconsistency
-     */
-    if (Meta_read(cf) == -2) {
+    /* Associate the cache structure with a link */
+    cf->link = path_to_Link(fn);
+    if (!cf->link) {
         Cache_free(cf);
-        Cache_delete(fn);
+        return NULL;
+    }
+
+    /*
+     * Internally inconsistent or corrupt metadata
+     */
+    int rtn = Meta_read(cf);
+    if ((rtn == EINCON) || rtn == EZEROS) {
+        Cache_free(cf);
+        fprintf(stderr, "Failure!\nMetadata inconsistent or corrupt!\n");
         return NULL;
     }
 
@@ -570,16 +601,16 @@ Cache *Cache_open(const char *fn)
      */
     if (cf->content_length > Data_size(fn)) {
         fprintf(stderr,
-                "Metadata inconsistency: \
+                "Failure!\nMetadata inconsistency: \
 cf->content_length: %ld, Data_size(fn): %ld\n",
                 cf->content_length, Data_size(fn));
         Cache_free(cf);
-        Cache_delete(fn);
         return NULL;
     }
 
     if (Data_open(cf)) {
         Cache_free(cf);
+        fprintf(stderr, "Failure!\n");
         return NULL;
     }
 
@@ -626,10 +657,13 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 {
     long sent;
     /*
-     * WARNING: Quick fix for SIGFPE,
-     *this shouldn't happen in the first place!
+     * Quick fix for SIGFPE,
+     * this shouldn't happen in the first place!
      */
     if (!cf->blksz) {
+        fprintf(stderr,
+                "Cache_read(): Warning: cf->blksz: %d, directly downloading",
+                cf->blksz);
         return path_download(cf->path, output_buf, len, offset);
     }
     pthread_mutex_lock(&(cf->rw_lock));

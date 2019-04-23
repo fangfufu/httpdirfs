@@ -79,7 +79,8 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 /** \brief open a file indicated by the path */
 static int fs_open(const char *path, struct fuse_file_info *fi)
 {
-    if (!path_to_Link(path)) {
+    Link *link = path_to_Link(path);
+    if (!link) {
         return -ENOENT;
     }
 
@@ -90,6 +91,9 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (CACHE_SYSTEM_INIT) {
         fi->fh = (uint64_t) Cache_open(path);
         if (!fi->fh) {
+            /* The link clearly exists, the cache cannot be opened */
+            Cache_delete(path);
+            Cache_create(link);
             return -ENOENT;
         }
     }

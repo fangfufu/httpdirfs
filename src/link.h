@@ -32,12 +32,12 @@ typedef struct Link Link;
  */
 struct Link {
     char linkname[LINKNAME_LEN_MAX]; /**< The link name in the last level of
-                                            the URL*/
-    char f_url[URL_LEN_MAX]; /**< The full URL of the file*/
+                                            the URL */
+    char f_url[URL_LEN_MAX]; /**< The full URL of the file */
     LinkType type; /**< The type of the link */
     size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
     LinkTable *next_table; /**< The next LinkTable level, if it is a LINK_DIR */
-    long time; /**< CURLINFO_FILETIME obtained from the server*/
+    long time; /**< CURLINFO_FILETIME obtained from the server */
 };
 
 struct LinkTable {
