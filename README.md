@@ -51,8 +51,6 @@ Please note that due to the way the permanent cache system is implemented. The m
 
 The permanent cache system also heavily relies on sparse allocation. Please make sure your filesystem supports it. Otherwise your hard drive / SSD might grind to a halt.
 
-The permanent cache system also appears to be slightly buggy. This software seems to crash less if I don't turn it on. Your mileage may vary.
-
 ## Configuration file support
 There is now rudimentary config file support. The configuration file that the program will read is ``${XDG_CONFIG_HOME}/httpdirfs/config``. If ``${XDG_CONFIG_HOME}`` is not set, it will default to ``${HOME}/.config``. So by default you need to put the configuration file at ``${HOME}/.config/httpdirfs/config``. You will have to create the sub-directory and the configuration file yourself. In the configuration file, please supply one option per line. For example:
 
