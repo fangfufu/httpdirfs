@@ -94,12 +94,12 @@ void Cache_delete(const char *fn);
  * \details If the segment does not exist on the local hard disk, download from
  * the Internet
  * \param[in] cf the cache in-memory data structure
- * \param[out] buf the output buffer
- * \param[in] size the requested segment size
+ * \param[out] output_buf the output buffer
+ * \param[in] len the requested segment size
  * \param[in] offset the start of the segment
  * \return the length of the segment the cache system managed to obtain.
  * \note Called by fs_read(), verified to be working
  */
-long Cache_read(Cache *cf, char *output_buf, off_t size, off_t offset);
+long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset);
 
 #endif

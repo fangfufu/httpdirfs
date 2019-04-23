@@ -12,7 +12,7 @@
  * the result in a new string.
  * \param[in] a the first string
  * \param[in] b the second string
- * \param[n] c the maximum length of the output string
+ * \param[in] n the maximum length of the output string
  */
 char *strndupcat(const char *a, const char *b, int n);
 

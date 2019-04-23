@@ -694,6 +694,7 @@ static int Seg_exist(Cache *cf, off_t offset)
 }
 /**
  * \brief Set the existence of a segment
+ * \param[in] cf the cache in-memory data structure
  * \param[in] offset the starting position of the segment.
  * \param[in] i 1 for exist, 0 for doesn't exist
  * \note Call this after downloading a segment.
