@@ -61,7 +61,7 @@ static void crypto_lock_init(void)
 
 /**
  * Adapted from:
- * https://curl.haxx.se/libcurl/c/10-at-a-time.html
+ * https://curl.haxx.se/libcurl/c/threaded-shared-conn.html
  */
 static void curl_callback_lock(CURL *handle, curl_lock_data data,
                                curl_lock_access access, void *userptr)
@@ -82,6 +82,10 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
     pthread_mutex_unlock(&curl_lock);
 }
 
+/**
+ * Adapted from:
+ * https://curl.haxx.se/libcurl/c/10-at-a-time.html
+ */
 static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
 {
     (void) n_running_curl;
