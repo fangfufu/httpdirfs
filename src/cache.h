@@ -24,12 +24,19 @@ typedef uint8_t Seg;
  */
 typedef struct {
     char *path; /**< the path to the file on the web server */
+    Link *link; /**< The Link associated with this cache data set */
     long time; /**<the modified time of the file */
     off_t content_length; /**<the size of the file */
-    pthread_mutex_t rw_lock; /**< mutex for disk operation */
+
+    pthread_t bgt; /**< background pthread */
+    pthread_mutex_t bgt_lock; /**< mutex for spawning a background thread */
+    pthread_mutexattr_t bgt_lock_attr;
+    off_t next_offset; /**<the offset of the next segment to be
+    downloaded in background*/
+
+    pthread_mutex_t rw_lock; /**< mutex for read/write operation */
     FILE *dfp; /**< The FILE pointer for the data file*/
     FILE *mfp; /**< The FILE pointer for the metadata */
-    Link *link; /**< The Link associated with this cache data set */
     int blksz; /**<the block size of the data file */
     long segbc; /**<segment array byte count */
     Seg *seg; /**< the detail of each segment */

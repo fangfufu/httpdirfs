@@ -1,6 +1,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+#include <stdint.h>
+
 /**
  * \file util.h
  * \brief utility functions
@@ -15,5 +17,10 @@
  * \param[in] n the maximum length of the output string
  */
 char *strndupcat(const char *a, const char *b, int n);
+
+/**
+ * \brief division, but rounded to the nearest integer rather than truncating
+ */
+int64_t round_div(int64_t a, int64_t b);
 
 #endif

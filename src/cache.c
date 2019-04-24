@@ -46,11 +46,6 @@ typedef enum {
 int CACHE_SYSTEM_INIT = 0;
 
 /**
- * \brief the receive buffer
- */
-static uint8_t RECV_BUF[DATA_BLK_SZ];
-
-/**
  * \brief The metadata directory
  */
 static char *META_DIR;
@@ -280,18 +275,12 @@ static long Data_size(const char *fn)
  *  - negative values on error,
  *  - otherwise, the number of bytes read.
  */
-static long Data_read(const Cache *cf, uint8_t *buf, off_t len, off_t offset)
+static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 {
     if (len == 0) {
         fprintf(stderr, "Data_read(): requested to read 0 byte!\n");
         return -EINVAL;
     }
-
-    size_t start = offset;
-    size_t end = start + len;
-    char range_str[64];
-    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    fprintf(stderr, "Data_read(%s, %s);\n", cf->path, range_str);
 
     long byte_read = -EIO;
 
@@ -332,19 +321,13 @@ static long Data_read(const Cache *cf, uint8_t *buf, off_t len, off_t offset)
  *  - otherwise, the number of bytes written.
  */
 
-static long Data_write(const Cache *cf, const uint8_t *buf, off_t len,
+static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
                        off_t offset)
 {
     if (len == 0) {
         fprintf(stderr, "Data_write(): requested to write 0 byte!\n");
         return -EINVAL;
     }
-
-    size_t start = offset;
-    size_t end = start + len;
-    char range_str[64];
-    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    fprintf(stderr, "Data_write(%s, %s);\n", cf->path, range_str);
 
     long byte_written = -EIO;
 
@@ -404,8 +387,26 @@ static Cache *Cache_alloc()
     }
 
     if (pthread_mutex_init(&cf->rw_lock, NULL)) {
-        printf(
-            "Cache_alloc(): rw_lock initialisation failed!\n");
+        fprintf(stderr, "Cache_alloc(): rw_lock initialisation failed!\n");
+    }
+
+    if (pthread_mutex_init(&cf->bgt_lock, NULL)) {
+        fprintf(stderr, "Cache_alloc(): seg_lock initialisation failed!\n");
+    }
+
+
+    if (pthread_mutexattr_init(&cf->bgt_lock_attr)) {
+        fprintf(stderr,
+                "Cache_alloc(): bgt_lock_attr initialisation failed!\n");
+    }
+
+    if (pthread_mutexattr_setpshared(&cf->bgt_lock_attr,
+        PTHREAD_PROCESS_SHARED)) {
+        fprintf(stderr, "Cache_alloc(): could not set bgt_lock_attr!\n");
+    }
+
+    if (pthread_mutex_init(&cf->bgt_lock, NULL)) {
+        fprintf(stderr, "Cache_alloc(): bgt_lock initialisation failed!\n");
     }
 
     return cf;
@@ -420,12 +421,21 @@ static void Cache_free(Cache *cf)
         fprintf(stderr, "Cache_free(): could not destroy rw_lock!\n");
     }
 
+    if (pthread_mutex_destroy(&cf->bgt_lock)) {
+        fprintf(stderr, "Cache_free(): could not destroy bgt_lock!\n");
+    }
+
+    if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
+        fprintf(stderr, "Cache_alloc(): could not destroy bgt_lock_attr!\n");
+    }
+
     if (cf->path) {
         free(cf->path);
     }
     if (cf->seg) {
         free(cf->seg);
     }
+
     free(cf);
 }
 
@@ -626,7 +636,6 @@ Cache *Cache_open(const char *fn)
 {
     /* Check if both metadata and data file exist */
     if (!Cache_exist(fn)) {
-//         fprintf(stderr, "dataset does not exist!\n");
         return NULL;
     }
 
@@ -689,6 +698,10 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
 
 void Cache_close(Cache *cf)
 {
+    /* Must wait for the background download thread to stop */
+    pthread_mutex_lock(&cf->bgt_lock);
+    pthread_mutex_unlock(&cf->bgt_lock);
+
     if (Meta_write(cf)) {
         fprintf(stderr, "Cache_close(): Meta_write() error.");
     }
@@ -728,9 +741,41 @@ static void Seg_set(Cache *cf, off_t offset, int i)
     cf->seg[byte] = i;
 }
 
+/**
+ * \brief Background download function
+ * \details If we are requesting the data from the second half of the current
+ * segment, we can spawn a pthread using this function to download the next
+ * segment.
+ */
+static void *Cache_background_download(void *arg)
+{
+    fprintf(stderr, "Starting Cache_background_download in its own thread.\n");
+    Cache *cf = (Cache *) arg;
+    uint8_t recv_buf[DATA_BLK_SZ];
+
+    long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
+                              cf->next_offset);
+    if ( (recv == cf->blksz) ||
+        (cf->next_offset == (cf->content_length / cf->blksz * cf->blksz)) )
+    {
+        Data_write(cf, recv_buf, cf->blksz, cf->next_offset);
+        Seg_set(cf, cf->next_offset, 1);
+    }  else {
+            fprintf(stderr,
+                    "Cache_background_download(): recv (%ld) < cf->blksz! \
+Possible network error?\n",
+                    recv);
+    }
+
+    pthread_mutex_unlock(&cf->bgt_lock);
+    fprintf(stderr, "Exiting Cache_background_download thread.\n");
+    pthread_exit(NULL);
+}
+
 long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 {
     long send;
+    uint8_t recv_buf[DATA_BLK_SZ];
     /*
      * Quick fix for SIGFPE,
      * this shouldn't happen in the first place!
@@ -741,7 +786,10 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
                 cf->blksz);
         return path_download(cf->path, output_buf, len, offset);
     }
+
     pthread_mutex_lock(&cf->rw_lock);
+    /* Calculate the aligned offset */
+    off_t dl_offset = offset / cf->blksz * cf->blksz;
     if (Seg_exist(cf, offset)) {
         /*
          * The metadata shows the segment already exists. This part is easy,
@@ -749,10 +797,8 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
          */
         send = Data_read(cf, (uint8_t *) output_buf, len, offset);
     } else {
-        /* Calculate the aligned offset */
-        off_t dl_offset = offset / cf->blksz * cf->blksz;
         /* Download the segment */
-        long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz,
+        long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                                   dl_offset);
         /*
          * check if we have received enough data
@@ -762,13 +808,14 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
          * Condition 2: offset is the last segment
          */
         if ( (recv == cf->blksz) ||
-            (dl_offset == (cf->content_length / cf->blksz * cf->blksz)) ) {
-            memmove(output_buf, RECV_BUF + (offset - dl_offset), len);
+            (dl_offset == (cf->content_length / cf->blksz * cf->blksz)) )
+        {
+            memmove(output_buf, recv_buf + (offset - dl_offset), len);
             send = len;
-            Data_write(cf, RECV_BUF, cf->blksz, dl_offset);
+            Data_write(cf, recv_buf, cf->blksz, dl_offset);
             Seg_set(cf, dl_offset, 1);
         }  else {
-            memmove(output_buf, RECV_BUF + (offset - dl_offset), recv);
+            memmove(output_buf, recv_buf + (offset - dl_offset), recv);
             send = recv;
             fprintf(stderr,
             "Cache_read(): recv (%ld) < cf->blksz! Possible network error?\n",
@@ -776,5 +823,19 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         }
     }
     pthread_mutex_unlock(&cf->rw_lock);
+
+    /* Download the next segment in background */
+    cf->next_offset = round_div(offset, cf->blksz) * cf->blksz;
+    if ( (cf->next_offset > dl_offset) && !Seg_exist(cf, cf->next_offset) ) {
+        /* Stop the spawning of multiple background pthreads */
+        if(!pthread_mutex_trylock(&cf->bgt_lock)) {
+            if (pthread_create(&cf->bgt, NULL, Cache_background_download, cf)) {
+                fprintf(stderr,
+                    "Cache_read(): Error creating background download thread\n"
+                );
+            }
+        }
+    }
+
     return send;
 }

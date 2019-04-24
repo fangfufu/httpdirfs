@@ -28,3 +28,8 @@ char *strndupcat(const char *a, const char *b, int n)
     c[nc-1] = '\0';
     return c;
 }
+
+int64_t round_div(int64_t a, int64_t b)
+{
+    return (a + (b / 2)) / b;
+}
