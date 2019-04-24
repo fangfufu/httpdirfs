@@ -15,14 +15,14 @@
 
 /**
  * \brief Data file block size
- * \details We set it to 1024*1024 = 1048576 bytes
+ * \details We set it to 1024*1024*8 = 8MiB
  */
-#define DATA_BLK_SZ         1048576
+#define DATA_BLK_SZ         8388608
 
 /**
  * \brief Maximum segment block count
  * \details This is set to 1024*1024*1024 = 1 GiB, which allows the user to
- * access a 1TB file.
+ * access a 8TiB file.
  */
 #define MAX_SEGBC           1073741824
 
