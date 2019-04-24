@@ -17,12 +17,12 @@
  * \brief Data file block size
  * \details We set it to 1024*1024 = 1048576 bytes
  */
-#define DATA_BLK_SZ         1048576
+#define DATA_BLK_SZ         8*1024*1024
 
 /**
  * \brief Maximum segment block count
- * \details This is set to 1024*1024*1024 = 1 GiB, which allows the user to
- * access a 1TB file.
+ * \details This is set to 1024*1024*1024 = 1 GB, which allows the user to
+ * access a 8TB file.
  */
 #define MAX_SEGBC           1073741824
 
@@ -405,7 +405,7 @@ static Cache *Cache_alloc()
         fprintf(stderr, "Cache_alloc(): could not set bgt_lock_attr!\n");
     }
 
-    if (pthread_mutex_init(&cf->bgt_lock, NULL)) {
+    if (pthread_mutex_init(&cf->bgt_lock, &cf->bgt_lock_attr)) {
         fprintf(stderr, "Cache_alloc(): bgt_lock initialisation failed!\n");
     }
 
@@ -747,12 +747,11 @@ static void Seg_set(Cache *cf, off_t offset, int i)
  * segment, we can spawn a pthread using this function to download the next
  * segment.
  */
-static void *Cache_background_download(void *arg)
+static void *Cache_bg_download(void *arg)
 {
-    fprintf(stderr, "Starting Cache_background_download in its own thread.\n");
     Cache *cf = (Cache *) arg;
-    uint8_t recv_buf[DATA_BLK_SZ];
-
+    uint8_t *recv_buf = calloc(DATA_BLK_SZ, sizeof(uint8_t));
+    fprintf(stderr, "Cache_bg_download(): ");
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                               cf->next_offset);
     if ( (recv == cf->blksz) ||
@@ -762,20 +761,17 @@ static void *Cache_background_download(void *arg)
         Seg_set(cf, cf->next_offset, 1);
     }  else {
             fprintf(stderr,
-                    "Cache_background_download(): recv (%ld) < cf->blksz! \
+                    "Cache_bg_download(): recv (%ld) < cf->blksz! \
 Possible network error?\n",
                     recv);
     }
-
+    free(recv_buf);
     pthread_mutex_unlock(&cf->bgt_lock);
-    fprintf(stderr, "Exiting Cache_background_download thread.\n");
     pthread_exit(NULL);
 }
 
 long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 {
-    long send;
-    uint8_t recv_buf[DATA_BLK_SZ];
     /*
      * Quick fix for SIGFPE,
      * this shouldn't happen in the first place!
@@ -788,6 +784,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
     }
 
     pthread_mutex_lock(&cf->rw_lock);
+    long send;
     /* Calculate the aligned offset */
     off_t dl_offset = offset / cf->blksz * cf->blksz;
     if (Seg_exist(cf, offset)) {
@@ -798,6 +795,8 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         send = Data_read(cf, (uint8_t *) output_buf, len, offset);
     } else {
         /* Download the segment */
+        fprintf(stderr, "Cache_read(): ");
+        uint8_t *recv_buf = calloc(DATA_BLK_SZ, sizeof(uint8_t));
         long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                                   dl_offset);
         /*
@@ -821,6 +820,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
             "Cache_read(): recv (%ld) < cf->blksz! Possible network error?\n",
                 recv);
         }
+        free(recv_buf);
     }
     pthread_mutex_unlock(&cf->rw_lock);
 
@@ -829,7 +829,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
     if ( (cf->next_offset > dl_offset) && !Seg_exist(cf, cf->next_offset) ) {
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
-            if (pthread_create(&cf->bgt, NULL, Cache_background_download, cf)) {
+            if (pthread_create(&cf->bgt, NULL, Cache_bg_download, cf)) {
                 fprintf(stderr,
                     "Cache_read(): Error creating background download thread\n"
                 );
