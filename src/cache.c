@@ -730,7 +730,7 @@ static void Seg_set(Cache *cf, off_t offset, int i)
 
 long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 {
-    long sent;
+    long send;
     /*
      * Quick fix for SIGFPE,
      * this shouldn't happen in the first place!
@@ -747,30 +747,34 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
          * The metadata shows the segment already exists. This part is easy,
          * as you don't have to worry about alignment
          */
-        sent = Data_read(cf, (uint8_t *) output_buf, len, offset);
+        send = Data_read(cf, (uint8_t *) output_buf, len, offset);
     } else {
         /* Calculate the aligned offset */
         off_t dl_offset = offset / cf->blksz * cf->blksz;
         /* Download the segment */
         long recv = path_download(cf->path, (char *) RECV_BUF, cf->blksz,
                                   dl_offset);
-        /* Send it off */
-        memmove(output_buf, RECV_BUF + (offset - dl_offset), len);
-        sent = len;
-        /* Write it to the disk, check if we haven't received enough data*/
-        if (recv == cf->blksz) {
+        /*
+         * check if we have received enough data
+         * send it off, then write it to the disk
+         *
+         * Condition 1: received the exact amount as the segment size.
+         * Condition 2: offset is the last segment
+         */
+        if ( (recv == cf->blksz) ||
+            (dl_offset == (cf->content_length / cf->blksz * cf->blksz)) ) {
+            memmove(output_buf, RECV_BUF + (offset - dl_offset), len);
+            send = len;
             Data_write(cf, RECV_BUF, cf->blksz, dl_offset);
             Seg_set(cf, dl_offset, 1);
-        } else if (dl_offset == (cf->content_length / cf->blksz * cf->blksz)) {
-            /* Check if we are at the last block */
-            Data_write(cf, RECV_BUF, cf->blksz, dl_offset);
-            Seg_set(cf, dl_offset, 1);
-        } else {
+        }  else {
+            memmove(output_buf, RECV_BUF + (offset - dl_offset), recv);
+            send = recv;
             fprintf(stderr,
             "Cache_read(): recv (%ld) < cf->blksz! Possible network error?\n",
                 recv);
         }
     }
     pthread_mutex_unlock(&cf->rw_lock);
-    return sent;
+    return send;
 }
