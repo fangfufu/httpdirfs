@@ -110,10 +110,9 @@ void CacheSystem_init(const char *path)
  */
 static int Meta_read(Cache *cf)
 {
-    FILE *fp;
-    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
-    fp = fopen(metafn, "r");
-    free(metafn);
+    FILE *fp = cf->mfp;
+    rewind(fp);
+
     int res = 0;
     int nmemb = 0;
 
@@ -137,8 +136,8 @@ static int Meta_read(Cache *cf)
     /* These things really should not be zero!!! */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
         fprintf(stderr,
-                "Meta_read:() Warning corrupt metadata: content_length: %ld, \
-blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
+                "Meta_read(): corrupt metadata: %s, content_length: %ld, \
+blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
         res = EZERO;
         goto end;
     }
@@ -181,9 +180,6 @@ blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
     }
 
     end:
-    if (fclose(fp)) {
-        fprintf(stderr, "Meta_read(): fclose(): %s\n", strerror(errno));
-    }
     return res;
 }
 
@@ -195,11 +191,9 @@ blksz: %d, segbc: %ld\n", cf->content_length, cf->blksz, cf->segbc);
  */
 static int Meta_write(Cache *cf)
 {
-    FILE *fp;
-    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
-    fp = fopen(metafn, "w");
-    free(metafn);
     int res = 0;
+    FILE *fp = cf->mfp;
+    rewind(fp);
 
     if (!fp) {
         /* Cannot create the metadata file */
@@ -207,10 +201,10 @@ static int Meta_write(Cache *cf)
         return -1;
     }
 
-    /* WARNING: These things really should not be zero!!! */
+    /* These things really should not be zero!!! */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
         fprintf(stderr,
-                "Meta_write:() Warning: content_length: %ld, blksz: %d, segbc: \
+                "Meta_write(): Warning: content_length: %ld, blksz: %d, segbc: \
 %ld\n", cf->content_length, cf->blksz, cf->segbc);
     }
 
@@ -227,32 +221,7 @@ static int Meta_write(Cache *cf)
         res = -1;
     }
 
-    if (fclose(fp)) {
-        fprintf(stderr, "Meta_write(): fclose(): %s\n", strerror(errno));
-    }
     return res;
-}
-
-/**
- * \brief create a metadata file
- * \details We set the followings here:
- *  -   block size
- *  -   the number of segments
- *
- * The number of segments depends on the block size. The block size is set to
- * DATA_BLK_SZ for now. In future support for different block size may be
- * implemented.
- */
-static int Meta_create(Cache *cf)
-{
-    cf->blksz = DATA_BLK_SZ;
-    cf->segbc = cf->content_length / cf->blksz + 1;
-    cf->seg = calloc(cf->segbc, sizeof(Seg));
-    if (!cf->seg) {
-        fprintf(stderr, "Meta_create(): calloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    return Meta_write(cf);
 }
 
 /**
@@ -439,11 +408,6 @@ static Cache *Cache_alloc()
             "Cache_alloc(): rw_lock initialisation failed!\n");
     }
 
-    if (pthread_mutex_init(&cf->meta_lock, NULL)) {
-        printf(
-            "Cache_alloc(): cf->meta_lock initialisation failed!\n");
-    }
-
     return cf;
 }
 
@@ -454,10 +418,6 @@ static void Cache_free(Cache *cf)
 {
     if (pthread_mutex_destroy(&cf->rw_lock)) {
         fprintf(stderr, "Cache_free(): could not destroy rw_lock!\n");
-    }
-
-    if (pthread_mutex_destroy(&cf->meta_lock)) {
-        fprintf(stderr, "Cache_free(): could not destroy meta_lock!\n");
     }
 
     if (cf->path) {
@@ -522,7 +482,7 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
-    fprintf(stderr, "Cache_delete(): deleting %s\n", fn);
+//     fprintf(stderr, "Cache_delete(): deleting %s\n", fn);
     char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
     char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
     if (!access(metafn, F_OK)) {
@@ -561,39 +521,95 @@ static int Data_open(Cache *cf)
     return 0;
 }
 
+/**
+ * \brief Open a metafile
+ * \return
+ *  -   0 on success
+ *  -   -1 on failure, with appropriate errno set.
+ */
+static int Meta_open(Cache *cf)
+{
+    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
+    cf->mfp = fopen(metafn, "r+");
+    if (!cf->mfp) {
+        /* Failed to open the data file */
+        fprintf(stderr, "Meta_open(): fopen(%s): %s\n", metafn,
+                strerror(errno));
+        free(metafn);
+        return -1;
+    }
+    free(metafn);
+    return 0;
+}
+
+/**
+ * \brief Create a metafile
+ * \return
+ *  -   0 on success
+ *  -   -1 on failure, with appropriate errno set.
+ */
+static int Meta_create(Cache *cf)
+{
+    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
+    cf->mfp = fopen(metafn, "w");
+    if (!cf->mfp) {
+        /* Failed to open the data file */
+        fprintf(stderr, "Meta_create(): fopen(%s): %s\n", metafn,
+                strerror(errno));
+        free(metafn);
+        return -1;
+    }
+    free(metafn);
+    return 0;
+}
+
 int Cache_create(Link *this_link)
 {
     char *fn;
-    fn = curl_easy_unescape(
-        NULL, this_link->f_url + ROOT_LINK_OFFSET, 0, NULL);
-    if (Cache_exist(fn)) {
-        /* We make sure that the cache files are not outdated */
-        Cache *cf = Cache_open(fn);
-        if (cf->time == this_link->time) {
-            Cache_close(cf);
-            curl_free(fn);
-            return 0;
-        }
-        Cache_delete(fn);
-    }
-
+    fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0, NULL);
     fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
     cf->path = strndup(fn, MAX_PATH_LEN);
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
+    cf->blksz = DATA_BLK_SZ;
+    cf->segbc = (cf->content_length / cf->blksz) + 1;
+    cf->seg = calloc(cf->segbc, sizeof(Seg));
+
+    if (!cf->seg) {
+        fprintf(stderr, "Cache_create(): cf->seg calloc failure!\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (Meta_create(cf)) {
+        fprintf(stderr, "Cache_create(): cannot create metadata.\n");
+    }
+
+    if (fclose(cf->mfp)) {
+        fprintf(stderr,
+                "Cache_create(): cannot close metadata after creation: %s.\n",
+                strerror(errno));
+    }
+
+    if (Meta_open(cf)) {
+        Cache_free(cf);
+        fprintf(stderr, "Cache_create(): cannot open metadata file, %s.\n", fn);
+    }
+
+    if (Meta_write(cf)) {
+        fprintf(stderr, "Cache_create(): Meta_write() failed!\n");
+    }
+
+    if (fclose(cf->mfp)) {
+        fprintf(stderr,
+                "Cache_create(): cannot close metadata after write, %s.\n",
+                strerror(errno));
+    }
 
     if (Data_create(cf)) {
         fprintf(stderr, "Cache_create(): Data_create() failed!\n");
     }
-
-    pthread_mutex_lock(&cf->meta_lock);
-    if (Meta_create(cf)) {
-        fprintf(stderr, "Cache_create(): Meta_create() failed!\n");
-    }
-    pthread_mutex_unlock(&cf->meta_lock);
-
 
     Cache_free(cf);
 
@@ -625,18 +641,20 @@ Cache *Cache_open(const char *fn)
         return NULL;
     }
 
+    if (Meta_open(cf)) {
+        Cache_free(cf);
+        fprintf(stderr, "Cache_open(): cannot open metadata file %s.\n", fn);
+        return NULL;
+    }
 
-    pthread_mutex_lock(&cf->meta_lock);
     int rtn = Meta_read(cf);
-    pthread_mutex_unlock(&cf->meta_lock);
 
     /*
      * Internally inconsistent or corrupt metadata
      */
     if ((rtn == EINCONSIST) || (rtn == EZERO) || (rtn == EMEM)) {
         Cache_free(cf);
-        fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
-        fprintf(stderr, "metadata error!\n");
+        fprintf(stderr, "Cache_open(): metadata error: %s, %d.\n", fn, rtn);
         return NULL;
     }
 
@@ -646,38 +664,43 @@ Cache *Cache_open(const char *fn)
      * allocation policy.
      */
     if (cf->content_length > Data_size(fn)) {
-        fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
-        fprintf(stderr,
-                "metadata inconsistency: cf->content_length: %ld, \
-Data_size(fn): %ld\n",
-                cf->content_length, Data_size(fn));
+        fprintf(stderr, "Cache_open(): metadata inconsistency %s, \
+cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
+                Data_size(fn));
+        Cache_free(cf);
+        return NULL;
+    }
+
+    /* Check if the cache files are not outdated */
+    if (cf->time != cf->link->time) {
+        fprintf(stderr, "Cache_open(): outdated cache file: %s.\n", fn);
         Cache_free(cf);
         return NULL;
     }
 
     if (Data_open(cf)) {
         Cache_free(cf);
-        fprintf(stderr, "Cache_open(): Opening cache file %s...", fn);
-        fprintf(stderr, "Data_open() failed!\n");
+        fprintf(stderr, "Cache_open(): cannot open data file %s.\n", fn);
         return NULL;
     }
 
-//     fprintf(stderr, "Success!\n");
     return cf;
 }
 
 void Cache_close(Cache *cf)
 {
-//     fprintf(stderr, "Cache_close(): Closing cache file %s.\n", cf->path);
-
-    pthread_mutex_lock(&cf->meta_lock);
     if (Meta_write(cf)) {
         fprintf(stderr, "Cache_close(): Meta_write() error.");
     }
-    pthread_mutex_unlock(&cf->meta_lock);
+
+    if (fclose(cf->mfp)) {
+        fprintf(stderr, "Cache_close(): cannot close metadata: %s.\n",
+                strerror(errno));
+    }
 
     if (fclose(cf->dfp)) {
-        fprintf(stderr, "Data_write(): fclose(): %s\n", strerror(errno));
+        fprintf(stderr, "Cache_close(): cannot close data file %s.\n",
+                strerror(errno));
     }
 
     return Cache_free(cf);
