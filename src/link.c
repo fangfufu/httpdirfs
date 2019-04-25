@@ -411,12 +411,11 @@ long path_download(const char *path, char *output_buf, size_t size,
     size_t end = start + size;
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+    fprintf(stderr, "path_download(%s, %s);\n", path, range_str);
 
     MemoryStruct buf;
     buf.size = 0;
     buf.memory = NULL;
-
-    fprintf(stderr, "path_download(%s, %s);\n", path, range_str);
 
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);

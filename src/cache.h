@@ -30,11 +30,13 @@ typedef struct {
 
     pthread_t bgt; /**< background pthread */
     pthread_mutex_t bgt_lock; /**< mutex for spawning a background thread */
-    pthread_mutexattr_t bgt_lock_attr;
+    pthread_mutexattr_t bgt_lock_attr; /**< attributes for bgt_lock */
     off_t next_offset; /**<the offset of the next segment to be
     downloaded in background*/
 
     pthread_mutex_t rw_lock; /**< mutex for read/write operation */
+    pthread_mutexattr_t rw_lock_attr; /**< attributes for rw_lock */
+
     FILE *dfp; /**< The FILE pointer for the data file*/
     FILE *mfp; /**< The FILE pointer for the metadata */
     int blksz; /**<the block size of the data file */
