@@ -1,5 +1,3 @@
-
-
 # HTTPDirFS - now with a permanent cache
 Have you ever wanted to mount those HTTP directory listings as if it was a partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper Text Transfer Protocol Directory Filesystem
 
@@ -13,15 +11,17 @@ The permanent cache system caches all the files you have downloaded, so you don'
 
 An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting.
 
-Other useful options:
-
+Useful options:
+    -f                     Run HTTPDirFS in foreground
     -u   --username        HTTP authentication username
     -p   --password        HTTP authentication password
     -P   --proxy           Proxy for libcurl, for more details refer to
-        https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
-            --proxy-username      Username for the proxy
-            --proxy-password      Password for the proxy
-            --cache               Set the cache folder
+                           https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
+         --proxy-username  Username for the proxy
+         --proxy-password  Password for the proxy
+         --cache           Set the cache folder
+         --dl-seg-size     Set the size of each download segment in MB,
+                           default to 8MB
 
 ## Permanent cache system
 You can now cache all the files you have looked at permanently on your hard

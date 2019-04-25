@@ -18,7 +18,7 @@
  * \details We set it to 1024*1024*8 = 8MiB
  */
 
-#define DATA_BLK_SZ         8*1024*1024
+#define DEFAULT_DATA_BLK_SZ         8*1024*1024
 
 /**
  * \brief Maximum segment block count
@@ -44,7 +44,9 @@ typedef enum {
     EMEM        = -4,   /**< Memory allocation failure */
 } MetaError;
 
+
 int CACHE_SYSTEM_INIT = 0;
+int DATA_BLK_SZ = 0;
 
 /**
  * \brief The metadata directory
@@ -88,10 +90,15 @@ void CacheSystem_init(const char *path)
         fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
     }
+
     if (mkdir(DATA_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
         fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                 strerror(errno));
+    }
+
+    if (!DATA_BLK_SZ) {
+        DATA_BLK_SZ = DEFAULT_DATA_BLK_SZ;
     }
 
     CACHE_SYSTEM_INIT = 1;

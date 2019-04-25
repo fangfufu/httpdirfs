@@ -142,6 +142,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"proxy-username", required_argument, NULL, 'L'},   /* 6 */
         {"proxy-password", required_argument, NULL, 'L'},   /* 7 */
         {"cache", required_argument, NULL, 'L'},            /* 8 */
+        {"dl-seg-size", required_argument, NULL, 'L'},      /* 9 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -192,6 +193,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         break;
                     case 8:
                         CacheSystem_init(optarg);
+                        break;
+                    case 9:
+                        DATA_BLK_SZ = atoi(optarg) * 1024 * 1024;
                         break;
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
@@ -246,6 +250,8 @@ static void print_http_options()
          --proxy-username  Username for the proxy\n\
          --proxy-password  Password for the proxy\n\
          --cache           Set the cache folder\n\
+         --dl-seg-size     Set the size of each download segment in MB, \n\
+                           default to 8MB\n\
     \n\
 libfuse options:\n");
 }

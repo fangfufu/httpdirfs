@@ -50,6 +50,11 @@ typedef struct {
 extern int CACHE_SYSTEM_INIT;
 
 /**
+ * \brief The size of each download segment
+ */
+extern int DATA_BLK_SZ;
+
+/**
  * \brief initialise the cache system directories
  * \details This function basically sets up the following variables:
  *  - META_DIR
