@@ -32,7 +32,7 @@ drive by using the ``--cache`` flag. The file it caches persist across sessions 
 
 Once a segment of the file has been downloaded once, it won't be downloaded again.
 
-Please note that due to the way the permanent cache system is implemented. The maximum download speed is around 6MiB/s, as measured using my localhost as the web server. However after you have accessed the file once, and you access it again, it will be the same speed as accessing your hard drive. . 
+Please note that due to the way the permanent cache system is implemented. The maximum download speed is around 15MiB/s, as measured using my localhost as the web server. However after you have accessed the file once, and you access it again, it will be the same speed as accessing your hard drive. . 
 
 If you have any patches to make the initial download go faster, feel free to submit a pull request.
 
