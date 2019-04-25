@@ -109,7 +109,6 @@ static int Meta_read(Cache *cf)
     FILE *fp = cf->mfp;
     rewind(fp);
 
-    int res = 0;
     int nmemb = 0;
 
     if (!fp) {
@@ -134,21 +133,18 @@ static int Meta_read(Cache *cf)
         fprintf(stderr,
                 "Meta_read(): corrupt metadata: %s, content_length: %ld, \
 blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
-        res = EZERO;
-        goto end;
+        return EZERO;
     }
 
     /* Allocate some memory for the segment */
     if (cf->segbc > MAX_SEGBC) {
         fprintf(stderr, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
-        res = EMEM;
-        goto end;
+        return EMEM;
     }
     cf->seg = calloc(cf->segbc, sizeof(Seg));
     if (!cf->seg) {
         fprintf(stderr, "Meta_read(): calloc failure: %s\n", strerror(errno));
-        res = EMEM;
-        goto end;
+        return EMEM;
     }
     /* Read all the segment */
     nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
@@ -158,25 +154,24 @@ blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
         /* reached EOF */
         fprintf(stderr,
                 "Meta_read(): attempted to read past the end of the file!\n");
-        res = EINCONSIST;
+        return EINCONSIST;
     }
 
     /* Error checking for fread */
     if (ferror(fp)) {
         fprintf(stderr,
                 "Meta_read(): error reading bitmap!\n");
-        res = EFREAD;
+        return EFREAD;
     }
 
     /* Check for inconsistent metadata file */
     if (nmemb != cf-> segbc) {
         fprintf(stderr,
                 "Meta_read(): corrupted metadata!\n");
-        res = EINCONSIST;
+        return EINCONSIST;
     }
 
-    end:
-    return res;
+    return 0;
 }
 
 /**
@@ -187,7 +182,6 @@ blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
  */
 static int Meta_write(Cache *cf)
 {
-    int res = 0;
     FILE *fp = cf->mfp;
     rewind(fp);
 
@@ -214,10 +208,10 @@ static int Meta_write(Cache *cf)
     if (ferror(fp)) {
         fprintf(stderr,
                 "Meta_write(): fwrite(): encountered error (from ferror)!\n");
-        res = -1;
+        return -1;
     }
 
-    return res;
+    return 0;
 }
 
 /**
@@ -283,15 +277,13 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         return -EINVAL;
     }
 
-    long byte_read = -EIO;
-
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
         fprintf(stderr, "Data_read(): fseeko(): %s\n", strerror(errno));
-        goto end;
+        return -EIO;
     }
 
-    byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
+    long byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_read != len) {
         fprintf(stderr,
                 "Data_read(): fread(): requested %ld, returned %ld!\n",
@@ -307,7 +299,7 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
                 "Data_read(): fread(): encountered error (from ferror)!\n");
         }
     }
-    end:
+
     return byte_read;
 }
 
@@ -330,15 +322,14 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
         return -EINVAL;
     }
 
-    long byte_written = -EIO;
 
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
         fprintf(stderr, "Data_write(): fseeko(): %s\n", strerror(errno));
-        goto end;
+        return -EIO;
     }
 
-    byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
+    long byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_written != len) {
         fprintf(stderr,
                 "Data_write(): fwrite(): requested %ld, returned %ld!\n",
@@ -354,7 +345,7 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
                 "Data_write(): fwrite(): encountered error (from ferror)!\n");
         }
     }
-    end:
+
     return byte_written;
 }
 
