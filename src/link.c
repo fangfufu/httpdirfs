@@ -137,28 +137,26 @@ static CURL *Link_to_curl(Link *link)
 
 void Link_get_stat(Link *this_link)
 {
-    if (this_link->type != LINK_INVALID) {
-        CURL *curl = Link_to_curl(this_link);
-        curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-        curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+    CURL *curl = Link_to_curl(this_link);
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
 
-        /*
-         * We need to put the variable on the heap, because otherwise the
-         * variable gets popped from the stack as the function returns.
-         *
-         * It gets freed in curl_multi_perform_once();
-         */
-        TransferStruct *transfer = malloc(sizeof(TransferStruct));
-        if (!transfer) {
-            fprintf(stderr, "Link_get_size(): malloc failed!\n");
-            exit(EXIT_FAILURE);
-        }
-        transfer->link = this_link;
-        transfer->type = FILESTAT;
-        curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
-
-        transfer_nonblocking(curl);
+    /*
+     * We need to put the variable on the heap, because otherwise the
+     * variable gets popped from the stack as the function returns.
+     *
+     * It gets freed in curl_multi_perform_once();
+     */
+    TransferStruct *transfer = malloc(sizeof(TransferStruct));
+    if (!transfer) {
+        fprintf(stderr, "Link_get_size(): malloc failed!\n");
+        exit(EXIT_FAILURE);
     }
+    transfer->link = this_link;
+    transfer->type = FILESTAT;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+
+    transfer_nonblocking(curl);
 }
 
 void Link_set_stat(Link* this_link, CURL *curl)
