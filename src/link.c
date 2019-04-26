@@ -78,7 +78,7 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         LinkType type = linkname_type(href->value);
-        if (type) {
+    if ( (type == LINK_DIR) || (type == LINK_FILE) ) {
             LinkTable_add(linktbl, Link_new(href->value, type));
         }
     }
@@ -137,7 +137,7 @@ static CURL *Link_to_curl(Link *link)
 
 void Link_get_stat(Link *this_link)
 {
-    if (this_link->type == LINK_FILE) {
+    if (this_link->type != LINK_INVALID) {
         CURL *curl = Link_to_curl(this_link);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
         curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
@@ -187,23 +187,17 @@ static void LinkTable_fill(LinkTable *linktbl)
     Link *head_link = linktbl->links[0];
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        if (this_link->type) {
+        if (this_link->type != LINK_INVALID) {
             char *url;
             url = path_append(head_link->f_url, this_link->linkname);
             strncpy(this_link->f_url, url, MAX_PATH_LEN);
             free(url);
-
             char *unescaped_linkname;
-            unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname, 0,
-                                                 NULL);
+            unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname,
+                                                    0, NULL);
             strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
             curl_free(unescaped_linkname);
-
-            if (this_link->type == LINK_FILE && !(this_link->content_length)) {
-                Link_get_stat(this_link);
-            } else if (this_link->type == LINK_DIR) {
-                this_link->time = head_link->time;
-            }
+            Link_get_stat(this_link);
         }
     }
     /* Block until the LinkTable is filled up */
@@ -218,7 +212,7 @@ static void LinkTable_fill(LinkTable *linktbl)
 static void LinkTable_gap_fill(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
-        if (!linktbl->links[i]->type) {
+        if (linktbl->links[i]->type == LINK_INVALID) {
             Link_get_stat(linktbl->links[i]);
         }
     }
@@ -242,27 +236,28 @@ static void LinkTable_free(LinkTable *linktbl)
 static void LinkTable_print(LinkTable *linktbl)
 {
     int i = 0;
-//     fprintf(stderr, "--------------------------------------------\n");
-//     fprintf(stderr, " LinkTable %p for %s\n", linktbl,
-//             linktbl->links[0]->f_url);
-//     fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, " LinkTable %p for %s\n", linktbl,
+            linktbl->links[0]->f_url);
+    fprintf(stderr, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-//         fprintf(stderr, "%d %c %lu %s %s\n",
-//                 i,
-//                 this_link->type,
-//                 this_link->content_length,
-//                 this_link->linkname,
-//                 this_link->f_url
-//         );
-        if (!this_link->type) {
+        fprintf(stderr, "%d %c %lu %s %s\n",
+                i,
+                this_link->type,
+                this_link->content_length,
+                this_link->linkname,
+                this_link->f_url
+        );
+        if (this_link->type == LINK_INVALID) {
             i++;
         }
 
     }
-//     fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, "--------------------------------------------\n");
     fprintf(stderr, "LinkTable_print(): Invalid link count: %d, %s.\n", i,
             linktbl->links[0]->f_url);
+    fprintf(stderr, "--------------------------------------------\n");
 }
 
 LinkTable *LinkTable_new(const char *url)
