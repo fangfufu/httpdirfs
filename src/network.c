@@ -98,6 +98,19 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
         transfer->transferring = 0;
         char *url = NULL;
         curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+
+        /* Wait for 5 seconds if we get HTTP 429 */
+        long http_resp = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (http_resp == HTTP_TOO_MANY_REQUESTS) {
+            fprintf(stderr, "curl_process_msgs(): HTTP 429\n");
+            sleep(HTTP_429_WAIT);
+            /* Re-add the link into the queue, if it is a file stat query */
+            if (transfer->type == FILESTAT) {
+                Link_get_stat(transfer->link);
+            }
+        }
+
         if (curl_msg->data.result) {
             fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",
                     curl_msg->data.result,
@@ -107,11 +120,10 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
         } else {
             /* Transfer successful, query the file size */
             if (transfer->type == FILESTAT) {
-//                 fprintf(stderr, "Link_set_stat(): %d, %d, %s\n",
-//                         n_running_curl, n_mesgs, url);
                 Link_set_stat(transfer->link, curl);
             }
         }
+
         curl_multi_remove_handle(curl_multi, curl);
         /* clean up the handle, if we are querying the file size */
         if (transfer->type == FILESTAT) {

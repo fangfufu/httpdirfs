@@ -3,15 +3,24 @@
 
 #include "link.h"
 
-typedef struct {
-    char *memory;
-    size_t size;
-} MemoryStruct;
+#define HTTP_429_WAIT   5
+
+typedef enum {
+    HTTP_OK                     = 200,
+    HTTP_PARTIAL_CONTENT        = 206,
+    HTTP_RANGE_NOT_SATISFIABLE  = 416,
+    HTTP_TOO_MANY_REQUESTS      = 429
+}HTTPResponseCode;
 
 typedef enum {
     FILESTAT = 's',
     DATA = 'd'
 } TransferType;
+
+typedef struct {
+    char *memory;
+    size_t size;
+} MemoryStruct;
 
 typedef struct {
     TransferType type;

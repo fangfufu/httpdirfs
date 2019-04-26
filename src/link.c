@@ -11,13 +11,6 @@
 #include <string.h>
 #include <unistd.h>
 
-typedef enum {
-    HTTP_OK                     = 200,
-    HTTP_PARTIAL_CONTENT        = 206,
-    HTTP_RANGE_NOT_SATISFIABLE  = 416,
-    HTTP_TOO_MANY_REQUESTS      = 429
-}HTTPResponseCode;
-
 /* ---------------- External variables -----------------------*/
 LinkTable *ROOT_LINK_TBL = NULL;
 int ROOT_LINK_OFFSET = 0;
@@ -278,7 +271,7 @@ LinkTable *LinkTable_new(const char *url)
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
             fprintf(stderr, "link.c: LinkTable_new(): URL: %s, HTTP 429, \
 Too Many Requests\n", url);
-            sleep(5);
+            sleep(HTTP_429_WAIT);
         } else if (http_resp != HTTP_OK) {
             fprintf(stderr, "link.c: LinkTable_new(): cannot retrieve the base \
 URL, URL: %s, HTTP %ld\n", url, http_resp);

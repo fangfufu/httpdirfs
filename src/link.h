@@ -51,6 +51,11 @@ extern LinkTable *ROOT_LINK_TBL;
 extern int ROOT_LINK_OFFSET;
 
 /**
+ * \brief
+ */
+void Link_get_stat(Link *this_link);
+
+/**
  * \brief set the stats for a file
  */
 void Link_set_stat(Link* this_link, CURL *curl);
