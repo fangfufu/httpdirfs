@@ -26,6 +26,7 @@ typedef struct {
     char *proxy_user;
     char *proxy_pass;
     long max_conns;
+    char *user_agent;
 } NetworkConfigStruct;
 
 /** \brief CURL configuration */

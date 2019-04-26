@@ -101,7 +101,7 @@ static CURL *Link_to_curl(Link *link)
         fprintf(stderr, "Link_to_curl(): curl_easy_init() failed!\n");
     }
     /* set up some basic curl stuff */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "HTTPDirFS");
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, NETWORK_CONFIG.user_agent);
     curl_easy_setopt(curl, CURLOPT_VERBOSE, 0);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     /* for following directories without the '/' */

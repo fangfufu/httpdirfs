@@ -206,6 +206,7 @@ void network_config_init()
     NETWORK_CONFIG.proxy_user = NULL;
     NETWORK_CONFIG.proxy_pass = NULL;
     NETWORK_CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
+    NETWORK_CONFIG.user_agent = "HTTPDirFS";
 }
 
 LinkTable *network_init(const char *url)

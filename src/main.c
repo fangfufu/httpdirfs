@@ -7,8 +7,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define ARG_LEN_MAX 64
-
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);
 static void print_version();
@@ -133,17 +131,18 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
     const char *short_opts = "o:hVdfsp:u:P:";
     const struct option long_opts[] = {
         /* Note that 'L' is returned for long options */
-        {"help", no_argument, NULL, 'h'},                   /* 0 */
-        {"version", no_argument, NULL, 'V'},                /* 1 */
-        {"debug", no_argument, NULL, 'd'},                  /* 2 */
-        {"username", required_argument, NULL, 'u'},         /* 3 */
-        {"password", required_argument, NULL, 'p'},         /* 4 */
-        {"proxy", required_argument, NULL, 'P'},            /* 5 */
-        {"proxy-username", required_argument, NULL, 'L'},   /* 6 */
-        {"proxy-password", required_argument, NULL, 'L'},   /* 7 */
-        {"cache", required_argument, NULL, 'L'},            /* 8 */
-        {"dl-seg-size", required_argument, NULL, 'L'},      /* 9 */
-        {"max-conns", required_argument, NULL, 'L'},         /* 10 */
+        {"help", no_argument, NULL, 'h'},                   /* 0  */
+        {"version", no_argument, NULL, 'V'},                /* 1  */
+        {"debug", no_argument, NULL, 'd'},                  /* 2  */
+        {"username", required_argument, NULL, 'u'},         /* 3  */
+        {"password", required_argument, NULL, 'p'},         /* 4  */
+        {"proxy", required_argument, NULL, 'P'},            /* 5  */
+        {"proxy-username", required_argument, NULL, 'L'},   /* 6  */
+        {"proxy-password", required_argument, NULL, 'L'},   /* 7  */
+        {"cache", required_argument, NULL, 'L'},            /* 8  */
+        {"dl-seg-size", required_argument, NULL, 'L'},      /* 9  */
+        {"max-conns", required_argument, NULL, 'L'},        /* 10 */
+        {"user-agent", required_argument, NULL, 'L'},       /* 11 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -173,24 +172,22 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                 add_arg(fuse_argv, fuse_argc, "-s");
                 break;
             case 'u':
-                NETWORK_CONFIG.username = strndup(optarg, ARG_LEN_MAX);
+                NETWORK_CONFIG.username = strdup(optarg);
                 break;
             case 'p':
-                NETWORK_CONFIG.password = strndup(optarg, ARG_LEN_MAX);
+                NETWORK_CONFIG.password = strdup(optarg);
                 break;
             case 'P':
-                NETWORK_CONFIG.proxy = strndup(optarg, MAX_PATH_LEN);
+                NETWORK_CONFIG.proxy = strdup(optarg);
                 break;
             case 'L':
                 /* Long options */
                 switch (long_index) {
                     case 6:
-                        NETWORK_CONFIG.proxy_user = strndup(optarg,
-                                                            ARG_LEN_MAX);
+                        NETWORK_CONFIG.proxy_user = strdup(optarg);
                         break;
                     case 7:
-                        NETWORK_CONFIG.proxy_pass = strndup(optarg,
-                                                            ARG_LEN_MAX);
+                        NETWORK_CONFIG.proxy_pass = strdup(optarg);
                         break;
                     case 8:
                         CacheSystem_init(optarg);
@@ -201,6 +198,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 10:
                         NETWORK_CONFIG.max_conns = atoi(optarg);
                         break;
+                    case 11:
+                        NETWORK_CONFIG.user_agent = strdup(optarg);
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
                         add_arg(fuse_argv, fuse_argc, "--help");
@@ -225,7 +224,7 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
     (*fuse_argc)++;
     *fuse_argv_ptr = realloc(*fuse_argv_ptr, *fuse_argc * sizeof(char *));
     char **fuse_argv = *fuse_argv_ptr;
-    fuse_argv[*fuse_argc - 1] = strndup(opt_string, ARG_LEN_MAX);
+    fuse_argv[*fuse_argc - 1] = strdup(opt_string);
 }
 
 static void print_help(char *program_name, int long_help)
@@ -253,11 +252,12 @@ static void print_http_options()
                             https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
         --proxy-username    Username for the proxy\n\
         --proxy-password    Password for the proxy\n\
-        --cache             Set the cache folder\n\
-        --dl-seg-size       Set the size of each download segment in MB, \n\
-                            default to 8MB\n\
+        --cache             Set a cache folder, by default this is disabled\n\
+        --dl-seg-size       The size of each download segment in MB, \n\
+                            default to 8MB.\n\
         --max-conns         The maximum number of network connections that\
-                            libcurl is allowed to make.\
+                            libcurl is allowed to make, default to 10.\
+        --user-agent        The user agent string, default to \"HTTPDirFS\".\
     \n\
 libfuse options:\n");
 }
