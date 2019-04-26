@@ -4,7 +4,6 @@
 #include "link.h"
 
 #include <pthread.h>
-#include <stdint.h>
 
 /**
  * \file cache.h

@@ -218,8 +218,6 @@ int curl_multi_perform_once()
     return n_running_curl;
 }
 
-
-
 void network_config_init()
 {
     NETWORK_CONFIG.username = NULL;
