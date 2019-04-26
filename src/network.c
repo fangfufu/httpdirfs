@@ -105,10 +105,12 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
             fprintf(stderr, "curl_process_msgs(): HTTP 429\n");
             sleep(HTTP_429_WAIT);
+            fprintf(stderr, "curl_process_msgs(): Finished sleeping\n");
             /* Re-add the link into the queue, if it is a file stat query */
             if (transfer->type == FILESTAT) {
                 Link_get_stat(transfer->link);
             }
+            fprintf(stderr, "curl_process_msgs(): Link re-added\n");
         }
 
         if (curl_msg->data.result) {
