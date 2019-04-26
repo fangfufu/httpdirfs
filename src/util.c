@@ -4,29 +4,27 @@
 #include <stdlib.h>
 #include <string.h>
 
-char *strndupcat(const char *a, const char *b, int n)
+char *path_append(const char *path, const char *filename)
 {
-    int na = strnlen(a, n);
-    int nb = strnlen(b, n);
-    int nc = na + nb + 1;
-    if (nc > n) {
-        fprintf(stderr,
-            "strndupcat(): resulting string length exceeds maximum limit!\n");
-        /*
-         * It is better to crash the program here, then corrupting the cache
-         * folder
-         */
+    int needs_separator = 0;
+    if (path[strnlen(path, MAX_PATH_LEN)-1] != '/') {
+        needs_separator = 1;
+    }
+
+    char *str;
+    size_t ul = strnlen(path, MAX_PATH_LEN);
+    size_t sl = strnlen(filename, MAX_FILENAME_LEN);
+    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
+    if (!str) {
+        fprintf(stderr, "path_append(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
-    char *c = calloc(nc, sizeof(char));
-    if (!c) {
-        fprintf(stderr, "strndupcat(): calloc failure!\n");
-        exit(EXIT_FAILURE);
+    strncpy(str, path, ul);
+    if (needs_separator) {
+        str[ul] = '/';
     }
-    strncpy(c, a, na);
-    strncat(c, b, nb);
-    c[nc-1] = '\0';
-    return c;
+    strncat(str, filename, sl);
+    return str;
 }
 
 int64_t round_div(int64_t a, int64_t b)

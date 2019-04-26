@@ -1,12 +1,9 @@
 #ifndef LINK_H
 #define LINK_H
 
-#include <curl/curl.h>
+#include "util.h"
 
-/** \brief the maximum length of the URL */
-#define URL_LEN_MAX 2048
-/** \brief the maximum length of a partial URL (a link) */
-#define LINKNAME_LEN_MAX 255
+#include <curl/curl.h>
 
 /** \brief the link type */
 typedef enum {
@@ -29,9 +26,9 @@ typedef struct Link Link;
  * \brief Link data structure
  */
 struct Link {
-    char linkname[LINKNAME_LEN_MAX]; /**< The link name in the last level of
+    char linkname[MAX_FILENAME_LEN]; /**< The link name in the last level of
                                             the URL */
-    char f_url[URL_LEN_MAX]; /**< The full URL of the file */
+    char f_url[MAX_PATH_LEN]; /**< The full URL of the file */
     LinkType type; /**< The type of the link */
     size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
     LinkTable *next_table; /**< The next LinkTable level, if it is a LINK_DIR */
@@ -80,5 +77,13 @@ Link *path_to_Link(const char *path);
  */
 LinkTable *path_to_Link_LinkTable_new(const char *path);
 
+/**
+ * \brief dump a link table to the disk.
+ */
+int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
 
+/**
+ * \brief load a link table from the disk.
+ */
+LinkTable *LinkTable_disk_open(const char *dirn);
 #endif

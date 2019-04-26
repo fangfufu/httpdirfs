@@ -9,18 +9,25 @@
  */
 
 /**
- * \brief strndup with concatenation
- * \details This function concatenate string a and string b together, and put
- * the result in a new string.
- * \param[in] a the first string
- * \param[in] b the second string
- * \param[in] n the maximum length of the output string
+ * \brief the maximum length of a path and a URL.
+ * \details This corresponds the maximum path length under Ext4.
  */
-char *strndupcat(const char *a, const char *b, int n);
+#define MAX_PATH_LEN        4096
+
+/** \brief the maximum length of a filename. */
+#define MAX_FILENAME_LEN    255
+
+/**
+ * \brief append a path
+ * \details This function appends a path with the next level, while taking the
+ * trailing slash of the upper level into account.
+ */
+char *path_append(const char *path, const char *filename);
 
 /**
  * \brief division, but rounded to the nearest integer rather than truncating
  */
 int64_t round_div(int64_t a, int64_t b);
+
 
 #endif

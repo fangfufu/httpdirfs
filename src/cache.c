@@ -28,12 +28,6 @@
 #define MAX_SEGBC           1073741824
 
 /**
- * \brief the maximum length of a path
- * \details This corresponds the maximum path length under Ext4.
- */
-#define MAX_PATH_LEN        4096
-
-/**
  * \brief error associated with metadata
  */
 typedef enum {
@@ -77,11 +71,11 @@ void CacheSystem_init(const char *path)
 
     /* Handle the case of missing '/' */
     if (path[strnlen(path, MAX_PATH_LEN) - 1] == '/') {
-        META_DIR = strndupcat(path, "meta/", MAX_PATH_LEN);
-        DATA_DIR = strndupcat(path, "data/", MAX_PATH_LEN);
+        META_DIR = path_append(path, "meta/");
+        DATA_DIR = path_append(path, "data/");
     } else {
-        META_DIR = strndupcat(path, "/meta/", MAX_PATH_LEN);
-        DATA_DIR = strndupcat(path, "/data/", MAX_PATH_LEN);
+        META_DIR = path_append(path, "/meta/");
+        DATA_DIR = path_append(path, "/data/");
     }
 
     /* Check if directories exist, if not, create them */
@@ -235,7 +229,7 @@ static int Data_create(Cache *cf)
     int mode;
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    char *datafn = strndupcat(DATA_DIR, cf->path, MAX_PATH_LEN);
+    char *datafn = path_append(DATA_DIR, cf->path);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     free(datafn);
     if (fd == -1) {
@@ -256,7 +250,7 @@ static int Data_create(Cache *cf)
  */
 static long Data_size(const char *fn)
 {
-    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+    char *datafn = path_append(DATA_DIR, fn);
     struct stat st;
     int s = stat(datafn, &st);
     free(datafn);
@@ -341,11 +335,6 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
         fprintf(stderr,
                 "Data_write(): fwrite(): requested %ld, returned %ld!\n",
                 len, byte_written);
-        if (feof(cf->dfp)) {
-            /* reached EOF */
-            fprintf(stderr,
-                    "Data_write(): fwrite(): reached the end of the file!\n");
-        }
         if (ferror(cf->dfp)) {
             /* filesystem error */
             fprintf(stderr,
@@ -358,8 +347,8 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
 
 int CacheDir_create(const char *dirn)
 {
-    char *metadirn = strndupcat(META_DIR, dirn, MAX_PATH_LEN);
-    char *datadirn = strndupcat(DATA_DIR, dirn, MAX_PATH_LEN);
+    char *metadirn = path_append(META_DIR, dirn);
+    char *datadirn = path_append(DATA_DIR, dirn);
     int i;
 
     i = -mkdir(metadirn, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
@@ -461,8 +450,8 @@ static int Cache_exist(const char *fn)
 {
     int meta_exists = 1;
     int data_exists = 1;
-    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
-    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+    char *metafn = path_append(META_DIR, fn);
+    char *datafn = path_append(DATA_DIR, fn);
 
     if (access(metafn, F_OK)) {
 //         fprintf(stderr, "Cache_exist(): access(): %s\n", strerror(errno));
@@ -501,8 +490,8 @@ static int Cache_exist(const char *fn)
 void Cache_delete(const char *fn)
 {
 //     fprintf(stderr, "Cache_delete(): deleting %s\n", fn);
-    char *metafn = strndupcat(META_DIR, fn, MAX_PATH_LEN);
-    char *datafn = strndupcat(DATA_DIR, fn, MAX_PATH_LEN);
+    char *metafn = path_append(META_DIR, fn);
+    char *datafn = path_append(DATA_DIR, fn);
     if (!access(metafn, F_OK)) {
         if(unlink(metafn)) {
             fprintf(stderr, "Cache_delete(): unlink(): %s\n",
@@ -528,12 +517,13 @@ void Cache_delete(const char *fn)
  */
 static int Data_open(Cache *cf)
 {
-    char *datafn = strndupcat(DATA_DIR, cf->path, MAX_PATH_LEN);
+    char *datafn = path_append(DATA_DIR, cf->path);
     cf->dfp = fopen(datafn, "r+");
     free(datafn);
     if (!cf->dfp) {
         /* Failed to open the data file */
-        fprintf(stderr, "Data_open(): fopen(): %s\n", strerror(errno));
+        fprintf(stderr, "Data_open(): fopen(%s): %s\n", datafn,
+                strerror(errno));
         return -1;
     }
     return 0;
@@ -547,7 +537,7 @@ static int Data_open(Cache *cf)
  */
 static int Meta_open(Cache *cf)
 {
-    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
+    char *metafn = path_append(META_DIR, cf->path);
     cf->mfp = fopen(metafn, "r+");
     if (!cf->mfp) {
         /* Failed to open the data file */
@@ -568,7 +558,7 @@ static int Meta_open(Cache *cf)
  */
 static int Meta_create(Cache *cf)
 {
-    char *metafn = strndupcat(META_DIR, cf->path, MAX_PATH_LEN);
+    char *metafn = path_append(META_DIR, cf->path);
     cf->mfp = fopen(metafn, "w");
     if (!cf->mfp) {
         /* Failed to open the data file */

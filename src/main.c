@@ -98,7 +98,7 @@ void parse_config_file(char ***argv, int *argc)
     strncat(full_path, main_config_name, strlen(main_config_name));
 
     /* The buffer has to be able to fit a URL */
-    int buf_len = URL_LEN_MAX;
+    int buf_len = MAX_PATH_LEN;
     char buf[buf_len];
     FILE *config = fopen(full_path, "r");
     if (config) {
@@ -178,7 +178,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                 NETWORK_CONFIG.password = strndup(optarg, ARG_LEN_MAX);
                 break;
             case 'P':
-                NETWORK_CONFIG.proxy = strndup(optarg, URL_LEN_MAX);
+                NETWORK_CONFIG.proxy = strndup(optarg, MAX_PATH_LEN);
                 break;
             case 'L':
                 /* Long options */

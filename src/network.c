@@ -263,7 +263,7 @@ LinkTable *network_init(const char *url)
 
     /* --------- Set the length of the root link ----------- */
     /* This is where the '/' should be */
-    ROOT_LINK_OFFSET = strnlen(url, URL_LEN_MAX) - 1;
+    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) - 1;
     if (url[ROOT_LINK_OFFSET] != '/') {
         /*
          * If '/' is not there, it is automatically added, so we need to skip 2

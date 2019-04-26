@@ -37,11 +37,11 @@ static Link *Link_new(const char *linkname, LinkType type)
         fprintf(stderr, "Link_new(): calloc failure!\n");
         exit(EXIT_FAILURE);
     }
-    strncpy(link->linkname, linkname, LINKNAME_LEN_MAX);
+    strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
     link->type = type;
 
     /* remove the '/' from linkname if it exists */
-    char *c = &(link->linkname[strnlen(link->linkname, LINKNAME_LEN_MAX) - 1]);
+    char *c = &(link->linkname[strnlen(link->linkname, MAX_FILENAME_LEN) - 1]);
     if ( *c == '/') {
         *c = '\0';
     }
@@ -61,7 +61,7 @@ static LinkType linkname_type(const char *linkname)
         return LINK_INVALID;
     }
 
-    if ( linkname[strnlen(linkname, LINKNAME_LEN_MAX) - 1] == '/' ) {
+    if ( linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/' ) {
         return LINK_DIR;
     }
 
@@ -185,29 +185,6 @@ void Link_set_stat(Link* this_link, CURL *curl)
     }
 }
 
-static char *url_append(const char *url, const char *sublink)
-{
-    int needs_separator = 0;
-    if (url[strnlen(url, URL_LEN_MAX)-1] != '/') {
-        needs_separator = 1;
-    }
-
-    char *str;
-    size_t ul = strnlen(url, URL_LEN_MAX);
-    size_t sl = strnlen(sublink, LINKNAME_LEN_MAX);
-    str = calloc(ul + sl + needs_separator + 1, sizeof(char));
-    if (!str) {
-        fprintf(stderr, "url_append(): calloc failure!\n");
-        exit(EXIT_FAILURE);
-    }
-    strncpy(str, url, ul);
-    if (needs_separator) {
-        str[ul] = '/';
-    }
-    strncat(str, sublink, sl);
-    return str;
-}
-
 static void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
@@ -215,14 +192,14 @@ static void LinkTable_fill(LinkTable *linktbl)
         Link *this_link = linktbl->links[i];
         if (this_link->type) {
             char *url;
-            url = url_append(head_link->f_url, this_link->linkname);
-            strncpy(this_link->f_url, url, URL_LEN_MAX);
+            url = path_append(head_link->f_url, this_link->linkname);
+            strncpy(this_link->f_url, url, MAX_PATH_LEN);
             free(url);
 
             char *unescaped_linkname;
             unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname, 0,
                                                  NULL);
-            strncpy(this_link->linkname, unescaped_linkname, LINKNAME_LEN_MAX);
+            strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
             curl_free(unescaped_linkname);
 
             if (this_link->type == LINK_FILE && !(this_link->content_length)) {
@@ -281,7 +258,7 @@ LinkTable *LinkTable_new(const char *url)
     LinkTable_add(linktbl, Link_new("/", LINK_HEAD));
     Link *head_link = linktbl->links[0];
     head_link->type = LINK_HEAD;
-    strncpy(head_link->f_url, url, URL_LEN_MAX);
+    strncpy(head_link->f_url, url, MAX_PATH_LEN);
 
     /* start downloading the base URL */
     CURL *curl = Link_to_curl(head_link);
@@ -327,6 +304,103 @@ URL: %s, HTTP %ld\n", url, http_resp);
     return linktbl;
 }
 
+static void LinkTable_disk_delete(const char *dirn)
+{
+    char *path = path_append(dirn, ".LinkTable");
+    if(unlink(path)) {
+        fprintf(stderr, "LinkTable_delete(): unlink(): %s\n",
+                strerror(errno));
+    }
+    free(path);
+}
+
+int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
+{
+    char *path = path_append(dirn, ".LinkTable");
+    FILE *fp = fopen(path, "w");
+    free(path);
+
+    if (!fp) {
+        fprintf(stderr, "LinkTable_save(): fopen(): %s\n", strerror(errno));
+        return -1;
+    }
+
+    fwrite(&linktbl->num, sizeof(int), 1, fp);
+    for (int i = 0; i < linktbl->num; i++) {
+        fwrite(linktbl->links[i]->linkname, sizeof(char), MAX_FILENAME_LEN, fp);
+        fwrite(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp);
+        fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp);
+        fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp);
+        fwrite(&linktbl->links[i]->time, sizeof(long), 1, fp);
+    }
+
+    int res = 0;
+
+    if (ferror(fp)) {
+        fprintf(stderr, "LinkTable_save(): encountered ferror!\n");
+        res = -1;
+    }
+
+    if (fclose(fp)) {
+        fprintf(stderr, "LinkTable_save(): cannot close the file pointer, %s\n",
+                strerror(errno));
+        res = -1;
+    }
+
+    return res;
+}
+
+LinkTable *LinkTable_disk_open(const char *dirn)
+{
+    char *path = path_append(dirn, ".LinkTable");
+    FILE *fp = fopen(path, "r");
+    free(path);
+
+    if (!fp) {
+        fprintf(stderr, "LinkTable_save(): fopen(): %s\n", strerror(errno));
+        return NULL;
+    }
+
+    LinkTable *linktbl = calloc(1, sizeof(LinkTable));
+    if (!linktbl) {
+        fprintf(stderr, "LinkTable_open(): calloc linktbl failed!\n");
+        return NULL;
+    }
+
+    fread(&linktbl->num, sizeof(int), 1, fp);
+    linktbl->links = calloc(linktbl->num, sizeof(Link *));
+    for (int i = 0; i < linktbl->num; i++) {
+        linktbl->links[i] = calloc(1, sizeof(Link));
+        if (linktbl->links[i]) {
+            fprintf(stderr, "LinkTable_open(): calloc links[i] failed!\n");
+        }
+        fread(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp);
+        fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp);
+        fread(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp);
+        fread(&linktbl->links[i]->time, sizeof(long), 1, fp);
+        if (feof(fp)) {
+            /* reached EOF */
+            fprintf(stderr,
+                    "LinkTable_open(): reached EOF!\n");
+            LinkTable_free(linktbl);
+            LinkTable_disk_delete(dirn);
+            return NULL;
+        }
+        if (ferror(fp)) {
+            fprintf(stderr, "LinkTable_open(): encountered ferror!\n");
+            LinkTable_free(linktbl);
+            LinkTable_disk_delete(dirn);
+            return NULL;
+        }
+    }
+    if (fclose(fp)) {
+        fprintf(stderr, "LinkTable_save(): cannot close the file pointer, %s\n",
+                strerror(errno));
+    }
+    return linktbl;
+}
+
+
 LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
     Link *link = path_to_Link(path);
@@ -344,7 +418,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     }
 
     /* remove the last '/' if it exists */
-    char *slash = &(path[strnlen(path, URL_LEN_MAX) - 1]);
+    char *slash = &(path[strnlen(path, MAX_PATH_LEN) - 1]);
     if (*slash == '/') {
         *slash = '\0';
     }
@@ -353,7 +427,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     if ( slash == NULL ) {
         /* We cannot find another '/', we have reached the last level */
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->linkname, LINKNAME_LEN_MAX)) {
+            if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
                 /* We found our link */
                 return linktbl->links[i];
             }
@@ -372,7 +446,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         /* move the pointer past the '/' */
         char *next_path = slash + 1;
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->linkname, LINKNAME_LEN_MAX)) {
+            if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
                 /* The next sub-directory exists */
                 if (!linktbl->links[i]->next_table) {
                     linktbl->links[i]->next_table = LinkTable_new(
@@ -388,7 +462,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 
 Link *path_to_Link(const char *path)
 {
-    char *new_path = strndup(path, URL_LEN_MAX);
+    char *new_path = strndup(path, MAX_PATH_LEN);
     if (!new_path) {
         fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
         exit(EXIT_FAILURE);
