@@ -792,8 +792,11 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         send = Data_read(cf, (uint8_t *) output_buf, len, offset);
         goto bgdl;
     } else {
-        /* Wait until the background thread finishes, then lock the I/O */
+        /* Wait for the other I/O threads to finish, then lock */
         pthread_mutex_lock(&cf->rw_lock);
+        /* Wait for the background download thread to finish */
+        pthread_mutex_lock(&cf->bgt_lock);
+        pthread_mutex_unlock(&cf->bgt_lock);
         if (Seg_exist(cf, offset)) {
             /* The segment already exists, send it off the unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset);
