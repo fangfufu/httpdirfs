@@ -23,7 +23,7 @@
  * \details This is set to 1024*1024*1024 = 1 GB, which allows the user to
  * access a 8TB file.
  */
-#define MAX_SEGBC           1073741824
+#define MAX_SEGBC                   1073741824
 
 /**
  * \brief error associated with metadata

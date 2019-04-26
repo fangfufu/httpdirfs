@@ -23,12 +23,12 @@ typedef uint8_t Seg;
  */
 typedef struct {
     char *path; /**< the path to the file on the web server */
-    Link *link; /**< The Link associated with this cache data set */
+    Link *link; /**< the Link associated with this cache data set */
     long time; /**<the modified time of the file */
     off_t content_length; /**<the size of the file */
 
-    pthread_t bgt; /**< background pthread */
-    pthread_mutex_t bgt_lock; /**< mutex for spawning a background thread */
+    pthread_t bgt; /**< background download pthread */
+    pthread_mutex_t bgt_lock; /**< mutex for the background download thread */
     pthread_mutexattr_t bgt_lock_attr; /**< attributes for bgt_lock */
     off_t next_offset; /**<the offset of the next segment to be
     downloaded in background*/
