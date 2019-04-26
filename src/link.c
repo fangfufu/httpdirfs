@@ -218,7 +218,7 @@ static void LinkTable_fill(LinkTable *linktbl)
 static void LinkTable_gap_fill(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
-        if (linktbl->links[i]->type == LINK_INVALID) {
+        if (!linktbl->links[i]->type) {
             Link_get_stat(linktbl->links[i]);
         }
     }
@@ -241,6 +241,7 @@ static void LinkTable_free(LinkTable *linktbl)
 
 static void LinkTable_print(LinkTable *linktbl)
 {
+    int i = 0;
     fprintf(stderr, "--------------------------------------------\n");
     fprintf(stderr, " LinkTable %p for %s\n", linktbl,
             linktbl->links[0]->f_url);
@@ -254,9 +255,13 @@ static void LinkTable_print(LinkTable *linktbl)
                 this_link->linkname,
                 this_link->f_url
         );
+        if (!this_link->type) {
+            i++;
+        }
 
     }
     fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, "The number of invalid link: %d.\n", i);
 }
 
 LinkTable *LinkTable_new(const char *url)
