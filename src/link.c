@@ -277,8 +277,8 @@ LinkTable *LinkTable_new(const char *url)
 URL: %s, HTTP %ld\n", url, http_resp);
 
         LinkTable_free(linktbl);
-        linktbl = NULL;
-        return linktbl;
+        curl_easy_cleanup(curl);
+        return NULL;
     };
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
     curl_easy_cleanup(curl);
@@ -289,16 +289,36 @@ URL: %s, HTTP %ld\n", url, http_resp);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
     free(buf.memory);
 
+    int skip_fill = 0;
+    char *unescaped_path;
+    unescaped_path = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
     if (CACHE_SYSTEM_INIT) {
-        char *unescaped_path;
-        unescaped_path = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0,
-                                            NULL);
         CacheDir_create(unescaped_path);
-        curl_free(unescaped_path);
+        LinkTable *disk_linktbl;
+        disk_linktbl = LinkTable_disk_open(unescaped_path);
+        if (disk_linktbl) {
+            /* Check if we need to update the link table */
+            if (disk_linktbl->num == linktbl->num) {
+                LinkTable_free(linktbl);
+                linktbl = disk_linktbl;
+                skip_fill = 1;
+            } else {
+                LinkTable_free(disk_linktbl);
+            }
+        }
     }
 
     /* Fill in the link table */
-    LinkTable_fill(linktbl);
+    if (!skip_fill) {
+        LinkTable_fill(linktbl);
+        /* Save the link table */
+        if (CACHE_SYSTEM_INIT) {
+            LinkTable_disk_save(linktbl, unescaped_path);
+        }
+    }
+
+    curl_free(unescaped_path);
+
     LinkTable_print(linktbl);
     fprintf(stderr, "LinkTable_new(): returning LinkTable %p\n", linktbl);
     return linktbl;
@@ -306,24 +326,30 @@ URL: %s, HTTP %ld\n", url, http_resp);
 
 static void LinkTable_disk_delete(const char *dirn)
 {
-    char *path = path_append(dirn, ".LinkTable");
+    char *metadirn = path_append("cache/meta/", dirn);
+    char *path = path_append(metadirn, ".LinkTable");
     if(unlink(path)) {
-        fprintf(stderr, "LinkTable_delete(): unlink(): %s\n",
+        fprintf(stderr, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
                 strerror(errno));
     }
     free(path);
+    free(metadirn);
 }
 
 int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 {
-    char *path = path_append(dirn, ".LinkTable");
+    char *metadirn = path_append("cache/meta/", dirn);
+    char *path = path_append(metadirn, ".LinkTable");
     FILE *fp = fopen(path, "w");
-    free(path);
+    free(metadirn);
 
     if (!fp) {
-        fprintf(stderr, "LinkTable_save(): fopen(): %s\n", strerror(errno));
+        fprintf(stderr, "LinkTable_disk_save(): fopen(%s): %s\n", path,
+                strerror(errno));
+        free(path);
         return -1;
     }
+    free(path);
 
     fwrite(&linktbl->num, sizeof(int), 1, fp);
     for (int i = 0; i < linktbl->num; i++) {
@@ -337,12 +363,13 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     int res = 0;
 
     if (ferror(fp)) {
-        fprintf(stderr, "LinkTable_save(): encountered ferror!\n");
+        fprintf(stderr, "LinkTable_disk_save(): encountered ferror!\n");
         res = -1;
     }
 
     if (fclose(fp)) {
-        fprintf(stderr, "LinkTable_save(): cannot close the file pointer, %s\n",
+        fprintf(stderr,
+                "LinkTable_disk_save(): cannot close the file pointer, %s\n",
                 strerror(errno));
         res = -1;
     }
@@ -352,18 +379,21 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 
 LinkTable *LinkTable_disk_open(const char *dirn)
 {
-    char *path = path_append(dirn, ".LinkTable");
+    char *metadirn = path_append("cache/meta/", dirn);
+    char *path = path_append(metadirn, ".LinkTable");
     FILE *fp = fopen(path, "r");
-    free(path);
+    free(metadirn);
 
     if (!fp) {
-        fprintf(stderr, "LinkTable_save(): fopen(): %s\n", strerror(errno));
+        fprintf(stderr, "LinkTable_disk_open(): fopen(%s): %s\n", path,
+                strerror(errno));
+        free(path);
         return NULL;
     }
 
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
-        fprintf(stderr, "LinkTable_open(): calloc linktbl failed!\n");
+        fprintf(stderr, "LinkTable_disk_open(): calloc linktbl failed!\n");
         return NULL;
     }
 
@@ -372,8 +402,9 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = calloc(1, sizeof(Link));
         if (linktbl->links[i]) {
-            fprintf(stderr, "LinkTable_open(): calloc links[i] failed!\n");
+            fprintf(stderr, "LinkTable_disk_open(): calloc links[i] failed!\n");
         }
+        fread(linktbl->links[i]->linkname, sizeof(char), MAX_FILENAME_LEN, fp);
         fread(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp);
         fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp);
         fread(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp);
@@ -381,20 +412,21 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         if (feof(fp)) {
             /* reached EOF */
             fprintf(stderr,
-                    "LinkTable_open(): reached EOF!\n");
+                    "LinkTable_disk_open(): reached EOF!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
         if (ferror(fp)) {
-            fprintf(stderr, "LinkTable_open(): encountered ferror!\n");
+            fprintf(stderr, "LinkTable_disk_open(): encountered ferror!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
     }
     if (fclose(fp)) {
-        fprintf(stderr, "LinkTable_save(): cannot close the file pointer, %s\n",
+        fprintf(stderr,
+                "LinkTable_disk_open(): cannot close the file pointer, %s\n",
                 strerror(errno));
     }
     return linktbl;
