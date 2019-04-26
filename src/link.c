@@ -276,8 +276,8 @@ LinkTable *LinkTable_new(const char *url)
         transfer_blocking(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
-            fprintf(stderr, "link.c: LinkTable_new(): HTTP 429, Too Many \
-Requests, URL: %s, HTTP %ld\n", url, http_resp);
+            fprintf(stderr, "link.c: LinkTable_new(): URL: %s, HTTP 429, \
+Too Many Requests\n", url);
             sleep(5);
         } else if (http_resp != HTTP_OK) {
             fprintf(stderr, "link.c: LinkTable_new(): cannot retrieve the base \
