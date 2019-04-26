@@ -35,7 +35,7 @@ typedef enum {
     EFREAD      = -1,   /**< Fread failed */
     EINCONSIST  = -2,   /**< Inconsistency in metadata */
     EZERO       = -3,   /**< Unexpected zeros in metadata */
-    EMEM        = -4,   /**< Memory allocation failure */
+    EMEM        = -4    /**< Memory allocation failure */
 } MetaError;
 
 

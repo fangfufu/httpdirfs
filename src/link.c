@@ -11,9 +11,12 @@
 #include <string.h>
 #include <unistd.h>
 
-#define HTTP_OK 200
-#define HTTP_PARTIAL_CONTENT 206
-#define HTTP_RANGE_NOT_SATISFIABLE 416
+typedef enum {
+    HTTP_OK                     = 200,
+    HTTP_PARTIAL_CONTENT        = 206,
+    HTTP_RANGE_NOT_SATISFIABLE  = 416,
+    HTTP_TOO_MANY_REQUESTS      = 429
+}HTTPResponseCode;
 
 /* ---------------- External variables -----------------------*/
 LinkTable *ROOT_LINK_TBL = NULL;
@@ -267,19 +270,25 @@ LinkTable *LinkTable_new(const char *url)
     buf.memory = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    transfer_blocking(curl);
+    /* If we get HTTP 429, wait for 5 seconds before retry */
+    volatile long http_resp = 0;
+    do {
+        transfer_blocking(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (http_resp == HTTP_TOO_MANY_REQUESTS) {
+            fprintf(stderr, "link.c: LinkTable_new(): HTTP 429, Too Many \
+Requests, URL: %s, HTTP %ld\n", url, http_resp);
+            sleep(5);
+        } else if (http_resp != HTTP_OK) {
+            fprintf(stderr, "link.c: LinkTable_new(): cannot retrieve the base \
+URL, URL: %s, HTTP %ld\n", url, http_resp);
 
-    /* if downloading base URL failed */
-    long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (http_resp != HTTP_OK) {
-        fprintf(stderr, "link.c: LinkTable_new() cannot retrieve the base URL, \
-URL: %s, HTTP %ld\n", url, http_resp);
+            LinkTable_free(linktbl);
+            curl_easy_cleanup(curl);
+            return NULL;
+        };
+    } while (http_resp != HTTP_OK);
 
-        LinkTable_free(linktbl);
-        curl_easy_cleanup(curl);
-        return NULL;
-    };
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
     curl_easy_cleanup(curl);
 
