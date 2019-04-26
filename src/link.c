@@ -183,7 +183,7 @@ void Link_set_stat(Link* this_link, CURL *curl)
 static void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
-    for (int i = 0; i < linktbl->num; i++) {
+    for (int i = 1; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         char *url;
         url = path_append(head_link->f_url, this_link->linkname);
@@ -209,9 +209,9 @@ static void LinkTable_gap_fill(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        if ((this_link->type == LINK_FILE) &&
-            (this_link->type == LINK_DIR) &&
-            (this_link->type == LINK_HEAD)) {
+        if ((this_link->type != LINK_FILE) &&
+            (this_link->type != LINK_DIR) &&
+            (this_link->type != LINK_HEAD)) {
             Link_get_stat(linktbl->links[i]);
         }
     }
