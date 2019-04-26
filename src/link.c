@@ -211,6 +211,24 @@ static void LinkTable_fill(LinkTable *linktbl)
     }
 }
 
+/**
+ * \brief fill in the gaps in a link table
+ */
+static void LinkTable_gap_fill(LinkTable *linktbl)
+{
+    for (int i = 0; i < linktbl->num; i++) {
+        if (linktbl->links[i]->type == LINK_INVALID) {
+            Link_get_stat(linktbl->links[i]);
+        }
+    }
+
+    /* Block until the gaps are filled */
+    while (curl_multi_perform_once()) {
+        usleep(1000);
+    }
+}
+
+
 static void LinkTable_free(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
@@ -310,13 +328,17 @@ URL, URL: %s, HTTP %ld\n", url, http_resp);
         }
     }
 
-    /* Fill in the link table */
     if (!skip_fill) {
+        /* Fill in the link table */
         LinkTable_fill(linktbl);
-        /* Save the link table */
-        if (CACHE_SYSTEM_INIT) {
-            LinkTable_disk_save(linktbl, unescaped_path);
-        }
+    } else {
+        /* Fill in the holes in the link table */
+        LinkTable_gap_fill(linktbl);
+    }
+
+    /* Save the link table */
+    if (CACHE_SYSTEM_INIT) {
+        LinkTable_disk_save(linktbl, unescaped_path);
     }
 
     curl_free(unescaped_path);
