@@ -248,7 +248,9 @@ static void LinkTable_print(LinkTable *linktbl)
                 this_link->linkname,
                 this_link->f_url
         );
-        if (this_link->type == LINK_INVALID) {
+        if ((this_link->type != LINK_FILE) &&
+            (this_link->type != LINK_DIR) &&
+            (this_link->type != LINK_HEAD)) {
             i++;
         }
 
