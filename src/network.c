@@ -324,9 +324,7 @@ void transfer_blocking(CURL *curl)
 
 void transfer_nonblocking(CURL *curl)
 {
-    pthread_mutex_lock(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-    pthread_mutex_unlock(&transfer_lock);
 
     if(res > 0) {
         fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
