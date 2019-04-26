@@ -185,18 +185,16 @@ static void LinkTable_fill(LinkTable *linktbl)
     Link *head_link = linktbl->links[0];
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        if (this_link->type != LINK_INVALID) {
-            char *url;
-            url = path_append(head_link->f_url, this_link->linkname);
-            strncpy(this_link->f_url, url, MAX_PATH_LEN);
-            free(url);
-            char *unescaped_linkname;
-            unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname,
-                                                    0, NULL);
-            strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
-            curl_free(unescaped_linkname);
-            Link_get_stat(this_link);
-        }
+        char *url;
+        url = path_append(head_link->f_url, this_link->linkname);
+        strncpy(this_link->f_url, url, MAX_PATH_LEN);
+        free(url);
+        char *unescaped_linkname;
+        unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname,
+                                                0, NULL);
+        strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
+        curl_free(unescaped_linkname);
+        Link_get_stat(this_link);
     }
     /* Block until the LinkTable is filled up */
     while (curl_multi_perform_once()) {
@@ -210,7 +208,10 @@ static void LinkTable_fill(LinkTable *linktbl)
 static void LinkTable_gap_fill(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
-        if (linktbl->links[i]->type == LINK_INVALID) {
+        Link *this_link = linktbl->links[i];
+        if ((this_link->type == LINK_FILE) &&
+            (this_link->type == LINK_DIR) &&
+            (this_link->type == LINK_HEAD)) {
             Link_get_stat(linktbl->links[i]);
         }
     }
