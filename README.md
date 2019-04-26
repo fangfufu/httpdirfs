@@ -75,7 +75,7 @@ I noticed that most HTTP directory listings don't provide the file size for the 
 
 This program downloads the HTML web pages/files using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using [Gumbo](https://github.com/google/gumbo-parser), and presents them using [libfuse](https://github.com/libfuse/libfuse).
 
-I wrote the cache system myself. It was a Herculean effort. I am immensely proud of it. The cache system stores the metadata and the downloaded file into two separate directories. It uses bitmaps to record which segment of the file has been downloaded. By bitmap, I meant ``uint8_t`` arrays, which each byte indicating for a 1 MiB segment. I could not be bothered to implement proper bitmapping. The main challenge for the cache system was hunting down a race condition which corrupted the metadata. 
+I wrote the cache system myself. It was a Herculean effort. I am immensely proud of it. The cache system stores the metadata and the downloaded file into two separate directories. It uses bitmaps to record which segment of the file has been downloaded. By bitmap, I meant ``uint8_t`` arrays, which each byte indicating for a 1 MiB segment. I could not be bothered to implement proper bitmapping. The main challenge for the cache system was hunting down various race conditions which caused metadata corruption, downloading the same segment multiple times, and deadlocks.
 
 ## Acknowledgement
 - First of all, I would like to thank [Jerome Charaoui](https://github.com/jcharaoui) for being the Debian Maintainer for this piece of software. Thank you so much for packaging it! 
