@@ -399,7 +399,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     linktbl->links = calloc(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = calloc(1, sizeof(Link));
-        if (linktbl->links[i]) {
+        if (!linktbl->links[i]) {
             fprintf(stderr, "LinkTable_disk_open(): calloc links[i] failed!\n");
         }
         fread(linktbl->links[i]->linkname, sizeof(char), MAX_FILENAME_LEN, fp);
