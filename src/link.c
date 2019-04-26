@@ -177,6 +177,7 @@ void Link_set_stat(Link* this_link, CURL *curl)
             this_link->type = LINK_FILE;
         }
     } else {
+        fprintf(stderr, "Link_set_stat(): HTTP %ld.\n", http_resp);
         this_link->type = LINK_INVALID;
     }
 }
@@ -291,9 +292,8 @@ LinkTable *LinkTable_new(const char *url)
 Too Many Requests\n", url);
             sleep(HTTP_429_WAIT);
         } else if (http_resp != HTTP_OK) {
-            fprintf(stderr, "link.c: LinkTable_new(): cannot retrieve the base \
-URL, URL: %s, HTTP %ld\n", url, http_resp);
-
+            fprintf(stderr, "link.c: LinkTable_new(): cannot retrieve URL: %s, \
+HTTP %ld\n", url, http_resp);
             LinkTable_free(linktbl);
             curl_easy_cleanup(curl);
             return NULL;
