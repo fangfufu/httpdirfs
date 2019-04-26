@@ -8,11 +8,13 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define DEFAULT_NETWORK_MAX_CONNS 10
+#define DEFAULT_NETWORK_MAX_CONNS   10
+#define DEFAULT_HTTP_429_WAIT       5
 
 /* ----------------- External variables ---------------------- */
 CURLSH *CURL_SHARE;
 NetworkConfigStruct NETWORK_CONFIG;
+int HTTP_429_WAIT = DEFAULT_HTTP_429_WAIT;
 
 /* ----------------- Static variable ----------------------- */
 /** \brief curl multi interface handle */

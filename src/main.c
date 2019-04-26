@@ -143,6 +143,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"dl-seg-size", required_argument, NULL, 'L'},      /* 9  */
         {"max-conns", required_argument, NULL, 'L'},        /* 10 */
         {"user-agent", required_argument, NULL, 'L'},       /* 11 */
+        {"retry-wait", required_argument, NULL, 'L'},       /* 12 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -201,6 +202,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 11:
                         NETWORK_CONFIG.user_agent = strdup(optarg);
                         break;
+                    case 12:
+                        HTTP_429_WAIT = atoi(optarg);
+                        break;
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
                         add_arg(fuse_argv, fuse_argc, "--help");
@@ -254,11 +258,14 @@ static void print_http_options()
         --proxy-username    Username for the proxy\n\
         --proxy-password    Password for the proxy\n\
         --cache             Set a cache folder, by default this is disabled\n\
-        --dl-seg-size       The size of each download segment in MB, \n\
+        --dl-seg-size       The size of each download segment in MB,\n\
                             default to 8MB.\n\
         --max-conns         The maximum number of network connections that\
                             libcurl is allowed to make, default to 10.\
         --user-agent        The user agent string, default to \"HTTPDirFS\".\
+        --retry-wait        The waiting interval in seconds before making an\
+                            HTTP request, after encountering an error, default\
+                            to 5 seconds.\
     \n\
 libfuse options:\n");
 }

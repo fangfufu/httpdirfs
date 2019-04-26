@@ -3,8 +3,6 @@
 
 #include "link.h"
 
-#define HTTP_429_WAIT   5
-
 typedef enum {
     HTTP_OK                     = 200,
     HTTP_PARTIAL_CONTENT        = 206,
@@ -36,7 +34,11 @@ typedef struct {
     char *proxy_pass;
     long max_conns;
     char *user_agent;
+    int http_429_wait;
 } NetworkConfigStruct;
+
+/** \brief The waiting time after getting HTTP 429 */
+extern int HTTP_429_WAIT;
 
 /** \brief CURL configuration */
 extern NetworkConfigStruct NETWORK_CONFIG;
