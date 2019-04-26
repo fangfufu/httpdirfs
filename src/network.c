@@ -107,12 +107,11 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
             if (!slept) {
-                fprintf(stderr, "curl_process_msgs(): HTTP 429, sleeping\n");
+                fprintf(stderr,
+                        "curl_process_msgs(): HTTP 429, sleeping for %d sec\n",
+                        HTTP_429_WAIT);
                 sleep(HTTP_429_WAIT);
                 slept = 1;
-            } else {
-                fprintf(stderr,
-                        "curl_process_msgs(): HTTP 429, slept already\n");
             }
             /* Re-add the link into the queue, if it is a file stat query */
             if (transfer->type == FILESTAT) {
