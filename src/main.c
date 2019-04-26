@@ -143,6 +143,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"proxy-password", required_argument, NULL, 'L'},   /* 7 */
         {"cache", required_argument, NULL, 'L'},            /* 8 */
         {"dl-seg-size", required_argument, NULL, 'L'},      /* 9 */
+        {"max-conns", required_argument, NULL, 'L'},         /* 10 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -197,6 +198,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 9:
                         DATA_BLK_SZ = atoi(optarg) * 1024 * 1024;
                         break;
+                    case 10:
+                        NETWORK_CONFIG.max_conns = atoi(optarg);
+                        break;
                     default:
                         fprintf(stderr, "Error: Invalid option\n");
                         add_arg(fuse_argv, fuse_argc, "--help");
@@ -243,15 +247,17 @@ static void print_http_options()
 {
     fprintf(stderr,
 "HTTP options:\n\
-    -u   --username        HTTP authentication username\n\
-    -p   --password        HTTP authentication password\n\
-    -P   --proxy           Proxy for libcurl, for more details refer to\n\
-                           https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
-         --proxy-username  Username for the proxy\n\
-         --proxy-password  Password for the proxy\n\
-         --cache           Set the cache folder\n\
-         --dl-seg-size     Set the size of each download segment in MB, \n\
-                           default to 8MB\n\
+    -u  --username          HTTP authentication username\n\
+    -p  --password          HTTP authentication password\n\
+    -P  --proxy             Proxy for libcurl, for more details refer to\n\
+                            https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
+        --proxy-username    Username for the proxy\n\
+        --proxy-password    Password for the proxy\n\
+        --cache             Set the cache folder\n\
+        --dl-seg-size       Set the size of each download segment in MB, \n\
+                            default to 8MB\n\
+        --max-conns         The maximum number of network connections that\
+                            libcurl is allowed to make.\
     \n\
 libfuse options:\n");
 }

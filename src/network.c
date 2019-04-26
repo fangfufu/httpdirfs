@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define NETWORK_MAX_CONNS 10
+#define DEFAULT_NETWORK_MAX_CONNS 10
 
 /* ----------------- External variables ---------------------- */
 CURLSH *CURL_SHARE;
@@ -205,7 +205,7 @@ void network_config_init()
     NETWORK_CONFIG.proxy = NULL;
     NETWORK_CONFIG.proxy_user = NULL;
     NETWORK_CONFIG.proxy_pass = NULL;
-    NETWORK_CONFIG.max_conns = NETWORK_MAX_CONNS;
+    NETWORK_CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
 }
 
 LinkTable *network_init(const char *url)
