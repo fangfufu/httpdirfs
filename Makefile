@@ -1,4 +1,4 @@
-VERSION=1.1.0
+VERSION=1.1.4
 
 CFLAGS+= -g -O2 -Wall -Wextra -D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\" \
 `pkg-config --cflags-only-I gumbo libcurl fuse`
