@@ -489,7 +489,6 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
-//     fprintf(stderr, "Cache_delete(): deleting %s\n", fn);
     char *metafn = path_append(META_DIR, fn);
     char *datafn = path_append(DATA_DIR, fn);
     if (!access(metafn, F_OK)) {
@@ -759,10 +758,9 @@ static void *Cache_bgdl(void *arg)
         Data_write(cf, recv_buf, cf->blksz, cf->next_offset);
         Seg_set(cf, cf->next_offset, 1);
     }  else {
-            fprintf(stderr,
-                    "Cache_bgdl(): recv (%ld) < cf->blksz! \
-Possible network error?\n",
-                    recv);
+        fprintf(stderr, "Cache_bgdl(): recv(%ld)<cf->blksz, content_length: \
+%ld, next_offset: %ld, possible network error?\n", recv, cf->content_length,
+cf->next_offset);
     }
     free(recv_buf);
     pthread_mutex_unlock(&cf->bgt_lock);
@@ -837,7 +835,9 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
     /* -----------Download the next segment in background -------------------*/
     bgdl:
     cf->next_offset = round_div(offset, cf->blksz) * cf->blksz;
-    if ( (cf->next_offset > dl_offset) && !Seg_exist(cf, cf->next_offset) ) {
+    if ( (cf->next_offset > dl_offset) &&
+        !Seg_exist(cf, cf->next_offset) &&
+        cf->next_offset < cf->content_length ){
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
             if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {

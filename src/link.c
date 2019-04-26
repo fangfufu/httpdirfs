@@ -385,8 +385,6 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     free(metadirn);
 
     if (!fp) {
-        fprintf(stderr, "LinkTable_disk_open(): fopen(%s): %s\n", path,
-                strerror(errno));
         free(path);
         return NULL;
     }
