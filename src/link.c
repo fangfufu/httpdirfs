@@ -242,32 +242,31 @@ static void LinkTable_free(LinkTable *linktbl)
 static void LinkTable_print(LinkTable *linktbl)
 {
     int i = 0;
-    fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, " LinkTable %p for %s\n", linktbl,
-            linktbl->links[0]->f_url);
-    fprintf(stderr, "--------------------------------------------\n");
+//     fprintf(stderr, "--------------------------------------------\n");
+//     fprintf(stderr, " LinkTable %p for %s\n", linktbl,
+//             linktbl->links[0]->f_url);
+//     fprintf(stderr, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        fprintf(stderr, "%d %c %lu %s %s\n",
-                i,
-                this_link->type,
-                this_link->content_length,
-                this_link->linkname,
-                this_link->f_url
-        );
+//         fprintf(stderr, "%d %c %lu %s %s\n",
+//                 i,
+//                 this_link->type,
+//                 this_link->content_length,
+//                 this_link->linkname,
+//                 this_link->f_url
+//         );
         if (!this_link->type) {
             i++;
         }
 
     }
-    fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, "The number of invalid link: %d.\n", i);
+//     fprintf(stderr, "--------------------------------------------\n");
+    fprintf(stderr, "LinkTable_print(): Invalid link count: %d, %s.\n", i,
+            linktbl->links[0]->f_url);
 }
 
 LinkTable *LinkTable_new(const char *url)
 {
-    fprintf(stderr, "LinkTable_new(%s);\n", url);
-
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
         fprintf(stderr, "LinkTable_new(): calloc failure!\n");
@@ -293,11 +292,11 @@ LinkTable *LinkTable_new(const char *url)
         transfer_blocking(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
-            fprintf(stderr, "link.c: LinkTable_new(): URL: %s, HTTP 429, \
+            fprintf(stderr, "LinkTable_new(): URL: %s, HTTP 429, \
 Too Many Requests\n", url);
             sleep(HTTP_429_WAIT);
         } else if (http_resp != HTTP_OK) {
-            fprintf(stderr, "link.c: LinkTable_new(): cannot retrieve URL: %s, \
+            fprintf(stderr, "LinkTable_new(): cannot retrieve URL: %s, \
 HTTP %ld\n", url, http_resp);
             LinkTable_free(linktbl);
             curl_easy_cleanup(curl);
@@ -349,7 +348,6 @@ HTTP %ld\n", url, http_resp);
     curl_free(unescaped_path);
 
     LinkTable_print(linktbl);
-    fprintf(stderr, "LinkTable_new(): returning LinkTable %p\n", linktbl);
     return linktbl;
 }
 
