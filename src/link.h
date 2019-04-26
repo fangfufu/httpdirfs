@@ -10,7 +10,7 @@ typedef enum {
     LINK_HEAD = 'H',
     LINK_DIR = 'D',
     LINK_FILE = 'F',
-    LINK_INVALID = 'I'
+    LINK_INVALID = '\0'
 } LinkType;
 
 /**
