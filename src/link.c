@@ -178,7 +178,7 @@ void Link_set_stat(Link* this_link, CURL *curl)
         fprintf(stderr, "Link_set_stat(): HTTP %ld", http_resp);
         this_link->type = LINK_INVALID;
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
-            fprintf(stderr, ", re-adding the link to the queue\n");
+            fprintf(stderr, ", re-adding the link to the queue");
             Link_get_stat(this_link);
         }
         fprintf(stderr, ".\n");
