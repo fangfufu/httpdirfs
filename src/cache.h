@@ -54,6 +54,12 @@ extern int CACHE_SYSTEM_INIT;
 extern int DATA_BLK_SZ;
 
 /**
+ * \brief The maximum segment count for a single cache file
+ */
+extern int MAX_SEGBC;
+
+
+/**
  * \brief initialise the cache system directories
  * \details This function basically sets up the following variables:
  *  - META_DIR

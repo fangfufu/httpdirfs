@@ -141,9 +141,10 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"proxy-password", required_argument, NULL, 'L'},   /* 7  */
         {"cache", required_argument, NULL, 'L'},            /* 8  */
         {"dl-seg-size", required_argument, NULL, 'L'},      /* 9  */
-        {"max-conns", required_argument, NULL, 'L'},        /* 10 */
-        {"user-agent", required_argument, NULL, 'L'},       /* 11 */
-        {"retry-wait", required_argument, NULL, 'L'},       /* 12 */
+        {"max-seg-count", required_argument, NULL, 'L'},    /* 10 */
+        {"max-conns", required_argument, NULL, 'L'},        /* 11 */
+        {"user-agent", required_argument, NULL, 'L'},       /* 12 */
+        {"retry-wait", required_argument, NULL, 'L'},       /* 13 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -197,12 +198,15 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         DATA_BLK_SZ = atoi(optarg) * 1024 * 1024;
                         break;
                     case 10:
-                        NETWORK_CONFIG.max_conns = atoi(optarg);
+                        MAX_SEGBC = atoi(optarg);
                         break;
                     case 11:
-                        NETWORK_CONFIG.user_agent = strdup(optarg);
+                        NETWORK_CONFIG.max_conns = atoi(optarg);
                         break;
                     case 12:
+                        NETWORK_CONFIG.user_agent = strdup(optarg);
+                        break;
+                    case 13:
                         HTTP_429_WAIT = atoi(optarg);
                         break;
                     default:
@@ -260,12 +264,18 @@ static void print_http_options()
         --cache             Set a cache folder, by default this is disabled\n\
         --dl-seg-size       The size of each download segment in MB,\n\
                             default to 8MB.\n\
-        --max-conns         The maximum number of network connections that\
-                            libcurl is allowed to make, default to 10.\
-        --user-agent        The user agent string, default to \"HTTPDirFS\".\
-        --retry-wait        The waiting interval in seconds before making an\
-                            HTTP request, after encountering an error, default\
-                            to 5 seconds.\
+        --max-seg-count     The maximum number of download segments a file\n\
+                            can have. By default it is set to 1048576. This\n\
+                            means the maximum memory usage per file is 1MB\n\
+                            memory. This allows caching file up to 8TB in\n\
+                            size, assuming you are using the default segment\n\
+                            size.\n\
+        --max-conns         The maximum number of network connections that\n\
+                            libcurl is allowed to make, default to 10.\n\
+        --user-agent        The user agent string, default to \"HTTPDirFS\".\n\
+        --retry-wait        The waiting interval in seconds before making an\n\
+                            HTTP request, after encountering an error, \n\
+                            default to 5 seconds.\n\
     \n\
 libfuse options:\n");
 }

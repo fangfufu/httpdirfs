@@ -20,10 +20,11 @@
 
 /**
  * \brief Maximum segment block count
- * \details This is set to 1024*1024*1024 = 1 GB, which allows the user to
- * access a 8TB file.
+ * \details This is set to 128*1024 blocks, which uses 128KB. By default,
+ * this allows the user to store (128*1024)*(8*1024*1024) = 1TB of data
  */
-#define MAX_SEGBC                   1073741824
+
+#define DEFAULT_MAX_SEGBC                   128*1024
 
 /**
  * \brief error associated with metadata
@@ -39,6 +40,7 @@ typedef enum {
 
 int CACHE_SYSTEM_INIT = 0;
 int DATA_BLK_SZ = 0;
+int MAX_SEGBC = DEFAULT_MAX_SEGBC;
 
 /**
  * \brief The metadata directory

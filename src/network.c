@@ -88,7 +88,8 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
  * Adapted from:
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
-static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
+static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
+                              int n_mesgs)
 {
     (void) n_running_curl;
     (void) n_mesgs;
@@ -323,8 +324,8 @@ void transfer_nonblocking(CURL *curl)
     }
 }
 
-size_t
-write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp)
+size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
+                             void *userp)
 {
     size_t realsize = size * nmemb;
     MemoryStruct *mem = (MemoryStruct *)userp;
@@ -337,7 +338,7 @@ write_memory_callback(void *contents, size_t size, size_t nmemb, void *userp)
         return 0;
     }
 
-    memmove(&(mem->memory[mem->size]), contents, realsize);
+    memmove(&mem->memory[mem->size], contents, realsize);
     mem->size += realsize;
     mem->memory[mem->size] = 0;
 
