@@ -121,19 +121,17 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
             slept = 0;
         }
 
-        if (curl_msg->data.result) {
-            fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",
-                    curl_msg->data.result,
-                    curl_easy_strerror(curl_msg->data.result),
-                    url);
-            usleep(1000);
-        } else {
+        if (!curl_msg->data.result) {
             /* Transfer successful, query the file size */
             if (transfer->type == FILESTAT) {
                 Link_set_stat(transfer->link, curl);
             }
+        } else {
+            fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",
+                    curl_msg->data.result,
+                    curl_easy_strerror(curl_msg->data.result),
+                    url);
         }
-
         curl_multi_remove_handle(curl_multi, curl);
         /* clean up the handle, if we are querying the file size */
         if (transfer->type == FILESTAT) {
@@ -146,66 +144,61 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
     }
 }
 
+/**
+ * \details effectively based on
+ * https://curl.haxx.se/libcurl/c/multi-double.html
+ */
 int curl_multi_perform_once()
 {
     pthread_mutex_lock(&transfer_lock);
     /* Get curl multi interface to perform pending tasks */
     int n_running_curl;
-    curl_multi_perform(curl_multi, &n_running_curl);
-
-    long timeout;
-    if(curl_multi_timeout(curl_multi, &timeout)) {
-        fprintf(stderr, "curl_multi_perform_once(): curl_multi_timeout\n");
-        exit(EXIT_FAILURE);
+    CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
+    if(mc > 0) {
+        fprintf(stderr, "curl_multi_perform(): %s\n", curl_multi_strerror(mc));
     }
 
-    if(timeout == -1) {
-        /*
-         * https://curl.haxx.se/libcurl/c/curl_multi_timeout.html
-         * If it returns -1, there's no timeout at all set.
-         */
-        timeout = 0;
-    }
+    fd_set fdread;
+    fd_set fdwrite;
+    fd_set fdexcep;
+    int maxfd = -1;
 
-    /* Check if any of the tasks encountered error */
-    int max_fd;
-    fd_set read_fd_set;
-    fd_set write_fd_set;
-    fd_set exc_fd_set;
-    FD_ZERO(&read_fd_set);
-    FD_ZERO(&write_fd_set);
-    FD_ZERO(&exc_fd_set);
-    CURLMcode res;
-    res = curl_multi_fdset(curl_multi, &read_fd_set, &write_fd_set, &exc_fd_set,
-                           &max_fd);
-    if(res > 0) {
-        fprintf(stderr, "curl_multi_perform_once(): curl_multi_fdset: %d, %s\n",
-                res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
-    }
+    long curl_timeo = -1;
 
-    if(max_fd == -1) {
-        /*
-         * https://curl.haxx.se/libcurl/c/curl_multi_fdset.html
-         * The above web page suggests sleeping for 100ms, unless
-         * curl_multi_timeout() suggests something shorter.
-         */
-        if (timeout > 100) {
-            timeout = 100;
+    FD_ZERO(&fdread);
+    FD_ZERO(&fdwrite);
+    FD_ZERO(&fdexcep);
+
+    /* set a default timeout for select() */
+    struct timeval timeout;
+    timeout.tv_sec = 1;
+    timeout.tv_usec = 0;
+
+    curl_multi_timeout(curl_multi, &curl_timeo);
+    /* We effectively cap timeout to 1 sec */
+    if (curl_timeo >= 0) {
+        timeout.tv_sec = curl_timeo / 1000;
+        if (timeout.tv_sec > 1) {
+            timeout.tv_sec = 1;
+        } else {
+            timeout.tv_usec = (curl_timeo % 1000) * 1000;
         }
     }
 
-    /* timeout is in miliseconds */
-    struct timeval t;
-    t.tv_sec = timeout/1000;            /* seconds      */
-    t.tv_usec = (timeout%1000)*1000;    /* microseconds */
+    /* get file descriptors from the transfers */
+    mc = curl_multi_fdset(curl_multi, &fdread, &fdwrite, &fdexcep, &maxfd);
 
-    if(select(max_fd + 1, &read_fd_set, &write_fd_set,
-              &exc_fd_set, &t) < 0) {
-        fprintf(stderr,
-                "curl_multi_perform_once(): select(%i,,,,%li): %i: %s\n",
-                max_fd + 1, timeout, errno, strerror(errno));
-        exit(EXIT_FAILURE);
+    if (mc > 0) {
+        fprintf(stderr, "curl_multi_fdset(): %s.\n", curl_multi_strerror(mc));
+    }
+
+    if (maxfd == -1) {
+        usleep(100*1000);
+    } else {
+        if (select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout) < 0) {
+            fprintf(stderr, "curl_multi_perform_once(): select(): %s.\n",
+                    strerror(errno));
+        }
     }
 
     /* Process the message queue */
@@ -322,18 +315,15 @@ void transfer_blocking(CURL *curl)
 
     while (transfer.transferring) {
         curl_multi_perform_once();
-        usleep(1000);
     }
 }
 
 void transfer_nonblocking(CURL *curl)
 {
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
-
     if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
-                res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
+        fprintf(stderr, "blocking_multi_transfer(): %s\n",
+                curl_multi_strerror(res));
     }
 }
 

@@ -197,9 +197,8 @@ static void LinkTable_fill(LinkTable *linktbl)
         Link_get_stat(this_link);
     }
     /* Block until the LinkTable is filled up */
-    while (curl_multi_perform_once()) {
-        usleep(1000);
-    }
+    while (curl_multi_perform_once())
+        ;
 }
 
 /**
@@ -217,9 +216,8 @@ static void LinkTable_gap_fill(LinkTable *linktbl)
     }
 
     /* Block until the gaps are filled */
-    while (curl_multi_perform_once()) {
-        usleep(1000);
-    }
+    while (curl_multi_perform_once())
+        ;
 }
 
 
