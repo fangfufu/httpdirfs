@@ -113,10 +113,6 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs
                 sleep(HTTP_429_WAIT);
                 slept = 1;
             }
-            /* Re-add the link into the queue, if it is a file stat query */
-            if (transfer->type == FILESTAT) {
-                Link_get_stat(transfer->link);
-            }
         } else {
             slept = 0;
         }

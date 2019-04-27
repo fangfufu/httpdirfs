@@ -175,8 +175,13 @@ void Link_set_stat(Link* this_link, CURL *curl)
             this_link->type = LINK_FILE;
         }
     } else {
-        fprintf(stderr, "Link_set_stat(): HTTP %ld.\n", http_resp);
+        fprintf(stderr, "Link_set_stat(): HTTP %ld", http_resp);
         this_link->type = LINK_INVALID;
+        if (http_resp == HTTP_TOO_MANY_REQUESTS) {
+            fprintf(stderr, ", re-adding the link to the queue\n");
+            Link_get_stat(this_link);
+        }
+        fprintf(stderr, ".\n");
     }
 }
 
@@ -232,7 +237,7 @@ static void LinkTable_free(LinkTable *linktbl)
 
 static void LinkTable_print(LinkTable *linktbl)
 {
-    int i = 0;
+    int j = 0;
     fprintf(stderr, "--------------------------------------------\n");
     fprintf(stderr, " LinkTable %p for %s\n", linktbl,
             linktbl->links[0]->f_url);
@@ -249,12 +254,11 @@ static void LinkTable_print(LinkTable *linktbl)
         if ((this_link->type != LINK_FILE) &&
             (this_link->type != LINK_DIR) &&
             (this_link->type != LINK_HEAD)) {
-            i++;
+            j++;
         }
-
     }
     fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, "LinkTable_print(): Invalid link count: %d, %s.\n", i,
+    fprintf(stderr, "LinkTable_print(): Invalid link count: %d, %s.\n", j,
             linktbl->links[0]->f_url);
     fprintf(stderr, "--------------------------------------------\n");
 }
