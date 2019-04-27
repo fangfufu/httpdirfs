@@ -12,16 +12,29 @@ The permanent cache system caches all the files you have downloaded, so you don'
 An example URL would be [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag keeps the program in the foreground, which is useful for monitoring which URL the filesystem is visiting.
 
 Useful options:
+
     -f                     Run HTTPDirFS in foreground
-    -u   --username        HTTP authentication username
-    -p   --password        HTTP authentication password
-    -P   --proxy           Proxy for libcurl, for more details refer to
-                           https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
-         --proxy-username  Username for the proxy
-         --proxy-password  Password for the proxy
-         --cache           Set the cache folder
-         --dl-seg-size     Set the size of each download segment in MB,
-                           default to 8MB
+    -u  --username          HTTP authentication username
+    -p  --password          HTTP authentication password
+    -P  --proxy             Proxy for libcurl, for more details refer to
+                            https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
+        --proxy-username    Username for the proxy
+        --proxy-password    Password for the proxy
+        --cache             Set a cache folder, by default this is disabled
+        --dl-seg-size       The size of each download segment in MB,
+                            default to 8MB.
+        --max-seg-count     The maximum number of download segments a file
+                            can have. By default it is set to 1048576. This
+                            means the maximum memory usage per file is 1MB
+                            memory. This allows caching file up to 8TB in
+                            size, assuming you are using the default segment
+                            size.
+        --max-conns         The maximum number of network connections that
+                            libcurl is allowed to make, default to 10.
+        --retry-wait        The waiting interval in seconds before making an
+                            HTTP request, after encountering an error, 
+                            default to 5 seconds.
+        --user-agent        The user agent string, default to "HTTPDirFS".
 
 ## Permanent cache system
 You can now cache all the files you have looked at permanently on your hard
