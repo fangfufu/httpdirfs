@@ -80,20 +80,9 @@ void parse_config_file(char ***argv, int *argc)
     if (!xdg_config_home) {
         char *home = getenv("HOME");
         char *xdg_config_home_default = "/.config";
-        xdg_config_home = calloc(
-            strnlen(home, PATH_MAX) + strnlen(xdg_config_home_default, PATH_MAX),
-                                 sizeof(char));
-        strncat(xdg_config_home, home, PATH_MAX);
-        strncat(xdg_config_home, xdg_config_home_default, PATH_MAX);
+        xdg_config_home = path_append(home, xdg_config_home_default);
     }
-    char *config_dir = "/httpdirfs";
-    char *main_config_name = "/config";
-    int full_path_len = strnlen(xdg_config_home, PATH_MAX) + strlen(config_dir)
-        + strlen(main_config_name) + 1;
-    char *full_path = calloc(full_path_len, sizeof(char));
-    strncat(full_path, xdg_config_home, strnlen(xdg_config_home, PATH_MAX));
-    strncat(full_path, config_dir, strlen(config_dir));
-    strncat(full_path, main_config_name, strlen(main_config_name));
+    char *full_path = path_append(xdg_config_home, "/httpdirfs/config");
 
     /* The buffer has to be able to fit a URL */
     int buf_len = MAX_PATH_LEN;
