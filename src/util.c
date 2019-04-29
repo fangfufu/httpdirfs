@@ -7,7 +7,7 @@
 char *path_append(const char *path, const char *filename)
 {
     int needs_separator = 0;
-    if (path[strnlen(path, MAX_PATH_LEN)-1] != '/') {
+    if ((path[strnlen(path, MAX_PATH_LEN)-1] != '/') && (filename[0] != '/')) {
         needs_separator = 1;
     }
 

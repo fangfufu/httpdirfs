@@ -21,6 +21,8 @@
  * \brief append a path
  * \details This function appends a path with the next level, while taking the
  * trailing slash of the upper level into account.
+ *
+ * Please free the char * pointer after use.
  */
 char *path_append(const char *path, const char *filename);
 
