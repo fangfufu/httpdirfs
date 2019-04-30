@@ -142,6 +142,10 @@ bitmapping. The main challenge for the cache system was hunting down various
 race conditions which caused metadata corruption, downloading the same segment
 multiple times, and deadlocks.
 
+## Other projects which incorporate HTTPDirFS
+- [Curious Container](https://www.curious-containers.cc/docs/red-connectors-input-directories#httpdirfs)
+has a Python wrapper for mounting HTTPDirFS.
+
 ## Acknowledgement
 - First of all, I would like to thank
 [Jerome Charaoui](https://github.com/jcharaoui) for being the Debian Maintainer
