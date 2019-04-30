@@ -247,7 +247,9 @@ static void print_version()
 static void print_http_options()
 {
     fprintf(stderr,
-"HTTP options:\n\
+"options from HTTPDirFS:\n\
+    -f                      foreground operation\n\
+    -s                      disable multi-threaded operation\n\
     -u  --username          HTTP authentication username\n\
     -p  --password          HTTP authentication password\n\
     -P  --proxy             Proxy for libcurl, for more details refer to\n\
@@ -261,17 +263,15 @@ static void print_http_options()
                             default to 8MB.\n\
         --max-seg-count     The maximum number of download segments a file\n\
                             can have. By default it is set to 128*1024. This\n\
-                            means the maximum memory usage per file is 128KB\n\
-                            memory. This allows caching file up to 1TB in\n\
-                            size, assuming you are using the default segment\n\
-                            size.\n\
+                            means the maximum memory usage per file is 128KB.\n\
+                            This allows caching file up to 1TB in size, \n\
+                            assuming you are using the default segment size.\n\
         --max-conns         The maximum number of network connections that\n\
                             libcurl is allowed to make, default to 10.\n\
         --retry-wait        The waiting interval in seconds before making an\n\
                             HTTP request, after encountering an error, \n\
                             default to 5 seconds.\n\
         --user-agent        The user agent string, default to \"HTTPDirFS\".\n\
-\
     \n\
-libfuse options:\n");
+other options from libfuse:\n");
 }

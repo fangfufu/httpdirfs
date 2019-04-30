@@ -23,6 +23,8 @@ the filesystem is visiting.
 
 Useful options:
 
+    -f                      foreground operation
+    -s                      disable multi-threaded operation
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to
@@ -36,10 +38,9 @@ Useful options:
                             default to 8MB.
         --max-seg-count     The maximum number of download segments a file
                             can have. By default it is set to 128*1024. This
-                            means the maximum memory usage per file is 128KB
-                            memory. This allows caching file up to 1TB in
-                            size, assuming you are using the default segment
-                            size.
+                            means the maximum memory usage per file is 128KB.
+                            This allows caching file up to 1TB in size,
+                            assuming you are using the default segment size.
         --max-conns         The maximum number of network connections that
                             libcurl is allowed to make, default to 10.
         --retry-wait        The waiting interval in seconds before making an
@@ -50,25 +51,26 @@ Useful options:
 ## Permanent cache system
 You can now cache all the files you have looked at permanently on your hard
 drive by using the ``--cache`` flag. The file it caches persist across sessions
-For example:
 
-    mkdir cache mnt
-    httpdirfs -f --cache cache http://cdimage.debian.org/debian-cd/ mnt
+By default, the cache files are stored under ``${XDG_CACHE_HOME}/httpdirfs``,
+which by default is ``${HOME}/.cache/httpdirfs``. Each HTTP directory gets its
+own cache folder, they are named using the escaped URL of the HTTP directory.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
 again.
 
 Please note that due to the way the permanent cache system is implemented. The
 maximum download speed is around 15MiB/s, as measured using my localhost as the
-web server. However after you have accessed the file once, and you access it
-again, it will be the same speed as accessing your hard drive. .
+web server. However after you have accessed a file once, accessing it again will
+be the same speed as accessing your hard drive.
 
 If you have any patches to make the initial download go faster, feel free to
 submit a pull request.
 
-The permanent cache system also heavily relies on sparse allocation. Please make
-sure your filesystem supports it. Otherwise your hard drive / SSD might grind to
-a halt.
+The permanent cache system also relies on sparse allocation. Please make sure
+your filesystem supports it. Otherwise your hard drive / SSD might grind to
+a halt.For a list of filesystem that supports sparse allocation, please refer to
+[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Configuration file support
 There is now rudimentary config file support. The configuration file that the
