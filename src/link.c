@@ -195,10 +195,12 @@ static void LinkTable_fill(LinkTable *linktbl)
         strncpy(this_link->f_url, url, MAX_PATH_LEN);
         free(url);
         char *unescaped_linkname;
-        unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname,
+        CURL* c = curl_easy_init();
+        unescaped_linkname = curl_easy_unescape(c, this_link->linkname,
                                                 0, NULL);
         strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
         curl_free(unescaped_linkname);
+        curl_easy_cleanup(c);
         Link_get_stat(this_link);
     }
     /* Block until the LinkTable is filled up */
@@ -313,7 +315,8 @@ HTTP %ld\n", url, http_resp);
 
     int skip_fill = 0;
     char *unescaped_path;
-    unescaped_path = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
+    CURL* c = curl_easy_init();
+    unescaped_path = curl_easy_unescape(c, url + ROOT_LINK_OFFSET, 0, NULL);
     if (CACHE_SYSTEM_INIT) {
         CacheDir_create(unescaped_path);
         LinkTable *disk_linktbl;
@@ -344,6 +347,7 @@ HTTP %ld\n", url, http_resp);
     }
 
     curl_free(unescaped_path);
+    curl_easy_cleanup(c);
 
     LinkTable_print(linktbl);
     return linktbl;

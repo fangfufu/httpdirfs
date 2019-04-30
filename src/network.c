@@ -1,5 +1,7 @@
 #include "network.h"
 
+#include "cache.h"
+
 #include <openssl/crypto.h>
 
 #include <errno.h>
@@ -217,6 +219,8 @@ void network_config_init()
     NETWORK_CONFIG.proxy_pass = NULL;
     NETWORK_CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
     NETWORK_CONFIG.user_agent = "HTTPDirFS";
+    NETWORK_CONFIG.cache_enabled = 0;
+    NETWORK_CONFIG.cache_dir = NULL;
 }
 
 LinkTable *network_init(const char *url)
@@ -286,6 +290,15 @@ LinkTable *network_init(const char *url)
     } else {
         /* If '/' is there, we need to skip it */
         ROOT_LINK_OFFSET += 1;
+    }
+
+    /* -----------  Enable cache system --------------------*/
+    if (NETWORK_CONFIG.cache_enabled) {
+        if (NETWORK_CONFIG.cache_dir) {
+            CacheSystem_init(NETWORK_CONFIG.cache_dir, 0);
+        } else {
+            CacheSystem_init(url, 1);
+        }
     }
 
     /* ----------- Create the root link table --------------*/

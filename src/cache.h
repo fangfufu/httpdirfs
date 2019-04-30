@@ -58,7 +58,6 @@ extern int DATA_BLK_SZ;
  */
 extern int MAX_SEGBC;
 
-
 /**
  * \brief initialise the cache system directories
  * \details This function basically sets up the following variables:
@@ -68,7 +67,7 @@ extern int MAX_SEGBC;
  * If these directories do not exist, they will be created.
  * \note Called by parse_arg_list(), verified to be working
  */
-void CacheSystem_init(const char *dir);
+void CacheSystem_init(const char *path, int path_supplied);
 
 /**
  * \brief Create directories under the cache directory structure, if they do

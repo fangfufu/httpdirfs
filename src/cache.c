@@ -52,18 +52,74 @@ static char *META_DIR;
  */
 static char *DATA_DIR;
 
-void CacheSystem_init(const char *path)
+/**
+ * \brief Calculate cache system directory
+ */
+static char *CacheSystem_calc_dir(const char *url)
 {
+    char *xdg_cache_home = getenv("XDG_CACHE_HOME");
+    if (!xdg_cache_home) {
+        char *home = getenv("HOME");
+        char *xdg_cache_home_default = "/.cache";
+        xdg_cache_home = path_append(home, xdg_cache_home_default);
+    }
+    if (mkdir(xdg_cache_home, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        && (errno != EEXIST)) {
+        fprintf(stderr, "CacheSystem_calc_dir(): mkdir(): %s\n",
+                strerror(errno));
+        }
+    char *cache_dir_root = path_append(xdg_cache_home, "/httpdirfs/");
+    if (mkdir(cache_dir_root, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        && (errno != EEXIST)) {
+        fprintf(stderr, "CacheSystem_calc_dir(): mkdir(): %s\n",
+                strerror(errno));
+        }
+
+    char *fn = path_append(cache_dir_root, "/CACHEDIR.TAG");
+    FILE *fp = fopen(fn, "w");
+    if (fn) {
+        fprintf(fp,
+"Signature: 8a477f597d28d172789f06886806bc55\n\
+# This file is a cache directory tag created by httpdirfs.\n\
+# For information about cache directory tags, see:\n\
+#	http://www.brynosaurus.com/cachedir/\n");
+    } else {
+        fprintf(stderr, "CacheSystem_calc_dir(): fopen(%s): %s", fn,
+                strerror(errno));
+    }
+    if (ferror(fp)) {
+        fprintf(stderr,
+                "CacheSystem_calc_dir(): fwrite(): encountered error!\n");
+    }
+    if (fclose(fp)) {
+        fprintf(stderr, "CacheSystem_calc_dir(): fclose(%s): %s\n", fn,
+                strerror(errno));
+    }
+    CURL* c = curl_easy_init();
+    char *escaped_url = curl_easy_escape(c, url, 0);
+    char *full_path = path_append(cache_dir_root, escaped_url);
+    if (mkdir(full_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        && (errno != EEXIST)) {
+        fprintf(stderr, "CacheSystem_calc_dir(): mkdir(): %s\n",
+                strerror(errno));
+        }
+    free(cache_dir_root);
+    curl_free(escaped_url);
+    curl_easy_cleanup(c);
+    return full_path;
+}
+
+void CacheSystem_init(const char *path, int url_supplied)
+{
+    if (url_supplied) {
+        path = CacheSystem_calc_dir(path);
+    }
+
+    fprintf(stderr, "CacheSystem_init(): directory: %s\n", path);
     DIR* dir;
 
-    /*
-     * Check if the top-level cache directory exists, if not, exit the
-     * program. We don't want to unintentionally create a folder
-     */
     dir = opendir(path);
-    if (dir) {
-        closedir(dir);
-    } else {
+    if (!dir) {
         fprintf(stderr,
                 "CacheSystem_init(): opendir(): %s\n", strerror(errno));
         exit(EXIT_FAILURE);
@@ -208,7 +264,7 @@ static int Meta_write(Cache *cf)
     /* Error checking for fwrite */
     if (ferror(fp)) {
         fprintf(stderr,
-                "Meta_write(): fwrite(): encountered error (from ferror)!\n");
+                "Meta_write(): fwrite(): encountered error!\n");
         return -1;
     }
 
@@ -297,7 +353,7 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         if (ferror(cf->dfp)) {
             /* filesystem error */
             fprintf(stderr,
-                "Data_read(): fread(): encountered error (from ferror)!\n");
+                "Data_read(): fread(): encountered error!\n");
         }
     }
 
@@ -338,7 +394,7 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
         if (ferror(cf->dfp)) {
             /* filesystem error */
             fprintf(stderr,
-                "Data_write(): fwrite(): encountered error (from ferror)!\n");
+                "Data_write(): fwrite(): encountered error!\n");
         }
     }
 

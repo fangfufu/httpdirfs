@@ -23,26 +23,27 @@ the filesystem is visiting.
 
 Useful options:
 
-    -f                     Run HTTPDirFS in foreground
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to
                             https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
         --proxy-username    Username for the proxy
         --proxy-password    Password for the proxy
-        --cache             Set a cache folder, by default this is disabled
+        --cache             Enable cache, by default this is disabled
+        --cache-location    Set a custom cache location, by default it is
+                            located in ${XDG_CACHE_HOME}/httpdirfs
         --dl-seg-size       The size of each download segment in MB,
                             default to 8MB.
         --max-seg-count     The maximum number of download segments a file
-                            can have. By default it is set to 1048576. This
-                            means the maximum memory usage per file is 1MB
-                            memory. This allows caching file up to 8TB in
+                            can have. By default it is set to 128*1024. This
+                            means the maximum memory usage per file is 128KB
+                            memory. This allows caching file up to 1TB in
                             size, assuming you are using the default segment
                             size.
         --max-conns         The maximum number of network connections that
                             libcurl is allowed to make, default to 10.
         --retry-wait        The waiting interval in seconds before making an
-                            HTTP request, after encountering an error, 
+                            HTTP request, after encountering an error,
                             default to 5 seconds.
         --user-agent        The user agent string, default to "HTTPDirFS".
 

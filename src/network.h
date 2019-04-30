@@ -35,6 +35,8 @@ typedef struct {
     long max_conns;
     char *user_agent;
     int http_429_wait;
+    char *cache_dir;
+    int cache_enabled;
 } NetworkConfigStruct;
 
 /** \brief The waiting time after getting HTTP 429 */
