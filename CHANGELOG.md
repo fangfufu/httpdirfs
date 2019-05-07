@@ -6,6 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
+
+## [1.1.6] - 2019-05-07
+### Changed
 - Now set a default cache directory
 - path_append() now check for both the existing path and appended path for '/'.
 - Now additionally set CURLMOPT_MAX_HOST_CONNECTIONS to limit the amount of connection HTTPDirFS makes. 
@@ -89,7 +92,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.1.5...HEAD
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.1.6...HEAD
+[1.1.6]: https://github.com/fangfufu/httpdirfs/compare/1.1.5...1.1.6
 [1.1.5]: https://github.com/fangfufu/httpdirfs/compare/1.1.4...1.1.5
 [1.1.4]: https://github.com/fangfufu/httpdirfs/compare/1.1.3...1.1.4
 [1.1.3]: https://github.com/fangfufu/httpdirfs/compare/1.1.2...1.1.3
