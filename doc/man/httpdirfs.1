@@ -1,4 +1,4 @@
-.TH HTTPDIRFS "1" "January 2019" "HTTPDirFS version 1.0" "User Commands"
+.TH HTTPDIRFS "1" "July 2019" "HTTPDirFS version 1.1.6" "User Commands"
 .SH NAME
 HTTPDirFS \- filesystem client for HTTP directory listing
 .SH SYNOPSIS
@@ -8,16 +8,23 @@ HTTPDirFS \- filesystem client for HTTP directory listing
 HTTPDirFS is program that can be used to mount HTTP directory listings
 (generated using an Apache DirectoryIndex, for example) as a virtual filesystem
 through the FUSE interface. It supports HTTP basic authentication and proxy.
-.SH OPTIONS
-.SS "HTTP options:"
+.Sh OPTIONS
+.SS "General options:"
 .TP
-\fB\-u\fR   \fB\-\-username\fR
+\fB\-f\fR
+foreground operation
+.TP
+\fB\-s\fR
+disable multi\-threaded operation
+.SS "Network options:"
+.TP
+\fB\-u\fR  \fB\-\-username\fR
 HTTP authentication username
 .TP
-\fB\-p\fR   \fB\-\-password\fR
+\fB\-p\fR  \fB\-\-password\fR
 HTTP authentication password
 .TP
-\fB\-P\fR   \fB\-\-proxy\fR
+\fB\-P\fR  \fB\-\-proxy\fR
 Proxy for libcurl, for more details refer to
 https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
 .TP
@@ -26,6 +33,37 @@ Username for the proxy
 .TP
 \fB\-\-proxy\-password\fR
 Password for the proxy
+.TP
+\fB\-\-dl\-seg\-size\fR
+The size of each download segment in MB,
+default to 8MB.
+.TP
+\fB\-\-max\-seg\-count\fR
+The maximum number of download segments a file
+can have. By default it is set to 128*1024. This
+means the maximum memory usage per file is 128KB.
+This allows caching file up to 1TB in size,
+assuming you are using the default segment size.
+.TP
+\fB\-\-max\-conns\fR
+The maximum number of network connections that
+libcurl is allowed to make, default to 10.
+.TP
+\fB\-\-retry\-wait\fR
+The waiting interval in seconds before making an
+HTTP request, after encountering an error,
+default to 5 seconds.
+.TP
+\fB\-\-user\-agent\fR
+The user agent string, default to "HTTPDirFS".
+.SS "Cache options:"
+.TP
+\fB\-\-cache\fR
+Enable cache, by default this is disabled
+.TP
+\fB\-\-cache\-location\fR
+Set a custom cache location, by default it is
+located in ${XDG_CACHE_HOME}/httpdirfs
 .SS "FUSE options:"
 .TP
 \fB\-d\fR   \fB\-o\fR debug
@@ -161,8 +199,8 @@ move data while splicing to the fuse device
 \fB\-o\fR [no_]splice_read
 use splice to read from the fuse device
 .PP
-.SS "Module options:"
-.TP
+Module options:
+.PP
 [iconv]
 .TP
 \fB\-o\fR from_code=CHARSET
