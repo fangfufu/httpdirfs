@@ -143,7 +143,7 @@ race conditions which caused metadata corruption, downloading the same segment
 multiple times, and deadlocks.
 
 ## Other projects which incorporate HTTPDirFS
-- [Curious Container](https://www.curious-containers.cc/docs/red-connectors-input-directories#httpdirfs)
+- [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
 has a Python wrapper for mounting HTTPDirFS.
 
 ## Acknowledgement
