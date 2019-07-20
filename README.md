@@ -14,7 +14,7 @@ faster than ``rclone mount``.
 
 ## Usage
 
-	./httpdirfs -c $CACHE_FOLDER -f $URL $YOUR_MOUNT_POINT
+	./httpdirfs -f --cache $CACHE_FOLDER -f $URL $YOUR_MOUNT_POINT
 
 An example URL would be
 [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag
@@ -141,6 +141,10 @@ indicating for a 1 MiB segment. I could not be bothered to implement proper
 bitmapping. The main challenge for the cache system was hunting down various
 race conditions which caused metadata corruption, downloading the same segment
 multiple times, and deadlocks.
+
+## Other projects which incorporate HTTPDirFS
+- [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
+has a Python wrapper for mounting HTTPDirFS.
 
 ## Acknowledgement
 - First of all, I would like to thank
