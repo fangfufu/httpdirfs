@@ -107,7 +107,10 @@ static CURL *Link_to_curl(Link *link)
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
     curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+
 //     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
 
 
     if (NETWORK_CONFIG.username) {
