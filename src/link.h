@@ -26,9 +26,9 @@ typedef struct Link Link;
  * \brief Link data structure
  */
 struct Link {
-    char linkname[MAX_FILENAME_LEN]; /**< The link name in the last level of
+    char linkname[MAX_FILENAME_LEN+1]; /**< The link name in the last level of
                                             the URL */
-    char f_url[MAX_PATH_LEN]; /**< The full URL of the file */
+    char f_url[MAX_PATH_LEN+1]; /**< The full URL of the file */
     LinkType type; /**< The type of the link */
     size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
     LinkTable *next_table; /**< The next LinkTable level, if it is a LINK_DIR */
