@@ -167,12 +167,12 @@ void Link_set_stat(Link* this_link, CURL *curl)
         double cl = 0;
         curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
         curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-        if (cl == -1) {
-            this_link->content_length = 0;
-            this_link->type = LINK_DIR;
-        } else {
-            this_link->content_length = cl;
-            this_link->type = LINK_FILE;
+        if (this_link->type == 'F') {
+            if (cl == -1) {
+                this_link->type = LINK_INVALID;
+            } else {
+                this_link->content_length = cl;
+            }
         }
     } else {
         fprintf(stderr, "Link_set_stat(): HTTP %ld", http_resp);
