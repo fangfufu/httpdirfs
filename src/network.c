@@ -237,9 +237,10 @@ LinkTable *network_init(const char *url)
         fprintf(stderr, "network_init(): curl_share_init() failed!\n");
         exit(EXIT_FAILURE);
     }
+
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
-    curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_CONNECT);
+    curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 
     if (pthread_mutex_init(&curl_lock, NULL) != 0) {
         printf(
