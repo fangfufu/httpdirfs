@@ -193,6 +193,10 @@ blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
         return EZERO;
     }
 
+    if (cf->blksz != DATA_BLK_SZ) {
+        fprintf(stderr, "Meta_read(): Warning: cf->blksz != DATA_BLK_SZ\n");
+    }
+
     /* Allocate some memory for the segment */
     if (cf->segbc > MAX_SEGBC) {
         fprintf(stderr, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
@@ -804,7 +808,7 @@ static void *Cache_bgdl(void *arg)
 {
     Cache *cf = (Cache *) arg;
     pthread_mutex_lock(&cf->rw_lock);
-    uint8_t *recv_buf = calloc(DATA_BLK_SZ, sizeof(uint8_t));
+    uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_bgdl(): ");
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                               cf->next_offset);
@@ -863,7 +867,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 
     /* ------------------------Download the segment -------------------------*/
 
-    uint8_t *recv_buf = calloc(DATA_BLK_SZ, sizeof(uint8_t));
+    uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_read(): ");
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                                 dl_offset);

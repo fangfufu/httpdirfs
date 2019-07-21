@@ -259,8 +259,10 @@ static void print_http_options()
         --cache             Enable cache, by default this is disabled\n\
         --cache-location    Set a custom cache location, by default it is \n\
                             located in ${XDG_CACHE_HOME}/httpdirfs \n\
-        --dl-seg-size       The size of each download segment in MB,\n\
-                            default to 8MB.\n\
+        --dl-seg-size       The download segment size in MB for the cache,\n\
+                            default to 8MB. Note that specifying download\n\
+                            segment size for existing cache file will not be\n\
+                            honoured. \n\
         --max-seg-count     The maximum number of download segments a file\n\
                             can have. By default it is set to 128*1024. This\n\
                             means the maximum memory usage per file is 128KB.\n\
