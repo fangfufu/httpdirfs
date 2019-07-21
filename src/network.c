@@ -320,7 +320,7 @@ void transfer_blocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
 
     if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %d, %s\n",
+        fprintf(stderr, "transfer_blocking(): %d, %s\n",
                 res, curl_multi_strerror(res));
         exit(EXIT_FAILURE);
     }
@@ -334,7 +334,7 @@ void transfer_nonblocking(CURL *curl)
 {
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if(res > 0) {
-        fprintf(stderr, "blocking_multi_transfer(): %s\n",
+        fprintf(stderr, "transfer_nonblocking(): %s\n",
                 curl_multi_strerror(res));
     }
 }
