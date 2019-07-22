@@ -756,8 +756,18 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
 void Cache_close(Cache *cf)
 {
     /* Must wait for the background download thread to stop */
+    fprintf(stderr, "Cache_read(): locking bgt_lock;\n");
+    fflush(stderr);
     pthread_mutex_lock(&cf->bgt_lock);
+    fprintf(stderr, "Cache_read(): unlocking bgt_lock;\n");
+    fflush(stderr);
     pthread_mutex_unlock(&cf->bgt_lock);
+    fprintf(stderr, "Cache_read(): locking rw_lock;\n");
+    fflush(stderr);
+    pthread_mutex_lock(&cf->rw_lock);
+    fprintf(stderr, "Cache_read(): unlocking rw_lock;\n");
+    fflush(stderr);
+    pthread_mutex_unlock(&cf->rw_lock);
 
     if (Meta_write(cf)) {
         fprintf(stderr, "Cache_close(): Meta_write() error.");
@@ -807,6 +817,8 @@ static void Seg_set(Cache *cf, off_t offset, int i)
 static void *Cache_bgdl(void *arg)
 {
     Cache *cf = (Cache *) arg;
+    fprintf(stderr, "Cache_bgdl(): locking rw_lock;\n");
+    fflush(stderr);
     pthread_mutex_lock(&cf->rw_lock);
     uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_bgdl(): ");
@@ -823,7 +835,11 @@ static void *Cache_bgdl(void *arg)
 cf->next_offset);
     }
     free(recv_buf);
+    fprintf(stderr, "Cache_bgdl(): unlocking bgt_lock;\n");
+    fflush(stderr);
     pthread_mutex_unlock(&cf->bgt_lock);
+    fprintf(stderr, "Cache_bgdl(): unlocking rw_lock;\n");
+    fflush(stderr);
     pthread_mutex_unlock(&cf->rw_lock);
     pthread_exit(NULL);
 }
@@ -852,14 +868,23 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         send = Data_read(cf, (uint8_t *) output_buf, len, offset);
         goto bgdl;
     } else {
-        /* Wait for the other I/O threads to finish, then lock */
+        /* Wait for any other download thread to finish, then lock */
+        fprintf(stderr, "Cache_read(): locking rw_lock;\n");
+        fflush(stderr);
         pthread_mutex_lock(&cf->rw_lock);
         /* Wait for the background download thread to finish */
+        fprintf(stderr, "Cache_read(): locking bgt_lock;\n");
+        fflush(stderr);
         pthread_mutex_lock(&cf->bgt_lock);
+        fprintf(stderr, "Cache_read(): unlocking bgt_lock;\n");
+        fflush(stderr);
         pthread_mutex_unlock(&cf->bgt_lock);
         if (Seg_exist(cf, offset)) {
-            /* The segment already exists, send it off the unlock the I/O */
+            /* The segment already exists - it was downloaded by the background
+             * download thread. Send it off and unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset);
+            fprintf(stderr, "Cache_read(): unlocking rw_lock;\n");
+            fflush(stderr);
             pthread_mutex_unlock(&cf->rw_lock);
             goto bgdl;
         }
@@ -893,6 +918,8 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
             recv);
     }
     free(recv_buf);
+    fprintf(stderr, "Cache_read(): unlocking rw_lock;\n");
+    fflush(stderr);
     pthread_mutex_unlock(&cf->rw_lock);
 
     /* -----------Download the next segment in background -------------------*/
@@ -903,6 +930,8 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         cf->next_offset < cf->content_length ){
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
+            fprintf(stderr, "Cache_read(): trylocked bgt_lock;\n");
+            fflush(stderr);
             if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
                 fprintf(stderr,
                     "Cache_read(): Error creating background download thread\n"
