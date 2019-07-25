@@ -13,18 +13,18 @@
 
 /**
  * \brief Data file block size
- * \details We set it to 1024*1024*8 = 8MiB
+ * \details We set it to 2*1024*1024 = 8MiB
  */
 
-#define DEFAULT_DATA_BLK_SZ         8*1024*1024
+#define DEFAULT_DATA_BLK_SZ         2*1024*1024
 
 /**
  * \brief Maximum segment block count
- * \details This is set to 128*1024 blocks, which uses 128KB. By default,
- * this allows the user to store (128*1024)*(8*1024*1024) = 1TB of data
+ * \details This is set to 512*1024 blocks, which uses 128KB. By default,
+ * this allows the user to store (512*1024)*(2*1024*1024) = 1TB of data
  */
 
-#define DEFAULT_MAX_SEGBC                   128*1024
+#define DEFAULT_MAX_SEGBC                   512*1024
 
 /**
  * \brief error associated with metadata
@@ -872,11 +872,6 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         send = Data_read(cf, (uint8_t *) output_buf, len, offset);
         goto bgdl;
     } else {
-        /* Wait for any other download thread to finish, then lock */
-        fprintf(stderr, "Cache_read(): thread %lu: locking rw_lock;\n",
-                pthread_self());
-        fflush(stderr);
-        pthread_mutex_lock(&cf->rw_lock);
         /* Wait for the background download thread to finish */
         fprintf(stderr, "Cache_read(): thread %lu: locking bgt_lock;\n",
                 pthread_self());
@@ -886,8 +881,13 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
                 pthread_self());
         fflush(stderr);
         pthread_mutex_unlock(&cf->bgt_lock);
+        /* Wait for any other download thread to finish*/
+        fprintf(stderr, "Cache_read(): thread %lu: locking rw_lock;\n",
+                pthread_self());
+        fflush(stderr);
+        pthread_mutex_lock(&cf->rw_lock);
         if (Seg_exist(cf, offset)) {
-            /* The segment already exists - it was downloaded by the background
+            /* The segment already exists - it was downloaded by other
              * download thread. Send it off and unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset);
             fprintf(stderr, "Cache_read(): thread %lu: unlocking rw_lock;\n",
