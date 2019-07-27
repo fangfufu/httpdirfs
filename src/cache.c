@@ -844,6 +844,7 @@ cf->next_offset);
             pthread_self());
     fflush(stderr);
     pthread_mutex_unlock(&cf->rw_lock);
+    pthread_detach(pthread_self());
     pthread_exit(NULL);
 }
 
