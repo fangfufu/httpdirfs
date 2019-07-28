@@ -831,9 +831,8 @@ static void *Cache_bgdl(void *arg)
         Data_write(cf, recv_buf, cf->blksz, cf->next_offset);
         Seg_set(cf, cf->next_offset, 1);
     }  else {
-        fprintf(stderr, "Cache_bgdl(): recv(%ld)<cf->blksz, content_length: \
-%ld, next_offset: %ld, possible network error?\n", recv, cf->content_length,
-cf->next_offset);
+        fprintf(stderr,
+                "Cache_bgdl(): received %ld, possible network error.\n", recv);
     }
     free(recv_buf);
     fprintf(stderr, "Cache_bgdl(): thread %lu: unlocking bgt_lock;\n",
@@ -923,8 +922,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
         memmove(output_buf, recv_buf + (offset - dl_offset), recv);
         send = recv;
         fprintf(stderr,
-        "Cache_read(): recv (%ld) < cf->blksz! Possible network error?\n",
-            recv);
+                "Cache_read(): received %ld, possible network error.\n", recv);
     }
     free(recv_buf);
     fprintf(stderr, "Cache_read(): thread %lu: unlocking rw_lock;\n",
