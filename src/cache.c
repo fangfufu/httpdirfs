@@ -13,18 +13,18 @@
 
 /**
  * \brief Data file block size
- * \details We set it to 2*1024*1024 = 8MiB
+ * \details We set it to 1024*1024*8 = 8MiB
  */
 
-#define DEFAULT_DATA_BLK_SZ         2*1024*1024
+#define DEFAULT_DATA_BLK_SZ         8*1024*1024
 
 /**
  * \brief Maximum segment block count
- * \details This is set to 512*1024 blocks, which uses 128KB. By default,
- * this allows the user to store (512*1024)*(2*1024*1024) = 1TB of data
+ * \details This is set to 128*1024 blocks, which uses 128KB. By default,
+ * this allows the user to store (128*1024)*(8*1024*1024) = 1TB of data
  */
 
-#define DEFAULT_MAX_SEGBC                   512*1024
+#define DEFAULT_MAX_SEGBC                   128*1024
 
 /**
  * \brief error associated with metadata
