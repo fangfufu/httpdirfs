@@ -10,7 +10,7 @@
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);
 static void print_version();
-static void print_http_options();
+static void print_long_help();
 static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
 void parse_config_file(char ***argv, int *argc);
@@ -234,7 +234,7 @@ static void print_help(char *program_name, int long_help)
     fprintf(stderr,
             "Usage: %s [options] URL mountpoint\n", program_name);
     if (long_help) {
-        print_http_options();
+        print_long_help();
     }
 }
 
@@ -244,7 +244,7 @@ static void print_version()
             "HTTPDirFS version %s\n", VERSION);
 }
 
-static void print_http_options()
+static void print_long_help()
 {
     fprintf(stderr,
 "options from HTTPDirFS:\n\
