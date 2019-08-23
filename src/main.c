@@ -203,14 +203,12 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         NETWORK_CONFIG.cache_dir = strdup(optarg);
                         break;
                     default:
-                        fprintf(stderr, "Error: Invalid option\n");
-                        add_arg(fuse_argv, fuse_argc, "--help");
+                        fprintf(stderr, "see httpdirfs -h for usage\n");
                         return 1;
                 }
                 break;
             default:
-                fprintf(stderr, "Error: Invalid option\n");
-                add_arg(fuse_argv, fuse_argc, "--help");
+                fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
         }
     };
