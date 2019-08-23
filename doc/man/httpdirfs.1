@@ -1,4 +1,4 @@
-.TH HTTPDIRFS "1" "July 2019" "HTTPDirFS version 1.1.6" "User Commands"
+.TH HTTPDIRFS "1" "August 2019" "HTTPDirFS version 1.1.6" "User Commands"
 .SH NAME
 HTTPDirFS \- filesystem client for HTTP directory listing
 .SH SYNOPSIS
@@ -11,12 +11,15 @@ through the FUSE interface. It supports HTTP basic authentication and proxy.
 .Sh OPTIONS
 .SS "General options:"
 .TP
-\fB\-f\fR
-foreground operation
+\fB\-o\fR opt,[opt...]
+mount options
 .TP
-\fB\-s\fR
-disable multi\-threaded operation
-.SS "Network options:"
+\fB\-h\fR   \fB\-\-help\fR
+print help
+.TP
+\fB\-V\fR   \fB\-\-version\fR
+print version
+.SS "HTTPDirFS options:"
 .TP
 \fB\-u\fR  \fB\-\-username\fR
 HTTP authentication username
@@ -34,36 +37,35 @@ Username for the proxy
 \fB\-\-proxy\-password\fR
 Password for the proxy
 .TP
-\fB\-\-dl\-seg\-size\fR
-The size of each download segment in MB,
-default to 8MB.
-.TP
-\fB\-\-max\-seg\-count\fR
-The maximum number of download segments a file
-can have. By default it is set to 128*1024. This
-means the maximum memory usage per file is 128KB.
-This allows caching file up to 1TB in size,
-assuming you are using the default segment size.
-.TP
-\fB\-\-max\-conns\fR
-The maximum number of network connections that
-libcurl is allowed to make, default to 10.
-.TP
-\fB\-\-retry\-wait\fR
-The waiting interval in seconds before making an
-HTTP request, after encountering an error,
-default to 5 seconds.
-.TP
-\fB\-\-user\-agent\fR
-The user agent string, default to "HTTPDirFS".
-.SS "Cache options:"
-.TP
 \fB\-\-cache\fR
-Enable cache, by default this is disabled
+Enable cache (default: off)
 .TP
 \fB\-\-cache\-location\fR
-Set a custom cache location, by default it is
-located in ${XDG_CACHE_HOME}/httpdirfs
+Set a custom cache location
+(default: "${XDG_CACHE_HOME}/httpdirfs")
+.TP
+\fB\-\-dl\-seg\-size\fR
+Set cache download segment size, in MB (default: 8)
+Note: this setting is ignored if previously
+cached data is found for the requested file.
+.TP
+\fB\-\-max\-seg\-count\fR
+Set maximum number of download segments a file
+can have. (default: 128*1024)
+With the default setting, the maximum memory usage
+per file is 128KB. This allows caching files up
+to 1TB in size using the default segment size.
+.TP
+\fB\-\-max\-conns\fR
+Set maximum number of network connections that
+libcurl is allowed to make. (default: 10)
+.TP
+\fB\-\-retry\-wait\fR
+Set delay in seconds before retrying an HTTP request
+after encountering an error. (default: 5)
+.TP
+\fB\-\-user\-agent\fR
+Set user agent string (default: "HTTPDirFS")
 .SS "FUSE options:"
 .TP
 \fB\-d\fR   \fB\-o\fR debug
