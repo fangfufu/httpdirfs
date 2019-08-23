@@ -230,7 +230,7 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 static void print_help(char *program_name, int long_help)
 {
     fprintf(stderr,
-            "Usage: %s [options] URL mountpoint\n", program_name);
+            "usage: %s [options] URL mountpoint\n", program_name);
     if (long_help) {
         print_long_help();
     }
@@ -245,33 +245,35 @@ static void print_version()
 static void print_long_help()
 {
     fprintf(stderr,
-"options from HTTPDirFS:\n\
-    -f                      foreground operation\n\
-    -s                      disable multi-threaded operation\n\
+"\n\
+general options:\n\
+    -o opt,[opt...]        mount options\n\
+    -h   --help            print help\n\
+    -V   --version         print version\n\
+\n\
+HTTPDirFS options:\n\
     -u  --username          HTTP authentication username\n\
     -p  --password          HTTP authentication password\n\
     -P  --proxy             Proxy for libcurl, for more details refer to\n\
                             https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
         --proxy-username    Username for the proxy\n\
         --proxy-password    Password for the proxy\n\
-        --cache             Enable cache, by default this is disabled\n\
-        --cache-location    Set a custom cache location, by default it is \n\
-                            located in ${XDG_CACHE_HOME}/httpdirfs \n\
-        --dl-seg-size       The download segment size in MB for the cache,\n\
-                            default to 8MB. Note that specifying download\n\
-                            segment size for existing cache file will not be\n\
-                            honoured. \n\
-        --max-seg-count     The maximum number of download segments a file\n\
-                            can have. By default it is set to 128*1024. This\n\
-                            means the maximum memory usage per file is 128KB.\n\
-                            This allows caching file up to 1TB in size, \n\
-                            assuming you are using the default segment size.\n\
-        --max-conns         The maximum number of network connections that\n\
-                            libcurl is allowed to make, default to 10.\n\
-        --retry-wait        The waiting interval in seconds before making an\n\
-                            HTTP request, after encountering an error, \n\
-                            default to 5 seconds.\n\
-        --user-agent        The user agent string, default to \"HTTPDirFS\".\n\
-    \n\
-other options from libfuse:\n");
+        --cache             Enable cache (default: off)\n\
+        --cache-location    Set a custom cache location\n\
+                            (default: \"${XDG_CACHE_HOME}/httpdirfs\")\n\
+        --dl-seg-size       Set cache download segment size, in MB (default: 8)\n\
+                            Note: this setting is ignored if previously\n\
+                            cached data is found for the requested file.\n\
+        --max-seg-count     Set maximum number of download segments a file\n\
+                            can have. (default: 128*1024)\n\
+                            With the default setting, the maximum memory usage\n\
+                            per file is 128KB. This allows caching files up\n\
+                            to 1TB in size using the default segment size.\n\
+        --max-conns         Set maximum number of network connections that\n\
+                            libcurl is allowed to make. (default: 10)\n\
+        --retry-wait        Set delay in seconds before retrying an HTTP request\n\
+                            after encountering an error. (default: 5)\n\
+        --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
+\n\
+");
 }
