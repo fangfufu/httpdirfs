@@ -147,7 +147,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                 break;
             case 'h':
                 print_help(argv[0], 1);
-                add_arg(fuse_argv, fuse_argc, "-h");
+                add_arg(fuse_argv, fuse_argc, "-ho");
                 /* skip everything else to print the help */
                 return 1;
             case 'V':
