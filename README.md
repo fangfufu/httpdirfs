@@ -113,6 +113,11 @@ If you have OpenSSL 1.1 and the associated development headers installed, then
 you can safely ignore these warning messages. If you are on Debian Buster, you
 will definitely get these warning messages, and you can safely ignore them.
 
+### Debugging Mutexes
+By default the debugging output associated with mutexes are not compiled. To enable them, compile the program using the following command:
+
+    make CPPFLAGS=-DLOCK_DEBUG
+
 ## SSL Support
 If you run the program in the foreground, when it starts up, it will output the
 SSL engine version string. Please verify that your libcurl is linked against
