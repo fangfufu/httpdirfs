@@ -85,7 +85,7 @@ one option per line. For example:
 	--username test
 	--password test
 	-f
-	
+
 ## Compilation
 This program was developed under Debian Stretch. If you are using the same
 operating system as me, you need ``libgumbo-dev``, ``libfuse-dev``,
@@ -94,12 +94,6 @@ operating system as me, you need ``libgumbo-dev``, ``libfuse-dev``,
 If you run Debian Stretch, and you have OpenSSL 1.0.2 installed, and you get
 warnings that look like below during compilation,
 
-    network.c:70:22: warning: ‘thread_id’ defined but not used [-Wunused-function]
-    static unsigned long thread_id(void)
-                         ^~~~~~~~~
-    network.c:57:13: warning: ‘lock_callback’ defined but not used [-Wunused-function]
-    static void lock_callback(int mode, int type, char *file, int line)
-                ^~~~~~~~~~~~~
     /usr/bin/ld: warning: libcrypto.so.1.0.2, needed by /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/libcurl.so, may conflict with libcrypto.so.1.1
 
 then you need to check if ``libssl1.0-dev`` had been installed properly. If you
@@ -126,7 +120,7 @@ OpenSSL, as the pthread mutex functions are designed for OpenSSL.
 The SSL engine version string looks something like this:
 
         libcurl SSL engine: OpenSSL/1.0.2l
-        
+
 ## The Technical Details
 I noticed that most HTTP directory listings don't provide the file size for the
 web page itself. I suppose this makes perfect sense, as they are generated on

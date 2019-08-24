@@ -30,6 +30,8 @@ static pthread_mutex_t curl_lock;
 /** \brief network configuration */
 
 /* -------------------- Functions -------------------------- */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-function"
 static void crypto_lock_callback(int mode, int type, char *file, int line)
 {
     (void)file;
@@ -48,6 +50,7 @@ static unsigned long thread_id(void)
     ret = (unsigned long)pthread_self();
     return ret;
 }
+#pragma GCC diagnostic pop
 
 static void crypto_lock_init(void)
 {
