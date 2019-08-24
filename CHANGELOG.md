@@ -6,6 +6,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Changed
+- Suppressed "-Wunused-function" in ``network.c`` for network related functions.
+
+### Fixed
+- Addressed the link ordering problem raised in issue #28
 
 ## [1.1.7] - 2019-08-23
 ### Added
