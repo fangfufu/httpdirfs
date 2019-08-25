@@ -1,16 +1,15 @@
 # HTTPDirFS - now with a permanent cache
 Have you ever wanted to mount those HTTP directory listings as if it was a
 partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
-Text Transfer Protocol Directory Filesystem
+Text Transfer Protocol Directory Filesystem.
 
-The performance of the program is excellent, due to the use of curl-multi
-interface. HTTP connections are reused, and HTTP pipelining is used when
-available. The FUSE component itself also runs in multithreaded mode.
+The performance of the program is excellent. HTTP connections are reused due to
+the use of curl-multi interface. The FUSE component runs in multithreaded mode.
 
-The permanent cache system caches all the files you have downloaded, so you
-don't need to download those files again if you later access them again.  This
-feature is triggered by the ``--cache`` flag. This makes this filesystem much
-faster than ``rclone mount``.
+There is a permanent cache system which can cache all the file segments you have
+downloaded, so you don't need to these segments again if you access them later.
+This feature is triggered by the ``--cache`` flag. This makes this filesystem
+much faster than ``rclone mount``.
 
 ## Usage
 
@@ -21,36 +20,42 @@ An example URL would be
 keeps the program in the foreground, which is useful for monitoring which URL
 the filesystem is visiting.
 
-Useful options:
+### Useful options
 
-    -f                      foreground operation
-    -s                      disable multi-threaded operation
+HTTPDirFS options:
+
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to
                             https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
         --proxy-username    Username for the proxy
         --proxy-password    Password for the proxy
-        --cache             Enable cache, by default this is disabled
-        --cache-location    Set a custom cache location, by default it is
-                            located in ${XDG_CACHE_HOME}/httpdirfs
-        --dl-seg-size       The size of each download segment in MB,
-                            default to 8MB.
-        --max-seg-count     The maximum number of download segments a file
-                            can have. By default it is set to 128*1024. This
-                            means the maximum memory usage per file is 128KB.
-                            This allows caching file up to 1TB in size,
-                            assuming you are using the default segment size.
-        --max-conns         The maximum number of network connections that
-                            libcurl is allowed to make, default to 10.
-        --retry-wait        The waiting interval in seconds before making an
-                            HTTP request, after encountering an error,
-                            default to 5 seconds.
-        --user-agent        The user agent string, default to "HTTPDirFS".
+        --cache             Enable cache (default: off)
+        --cache-location    Set a custom cache location
+                            (default: "${XDG_CACHE_HOME}/httpdirfs")
+        --dl-seg-size       Set cache download segment size, in MB (default: 8)
+                            Note: this setting is ignored if previously
+                            cached data is found for the requested file.
+        --max-seg-count     Set maximum number of download segments a file
+                            can have. (default: 128*1024)
+                            With the default setting, the maximum memory usage
+                            per file is 128KB. This allows caching files up
+                            to 1TB in size using the default segment size.
+        --max-conns         Set maximum number of network connections that
+                            libcurl is allowed to make. (default: 10)
+        --retry-wait        Set delay in seconds before retrying an HTTP request
+                            after encountering an error. (default: 5)
+        --user-agent        Set user agent string (default: "HTTPDirFS")
+
+FUSE options:
+
+    -d   -o debug          enable debug output (implies -f)
+    -f                     foreground operation
+    -s                     disable multi-threaded operation
 
 ## Permanent cache system
-You can now cache all the files you have looked at permanently on your hard
-drive by using the ``--cache`` flag. The file it caches persist across sessions
+You can cache all the files you have looked at permanently on your hard drive by
+using the ``--cache`` flag. The file it caches persist across sessions.
 
 By default, the cache files are stored under ``${XDG_CACHE_HOME}/httpdirfs``,
 which by default is ``${HOME}/.cache/httpdirfs``. Each HTTP directory gets its
@@ -64,82 +69,63 @@ maximum download speed is around 15MiB/s, as measured using my localhost as the
 web server. However after you have accessed a file once, accessing it again will
 be the same speed as accessing your hard drive.
 
-If you have any patches to make the initial download go faster, feel free to
-submit a pull request.
+If you have any patches to make the initial download go faster, please submit a
+pull request.
 
-The permanent cache system also relies on sparse allocation. Please make sure
-your filesystem supports it. Otherwise your hard drive / SSD might grind to
-a halt.For a list of filesystem that supports sparse allocation, please refer to
-[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
+The permanent cache system relies on sparse allocation. Please make sure your
+filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
+cache file creation. For a list of filesystem that supports sparse allocation,
+please refer to [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Configuration file support
-There is now rudimentary config file support. The configuration file that the
-program will read is ``${XDG_CONFIG_HOME}/httpdirfs/config``.
-If ``${XDG_CONFIG_HOME}`` is not set, it will default to ``${HOME}/.config``. So
-by default you need to put the configuration file at
-``${HOME}/.config/httpdirfs/config``. You will have to create the sub-directory
-and the configuration file yourself. In the configuration file, please supply
-one option per line. For example:
+This program has basic support for using a configuration file. The configuration
+file that the program reads is ``${XDG_CONFIG_HOME}/httpdirfs/config``, which by
+default is at ``${HOME}/.config/httpdirfs/config``. You will have to create the
+sub-directory and the configuration file yourself. In the configuration file,
+please supply one option per line. For example:
 
-	$ cat ${HOME}/.config/httpdirfs/config
 	--username test
 	--password test
 	-f
 
 ## Compilation
-This program was developed under Debian Stretch. If you are using the same
-operating system as me, you need ``libgumbo-dev``, ``libfuse-dev``,
-``libssl1.0-dev`` and ``libcurl4-openssl-dev``.
+### Debian 10 "Buster" and newer versions
+Under Debian 10 "Buster" and newer versions, you need the following packages:
 
-If you run Debian Stretch, and you have OpenSSL 1.0.2 installed, and you get
-warnings that look like below during compilation,
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev
+
+### Debian 9 "Stretch"
+Under Debian 9 "Stretch", you need the following packages:
+
+    libgumbo-dev libfuse-dev libssl1.0-dev libcurl4-openssl-dev
+
+If you get the following warnings during compilation,
 
     /usr/bin/ld: warning: libcrypto.so.1.0.2, needed by /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/libcurl.so, may conflict with libcrypto.so.1.1
 
-then you need to check if ``libssl1.0-dev`` had been installed properly. If you
-get these compilation warnings, this program will ocassionally crash if you
-connect to HTTPS website. This is because OpenSSL 1.0.2 needs those functions
-for thread safety, whereas OpenSSL 1.1 does not. If you have ``libssl-dev``
-rather than ``libssl1.0-dev`` installed, those call back functions will not be
-linked properly.
+then this program will crash if you connect to HTTPS website. You need to check
+if you have ``libssl1.0-dev`` installed rather than ``libssl-dev``.
+This is you likely have the binaries of OpenSSL 1.0.2 installed alongside with
+the header files for OpenSSL 1.1. The header files for OpenSSL 1.0.2 link in
+additional mutex related callback functions, whereas the header files for
+OpenSSL 1.1 do not.
 
-If you have OpenSSL 1.1 and the associated development headers installed, then
-you can safely ignore these warning messages. If you are on Debian Buster, you
-will definitely get these warning messages, and you can safely ignore them.
 
 ### Debugging Mutexes
-By default the debugging output associated with mutexes are not compiled. To enable them, compile the program using the following command:
+By default the debugging output associated with mutexes are not compiled. To
+enable them, compile the program using the following command:
 
     make CPPFLAGS=-DLOCK_DEBUG
 
-## SSL Support
-If you run the program in the foreground, when it starts up, it will output the
-SSL engine version string. Please verify that your libcurl is linked against
-OpenSSL, as the pthread mutex functions are designed for OpenSSL.
-
-The SSL engine version string looks something like this:
-
-        libcurl SSL engine: OpenSSL/1.0.2l
-
 ## The Technical Details
-I noticed that most HTTP directory listings don't provide the file size for the
-web page itself. I suppose this makes perfect sense, as they are generated on
-the fly. Whereas the actual files have got file sizes. So the listing pages can
-be treated as folders, and the rest are files.
-
 This program downloads the HTML web pages/files using
 [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using
 [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 [libfuse](https://github.com/libfuse/libfuse).
 
-I wrote the cache system myself. It was a Herculean effort. I am immensely proud
-of it. The cache system stores the metadata and the downloaded file into two
-separate directories. It uses bitmaps to record which segment of the file has
-been downloaded. By bitmap, I meant ``uint8_t`` arrays, which each byte
-indicating for a 1 MiB segment. I could not be bothered to implement proper
-bitmapping. The main challenge for the cache system was hunting down various
-race conditions which caused metadata corruption, downloading the same segment
-multiple times, and deadlocks.
+The cache system stores the metadata and the downloaded file into two
+separate directories. It uses ``uint8_t`` arrays to record which segments of the
+file had been downloaded.
 
 ## Other projects which incorporate HTTPDirFS
 - [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
