@@ -32,6 +32,10 @@ static pthread_mutex_t curl_lock;
 /* -------------------- Functions -------------------------- */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-function"
+/**
+ * \note
+ * Required for OpenSSL 1.02, but not OpenSSL 1.1
+ */
 static void crypto_lock_callback(int mode, int type, char *file, int line)
 {
     (void)file;
@@ -43,6 +47,10 @@ static void crypto_lock_callback(int mode, int type, char *file, int line)
     }
 }
 
+/**
+ * \note
+ * Required for OpenSSL 1.02, but not OpenSSL 1.1
+ */
 static unsigned long thread_id(void)
 {
     unsigned long ret;
@@ -67,7 +75,7 @@ static void crypto_lock_init(void)
 }
 
 /**
- * Adapted from:
+ * \note Adapted from:
  * https://curl.haxx.se/libcurl/c/threaded-shared-conn.html
  */
 static void curl_callback_lock(CURL *handle, curl_lock_data data,
@@ -90,7 +98,7 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
 }
 
 /**
- * Adapted from:
+ * \note Adapted from:
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
 static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
@@ -147,7 +155,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
 }
 
 /**
- * \details effectively based on
+ * \note  effectively based on
  * https://curl.haxx.se/libcurl/c/multi-double.html
  */
 int curl_multi_perform_once()
