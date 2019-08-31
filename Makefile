@@ -1,4 +1,4 @@
-VERSION=1.1.8
+VERSION=1.1.9
 
 CFLAGS+= -g -O2 -Wall -Wextra -Wshadow\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\" \
