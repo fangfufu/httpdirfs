@@ -36,6 +36,9 @@ int main(int argc, char **argv)
     /*--- FUSE expects the first initialisation to be the program's name ---*/
     add_arg(&fuse_argv, &fuse_argc, argv[0]);
 
+    /* initialise link subsystem */
+    link_system_init();
+
     /* initialise network configuration struct */
     network_config_init();
 

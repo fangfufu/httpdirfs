@@ -160,6 +160,11 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
  */
 int curl_multi_perform_once()
 {
+#ifdef NETWORK_LOCK_DEBUG
+    fprintf(stderr,
+            "curl_multi_perform_once(): thread %lu: locking transfer_lock;\n",
+            pthread_self());
+#endif
     pthread_mutex_lock(&transfer_lock);
     /* Get curl multi interface to perform pending tasks */
     int n_running_curl;
@@ -217,6 +222,11 @@ int curl_multi_perform_once()
     while((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
         curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
     }
+#ifdef NETWORK_LOCK_DEBUG
+    fprintf(stderr,
+            "curl_multi_perform_once(): thread %lu: unlocking transfer_lock;\n",
+            pthread_self());
+#endif
     pthread_mutex_unlock(&transfer_lock);
     return n_running_curl;
 }
@@ -254,8 +264,7 @@ LinkTable *network_init(const char *url)
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 
     if (pthread_mutex_init(&curl_lock, NULL) != 0) {
-        printf(
-            "network_init(): curl_lock initialisation failed!\n");
+        fprintf(stderr, "network_init(): curl_lock initialisation failed!\n");
         exit(EXIT_FAILURE);
     }
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
@@ -327,9 +336,18 @@ void transfer_blocking(CURL *curl)
     transfer.type = DATA;
     transfer.transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
-
+#ifdef NETWORK_LOCK_DEBUG
+    fprintf(stderr,
+            "transfer_blocking(): thread %lu: locking transfer_lock;\n",
+            pthread_self());
+#endif
     pthread_mutex_lock(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+#ifdef NETWORK_LOCK_DEBUG
+    fprintf(stderr,
+            "transfer_blocking(): thread %lu: unlocking transfer_lock;\n",
+            pthread_self());
+#endif
     pthread_mutex_unlock(&transfer_lock);
 
     if(res > 0) {
@@ -345,8 +363,18 @@ void transfer_blocking(CURL *curl)
 
 void transfer_nonblocking(CURL *curl)
 {
+#ifdef NETWORK_LOCK_DEBUG
+    fprintf(stderr,
+            "transfer_nonblocking(): thread %lu: locking transfer_lock;\n",
+            pthread_self());
+#endif
     pthread_mutex_lock(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+#ifdef NETWORK_LOCK_DEBUG
+    fprintf(stderr,
+            "transfer_nonblocking(): thread %lu: unlocking transfer_lock;\n",
+            pthread_self());
+#endif
     pthread_mutex_unlock(&transfer_lock);
 
     if(res > 0) {
