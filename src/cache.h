@@ -1,9 +1,14 @@
 #ifndef CACHE_H
 #define CACHE_H
 
-#include "link.h"
-
 #include <pthread.h>
+
+/**
+ * \brief cache data type
+ */
+typedef struct Cache Cache;
+
+#include "link.h"
 
 /**
  * \file cache.h
@@ -19,9 +24,9 @@
 typedef uint8_t Seg;
 
 /**
- * \brief cache in-memory data structure
+ * \brief cache data type in-memory data structure
  */
-typedef struct {
+struct Cache {
     char *path; /**< the path to the file on the web server */
     Link *link; /**< the Link associated with this cache data set */
     long time; /**<the modified time of the file */
@@ -41,7 +46,7 @@ typedef struct {
     int blksz; /**<the block size of the data file */
     long segbc; /**<segment array byte count */
     Seg *seg; /**< the detail of each segment */
-} Cache;
+};
 
 /**
  * \brief whether the cache system is enabled

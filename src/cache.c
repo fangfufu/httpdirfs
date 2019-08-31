@@ -37,10 +37,20 @@ typedef enum {
     EMEM        = -4    /**< Memory allocation failure */
 } MetaError;
 
+/* ---------------- External variables -----------------------*/
 
 int CACHE_SYSTEM_INIT = 0;
 int DATA_BLK_SZ = 0;
 int MAX_SEGBC = DEFAULT_MAX_SEGBC;
+
+/* ----------------- Static variables ----------------------- */
+
+/**
+ * \brief Cache file locking
+ * \details Ensure cache opening and cache closing is an atomic operation
+ */
+static pthread_mutex_t cf_lock;
+
 
 /**
  * \brief The metadata directory
@@ -111,6 +121,12 @@ static char *CacheSystem_calc_dir(const char *url)
 
 void CacheSystem_init(const char *path, int url_supplied)
 {
+    if (pthread_mutex_init(&cf_lock, NULL) != 0) {
+        fprintf(stderr,
+                "CacheSystem_init(): cf_lock initialisation failed!\n");
+        exit(EXIT_FAILURE);
+    }
+
     if (url_supplied) {
         path = CacheSystem_calc_dir(path);
     }
@@ -696,16 +712,43 @@ Cache *Cache_open(const char *fn)
         return NULL;
     }
 
+    /* Obtain the link structure memory pointer */
+    Link *link = path_to_Link(fn);
+    if (!link) {
+        return NULL;
+    }
+
+    /*---------------- Cache_open() critical section -----------------*/
+
+#ifdef CACHE_LOCK_DEBUG
+    fprintf(stderr, "Cache_open(): thread %lu: locking cf_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_lock(&cf_lock);
+
+    if (link->cache_opened) {
+        link->cache_opened++;
+#ifdef CACHE_LOCK_DEBUG
+        fprintf(stderr, "Cache_open(): thread %lu: unlocking cf_lock;\n",
+                pthread_self());
+#endif
+        pthread_mutex_unlock(&cf_lock);
+        return link->cache_ptr;
+    }
+
+#ifdef CACHE_LOCK_DEBUG
+    fprintf(stderr, "Cache_open(): thread %lu: unlocking cf_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_unlock(&cf_lock);
+    /*----------------------------------------------------------------*/
+
     /* Create the cache in-memory data structure */
     Cache *cf = Cache_alloc();
     cf->path = strndup(fn, MAX_PATH_LEN);
 
     /* Associate the cache structure with a link */
-    cf->link = path_to_Link(fn);
-    if (!cf->link) {
-        Cache_free(cf);
-        return NULL;
-    }
+    cf->link = link;
 
     if (Meta_open(cf)) {
         Cache_free(cf);
@@ -750,22 +793,41 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
         return NULL;
     }
 
+    cf->link->cache_opened = 1;
+    /* Yup, we just created a circular loop. ;) */
+    cf->link->cache_ptr = cf;
+
     return cf;
 }
 
 void Cache_close(Cache *cf)
 {
+    /*--------------- Cache_close() critical section -----------------*/
+
 #ifdef CACHE_LOCK_DEBUG
-    /* Must wait for the background download thread to stop */
-    fprintf(stderr, "Cache_close(): locking bgt_lock;\n");
-        pthread_mutex_lock(&cf->bgt_lock);
-    fprintf(stderr, "Cache_close(): unlocking bgt_lock;\n");
-        pthread_mutex_unlock(&cf->bgt_lock);
-    fprintf(stderr, "Cache_close(): locking rw_lock;\n");
-        pthread_mutex_lock(&cf->rw_lock);
-    fprintf(stderr, "Cache_close(): unlocking rw_lock;\n");
-        pthread_mutex_unlock(&cf->rw_lock);
+    fprintf(stderr, "Cache_close(): thread %lu: locking cf_lock;\n",
+            pthread_self());
 #endif
+    pthread_mutex_lock(&cf_lock);
+
+    cf->link->cache_opened--;
+
+    if (cf->link->cache_opened > 0) {
+#ifdef CACHE_LOCK_DEBUG
+        fprintf(stderr, "Cache_close(): thread %lu: unlocking cf_lock;\n",
+                pthread_self());
+#endif
+        pthread_mutex_unlock(&cf_lock);
+        return;
+    }
+
+#ifdef CACHE_LOCK_DEBUG
+    fprintf(stderr, "Cache_close(): thread %lu: unlocking cf_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_unlock(&cf_lock);
+
+    /*----------------------------------------------------------------*/
 
     if (Meta_write(cf)) {
         fprintf(stderr, "Cache_close(): Meta_write() error.");
@@ -876,15 +938,13 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
 
 #ifdef CACHE_LOCK_DEBUG
         /* Wait for the background download thread to finish */
-        fprintf(stderr, "Cache_read(): thread %lu: locking bgt_lock;\n",
+        fprintf(stderr,
+                "Cache_read(): thread %lu: locking and unlocking bgt_lock;\n",
                 pthread_self());
 #endif
         pthread_mutex_lock(&cf->bgt_lock);
-#ifdef CACHE_LOCK_DEBUG
-        fprintf(stderr, "Cache_read(): thread %lu: unlocking bgt_lock;\n",
-                pthread_self());
-#endif
         pthread_mutex_unlock(&cf->bgt_lock);
+
 #ifdef CACHE_LOCK_DEBUG
         /* Wait for any other download thread to finish*/
         fprintf(stderr, "Cache_read(): thread %lu: locking rw_lock;\n",
