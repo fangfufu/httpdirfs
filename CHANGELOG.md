@@ -10,6 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Fixed issue #40 - Crashes with "API function called from within callback".
+- Cache system bug fix - now keep track of the number of times a file has been opened. The on-disk
+  cache file no longer gets opened multiple times, if a file is opened multiple times.
 
 ## [1.1.8] - 2019-08-24
 ### Changed
