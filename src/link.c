@@ -15,6 +15,23 @@
 LinkTable *ROOT_LINK_TBL = NULL;
 int ROOT_LINK_OFFSET = 0;
 
+/* ----------------- Static variable ----------------------- */
+/**
+ * \brief LinkTable generation priority lock
+ * \details This allows LinkTable generation to be run exclusively. This
+ * effectively gives LinkTable generation priority over file transfer.
+ */
+static pthread_mutex_t link_lock;
+
+void link_system_init()
+{
+    if (pthread_mutex_init(&link_lock, NULL) != 0) {
+        fprintf(stderr,
+                "link_system_init(): link_lock initialisation failed!\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
 static void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
@@ -266,6 +283,12 @@ static void LinkTable_print(LinkTable *linktbl)
 
 LinkTable *LinkTable_new(const char *url)
 {
+#ifdef LINK_LOCK_DEBUG
+    fprintf(stderr,
+            "LinkTable_new(): thread %lu: locking link_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_lock(&link_lock);
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
         fprintf(stderr, "LinkTable_new(): calloc failure!\n");
@@ -349,6 +372,12 @@ HTTP %ld\n", url, http_resp);
     curl_easy_cleanup(c);
 
     LinkTable_print(linktbl);
+#ifdef LINK_LOCK_DEBUG
+    fprintf(stderr,
+            "LinkTable_new(): thread %lu: unlocking link_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_unlock(&link_lock);
     return linktbl;
 }
 
@@ -553,6 +582,18 @@ long path_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
+#ifdef LINK_LOCK_DEBUG
+    fprintf(stderr,
+            "path_download(): thread %lu: locking link_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_lock(&link_lock);
+#ifdef LINK_LOCK_DEBUG
+    fprintf(stderr,
+            "path_download(): thread %lu: unlocking link_lock;\n",
+            pthread_self());
+#endif
+    pthread_mutex_unlock(&link_lock);
     transfer_blocking(curl);
 
     long http_resp;
