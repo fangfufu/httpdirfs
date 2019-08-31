@@ -5,6 +5,11 @@
 
 #include <curl/curl.h>
 
+/** \brief Link type */
+typedef struct Link Link;
+
+#include "cache.h"
+
 /** \brief the link type */
 typedef enum {
     LINK_HEAD = 'H',
@@ -19,11 +24,8 @@ typedef enum {
  */
 typedef struct LinkTable LinkTable;
 
-/** \brief link data type */
-typedef struct Link Link;
-
 /**
- * \brief Link data structure
+ * \brief Link type data structure
  */
 struct Link {
     char linkname[MAX_FILENAME_LEN+1]; /**< The link name in the last level of
@@ -33,6 +35,8 @@ struct Link {
     size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
     LinkTable *next_table; /**< The next LinkTable level, if it is a LINK_DIR */
     long time; /**< CURLINFO_FILETIME obtained from the server */
+    int cache_opened; /**< How many times associated cache has been opened */
+    Cache *cache_ptr; /**< The pointer associated with the cache file */
 };
 
 struct LinkTable {

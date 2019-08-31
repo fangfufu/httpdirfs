@@ -15,7 +15,8 @@
 LinkTable *ROOT_LINK_TBL = NULL;
 int ROOT_LINK_OFFSET = 0;
 
-/* ----------------- Static variable ----------------------- */
+/* ----------------- Static variables ----------------------- */
+
 /**
  * \brief LinkTable generation priority lock
  * \details This allows LinkTable generation to be run exclusively. This
@@ -584,16 +585,13 @@ long path_download(const char *path, char *output_buf, size_t size,
 
 #ifdef LINK_LOCK_DEBUG
     fprintf(stderr,
-            "path_download(): thread %lu: locking link_lock;\n",
+            "path_download(): thread %lu: locking and unlocking link_lock;\n",
             pthread_self());
 #endif
+
     pthread_mutex_lock(&link_lock);
-#ifdef LINK_LOCK_DEBUG
-    fprintf(stderr,
-            "path_download(): thread %lu: unlocking link_lock;\n",
-            pthread_self());
-#endif
     pthread_mutex_unlock(&link_lock);
+
     transfer_blocking(curl);
 
     long http_resp;
