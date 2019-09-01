@@ -6,7 +6,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.1.9] - 2019-08-31
 ### Changed
-- Improved the performance of directory listing generation while there are on-going file transfers
+- Improved the performance of directory listing generation while there are
+on-going file transfers
+- Wrapped all mutex locking and unlocking functions in error checking macro
 
 ### Fixed
 - Fixed issue #40 - Crashes with "API function called from within callback".
@@ -31,7 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Now set a default cache directory
 - path_append() now check for both the existing path and appended path for '/'.
-- Now additionally set CURLMOPT_MAX_HOST_CONNECTIONS to limit the amount of connection HTTPDirFS makes. 
+- Now additionally set CURLMOPT_MAX_HOST_CONNECTIONS to limit the amount of
+connection HTTPDirFS makes.
 
 ## [1.1.5] - 2019-04-26
 ### Added
