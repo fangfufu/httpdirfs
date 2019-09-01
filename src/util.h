@@ -5,6 +5,7 @@
  * \brief utility functions
  */
 
+#include <pthread.h>
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -20,30 +21,13 @@
 /**
  * \brief wrapper for pthread_mutex_lock()
  */
-#define PTHREAD_MUTEX_LOCK(x)\
-({\
-    int i;\
-    i = pthread_mutex_lock(x);\
-    if (i) { \
-        fprintf(stderr, "pthread_mutex_lock failed, %d, %s\n", i, \
-        strerror(i));\
-        exit(EXIT_FAILURE);\
-    }\
-})
+void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x);
 
 /**
  * \brief wrapper for pthread_mutex_unlock()
  */
-#define PTHREAD_MUTEX_UNLOCK(x)\
-({\
-    int i;\
-    i = pthread_mutex_unlock(x);\
-    if (i) { \
-        fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i, \
-        strerror(i));\
-        exit(EXIT_FAILURE);\
-    }\
-})
+void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
+
 
 /**
  * \brief append a path

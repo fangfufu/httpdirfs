@@ -31,3 +31,25 @@ int64_t round_div(int64_t a, int64_t b)
 {
     return (a + (b / 2)) / b;
 }
+
+void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
+{
+    int i;
+    i = pthread_mutex_unlock(x);
+    if (i) {
+        fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i,
+        strerror(i));
+        exit(EXIT_FAILURE);
+    }
+}
+
+void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
+{
+    int i;
+    i = pthread_mutex_lock(x);
+    if (i) {
+        fprintf(stderr, "pthread_mutex_lock failed, %d, %s\n", i,
+        strerror(i));
+        exit(EXIT_FAILURE);
+    }
+}

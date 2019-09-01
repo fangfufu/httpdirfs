@@ -5,7 +5,6 @@
 #include <openssl/crypto.h>
 
 #include <errno.h>
-#include <pthread.h>
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
