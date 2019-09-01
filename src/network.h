@@ -1,6 +1,11 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
+/**
+ * \file network.h
+ * \brief network related functions
+ */
+
 #include "link.h"
 
 typedef enum {
@@ -8,7 +13,7 @@ typedef enum {
     HTTP_PARTIAL_CONTENT        = 206,
     HTTP_RANGE_NOT_SATISFIABLE  = 416,
     HTTP_TOO_MANY_REQUESTS      = 429
-}HTTPResponseCode;
+} HTTPResponseCode;
 
 typedef enum {
     FILESTAT = 's',

@@ -937,22 +937,22 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
     } else {
 
 #ifdef CACHE_LOCK_DEBUG
-        /* Wait for the background download thread to finish */
         fprintf(stderr,
                 "Cache_read(): thread %lu: locking and unlocking bgt_lock;\n",
                 pthread_self());
 #endif
+        /* Wait for the background download thread to finish */
         PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
         PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
 
 #ifdef CACHE_LOCK_DEBUG
-        /* Wait for any other download thread to finish*/
         fprintf(stderr, "Cache_read(): thread %lu: locking rw_lock;\n",
                 pthread_self());
 #endif
+        /* Wait for any other download thread to finish*/
         PTHREAD_MUTEX_LOCK(&cf->rw_lock);
         if (Seg_exist(cf, offset)) {
-            /* The segment already exists - it was downloaded by other
+            /* The segment now exists - it was downloaded by another
              * download thread. Send it off and unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset);
 #ifdef CACHE_LOCK_DEBUG

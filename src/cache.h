@@ -1,6 +1,14 @@
 #ifndef CACHE_H
 #define CACHE_H
 
+/**
+ * \file cache.h
+ * \brief cache related structures and functions
+ * \details
+ *   - We store the metadata and the actual data separately in two
+ * separate folders.
+ */
+
 #include <pthread.h>
 
 /**
@@ -9,14 +17,6 @@
 typedef struct Cache Cache;
 
 #include "link.h"
-
-/**
- * \file cache.h
- * \brief cache related structures and functions
- * \details
- *   - We store the metadata and the actual data separately in two
- * separate folders.
- */
 
 /**
  * \brief Type definition for a cache segment
@@ -100,7 +100,7 @@ void Cache_close(Cache *cf);
 /**
  * \brief create a cache file set if it doesn't exist already
  * \return
- *  -   0, if the cache file already exists, or was created succesfully.
+ *  -   0, if the cache file already exists, or was created successfully.
  *  -   -1, otherwise
  * \note Called by fs_open()
  */

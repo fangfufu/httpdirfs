@@ -1,4 +1,4 @@
-# HTTPDirFS - now with a permanent cache
+# HTTPDirFS - HTTP Directory Filesystem, with a permanent cache
 Have you ever wanted to mount those HTTP directory listings as if it was a
 partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
 Text Transfer Protocol Directory Filesystem.

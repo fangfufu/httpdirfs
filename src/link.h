@@ -1,6 +1,11 @@
 #ifndef LINK_H
 #define LINK_H
 
+/**
+ * \file link.h
+ * \brief link related structures and functions
+ */
+
 #include "util.h"
 
 #include <curl/curl.h>
@@ -60,12 +65,12 @@ extern int ROOT_LINK_OFFSET;
 void link_system_init();
 
 /**
- * \brief
+ * \brief Add a link to the curl multi bundle for querying stats
  */
 void Link_get_stat(Link *this_link);
 
 /**
- * \brief set the stats for a file
+ * \brief Set the stats of a link, after curl multi handle finished querying
  */
 void Link_set_stat(Link* this_link, CURL *curl);
 

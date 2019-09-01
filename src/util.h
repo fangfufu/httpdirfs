@@ -8,17 +8,18 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#define PTHREAD_MUTEX_UNLOCK(x)\
-({\
-    int i;\
-    i = pthread_mutex_unlock(x);\
-    if (i) { \
-        fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i, \
-        strerror(i));\
-        exit(EXIT_FAILURE);\
-    }\
-})
+/**
+ * \brief the maximum length of a path and a URL.
+ * \details This corresponds the maximum path length under Ext4.
+ */
+#define MAX_PATH_LEN        4096
 
+/** \brief the maximum length of a filename. */
+#define MAX_FILENAME_LEN    255
+
+/**
+ * \brief wrapper for pthread_mutex_lock()
+ */
 #define PTHREAD_MUTEX_LOCK(x)\
 ({\
     int i;\
@@ -31,13 +32,18 @@
 })
 
 /**
- * \brief the maximum length of a path and a URL.
- * \details This corresponds the maximum path length under Ext4.
+ * \brief wrapper for pthread_mutex_unlock()
  */
-#define MAX_PATH_LEN        4096
-
-/** \brief the maximum length of a filename. */
-#define MAX_FILENAME_LEN    255
+#define PTHREAD_MUTEX_UNLOCK(x)\
+({\
+    int i;\
+    i = pthread_mutex_unlock(x);\
+    if (i) { \
+        fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i, \
+        strerror(i));\
+        exit(EXIT_FAILURE);\
+    }\
+})
 
 /**
  * \brief append a path
