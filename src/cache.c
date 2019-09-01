@@ -724,7 +724,7 @@ Cache *Cache_open(const char *fn)
     fprintf(stderr, "Cache_open(): thread %lu: locking cf_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&cf_lock);
+    PTHREAD_MUTEX_LOCK(&cf_lock);
 
     if (link->cache_opened) {
         link->cache_opened++;
@@ -732,7 +732,7 @@ Cache *Cache_open(const char *fn)
         fprintf(stderr, "Cache_open(): thread %lu: unlocking cf_lock;\n",
                 pthread_self());
 #endif
-        pthread_mutex_unlock(&cf_lock);
+        PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return link->cache_ptr;
     }
 
@@ -740,7 +740,7 @@ Cache *Cache_open(const char *fn)
     fprintf(stderr, "Cache_open(): thread %lu: unlocking cf_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&cf_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf_lock);
     /*----------------------------------------------------------------*/
 
     /* Create the cache in-memory data structure */
@@ -808,7 +808,7 @@ void Cache_close(Cache *cf)
     fprintf(stderr, "Cache_close(): thread %lu: locking cf_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&cf_lock);
+    PTHREAD_MUTEX_LOCK(&cf_lock);
 
     cf->link->cache_opened--;
 
@@ -817,7 +817,7 @@ void Cache_close(Cache *cf)
         fprintf(stderr, "Cache_close(): thread %lu: unlocking cf_lock;\n",
                 pthread_self());
 #endif
-        pthread_mutex_unlock(&cf_lock);
+        PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return;
     }
 
@@ -825,7 +825,7 @@ void Cache_close(Cache *cf)
     fprintf(stderr, "Cache_close(): thread %lu: unlocking cf_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&cf_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf_lock);
 
     /*----------------------------------------------------------------*/
 
@@ -881,7 +881,7 @@ static void *Cache_bgdl(void *arg)
     fprintf(stderr, "Cache_bgdl(): thread %lu: locking rw_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&cf->rw_lock);
+    PTHREAD_MUTEX_LOCK(&cf->rw_lock);
     uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_bgdl(): thread %lu:", pthread_self());
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
@@ -900,12 +900,12 @@ static void *Cache_bgdl(void *arg)
     fprintf(stderr, "Cache_bgdl(): thread %lu: unlocking bgt_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&cf->bgt_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
 #ifdef CACHE_LOCK_DEBUG
     fprintf(stderr, "Cache_bgdl(): thread %lu: unlocking rw_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&cf->rw_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf->rw_lock);
     pthread_detach(pthread_self());
     pthread_exit(NULL);
 }
@@ -942,15 +942,15 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
                 "Cache_read(): thread %lu: locking and unlocking bgt_lock;\n",
                 pthread_self());
 #endif
-        pthread_mutex_lock(&cf->bgt_lock);
-        pthread_mutex_unlock(&cf->bgt_lock);
+        PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
+        PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
 
 #ifdef CACHE_LOCK_DEBUG
         /* Wait for any other download thread to finish*/
         fprintf(stderr, "Cache_read(): thread %lu: locking rw_lock;\n",
                 pthread_self());
 #endif
-        pthread_mutex_lock(&cf->rw_lock);
+        PTHREAD_MUTEX_LOCK(&cf->rw_lock);
         if (Seg_exist(cf, offset)) {
             /* The segment already exists - it was downloaded by other
              * download thread. Send it off and unlock the I/O */
@@ -959,7 +959,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
             fprintf(stderr, "Cache_read(): thread %lu: unlocking rw_lock;\n",
                     pthread_self());
 #endif
-            pthread_mutex_unlock(&cf->rw_lock);
+            PTHREAD_MUTEX_UNLOCK(&cf->rw_lock);
             goto bgdl;
         }
     }
@@ -995,7 +995,7 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset)
     fprintf(stderr, "Cache_read(): thread %lu: unlocking rw_lock;\n",
             pthread_self());
 #endif
-        pthread_mutex_unlock(&cf->rw_lock);
+        PTHREAD_MUTEX_UNLOCK(&cf->rw_lock);
 
     /* -----------Download the next segment in background -------------------*/
     bgdl:

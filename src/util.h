@@ -1,12 +1,34 @@
 #ifndef UTIL_H
 #define UTIL_H
-
-#include <stdint.h>
-
 /**
  * \file util.h
  * \brief utility functions
  */
+
+#include <stdint.h>
+#include <stdlib.h>
+
+#define PTHREAD_MUTEX_UNLOCK(x)\
+({\
+    int i;\
+    i = pthread_mutex_unlock(x);\
+    if (i) { \
+        fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i, \
+        strerror(i));\
+        exit(EXIT_FAILURE);\
+    }\
+})
+
+#define PTHREAD_MUTEX_LOCK(x)\
+({\
+    int i;\
+    i = pthread_mutex_lock(x);\
+    if (i) { \
+        fprintf(stderr, "pthread_mutex_lock failed, %d, %s\n", i, \
+        strerror(i));\
+        exit(EXIT_FAILURE);\
+    }\
+})
 
 /**
  * \brief the maximum length of a path and a URL.

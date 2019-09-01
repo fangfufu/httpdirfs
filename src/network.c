@@ -41,9 +41,9 @@ static void crypto_lock_callback(int mode, int type, char *file, int line)
     (void)file;
     (void)line;
     if(mode & CRYPTO_LOCK) {
-        pthread_mutex_lock(&(crypto_lockarray[type]));
+        PTHREAD_MUTEX_LOCK(&(crypto_lockarray[type]));
     } else {
-        pthread_mutex_unlock(&(crypto_lockarray[type]));
+        PTHREAD_MUTEX_UNLOCK(&(crypto_lockarray[type]));
     }
 }
 
@@ -85,7 +85,7 @@ static void curl_callback_lock(CURL *handle, curl_lock_data data,
     (void)userptr; /* unused */
     (void)handle; /* unused */
     (void)data; /* unused */
-    pthread_mutex_lock(&curl_lock);
+    PTHREAD_MUTEX_LOCK(&curl_lock);
 }
 
 static void curl_callback_unlock(CURL *handle, curl_lock_data data,
@@ -94,7 +94,7 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
     (void)userptr; /* unused */
     (void)handle;  /* unused */
     (void)data;    /* unused */
-    pthread_mutex_unlock(&curl_lock);
+    PTHREAD_MUTEX_UNLOCK(&curl_lock);
 }
 
 /**
@@ -165,7 +165,7 @@ int curl_multi_perform_once()
             "curl_multi_perform_once(): thread %lu: locking transfer_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&transfer_lock);
+    PTHREAD_MUTEX_LOCK(&transfer_lock);
     /* Get curl multi interface to perform pending tasks */
     int n_running_curl;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
@@ -227,7 +227,7 @@ int curl_multi_perform_once()
             "curl_multi_perform_once(): thread %lu: unlocking transfer_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&transfer_lock);
+    PTHREAD_MUTEX_UNLOCK(&transfer_lock);
     return n_running_curl;
 }
 
@@ -341,14 +341,14 @@ void transfer_blocking(CURL *curl)
             "transfer_blocking(): thread %lu: locking transfer_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&transfer_lock);
+    PTHREAD_MUTEX_LOCK(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
 #ifdef NETWORK_LOCK_DEBUG
     fprintf(stderr,
             "transfer_blocking(): thread %lu: unlocking transfer_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&transfer_lock);
+    PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
     if(res > 0) {
         fprintf(stderr, "transfer_blocking(): %d, %s\n",
@@ -368,14 +368,14 @@ void transfer_nonblocking(CURL *curl)
             "transfer_nonblocking(): thread %lu: locking transfer_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&transfer_lock);
+    PTHREAD_MUTEX_LOCK(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
 #ifdef NETWORK_LOCK_DEBUG
     fprintf(stderr,
             "transfer_nonblocking(): thread %lu: unlocking transfer_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&transfer_lock);
+    PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
     if(res > 0) {
         fprintf(stderr, "transfer_nonblocking(): %s\n",

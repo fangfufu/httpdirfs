@@ -289,7 +289,7 @@ LinkTable *LinkTable_new(const char *url)
             "LinkTable_new(): thread %lu: locking link_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_lock(&link_lock);
+    PTHREAD_MUTEX_LOCK(&link_lock);
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
         fprintf(stderr, "LinkTable_new(): calloc failure!\n");
@@ -378,7 +378,7 @@ HTTP %ld\n", url, http_resp);
             "LinkTable_new(): thread %lu: unlocking link_lock;\n",
             pthread_self());
 #endif
-    pthread_mutex_unlock(&link_lock);
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
     return linktbl;
 }
 
@@ -589,8 +589,8 @@ long path_download(const char *path, char *output_buf, size_t size,
             pthread_self());
 #endif
 
-    pthread_mutex_lock(&link_lock);
-    pthread_mutex_unlock(&link_lock);
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
 
     transfer_blocking(curl);
 
