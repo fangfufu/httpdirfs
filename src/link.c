@@ -284,11 +284,11 @@ static void LinkTable_print(LinkTable *linktbl)
 
 LinkTable *LinkTable_new(const char *url)
 {
-#ifdef LINK_LOCK_DEBUG
+    #ifdef LINK_LOCK_DEBUG
     fprintf(stderr,
             "LinkTable_new(): thread %lu: locking link_lock;\n",
             pthread_self());
-#endif
+    #endif
     PTHREAD_MUTEX_LOCK(&link_lock);
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
@@ -583,11 +583,11 @@ long path_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-#ifdef LINK_LOCK_DEBUG
+    #ifdef LINK_LOCK_DEBUG
     fprintf(stderr,
             "path_download(): thread %lu: locking and unlocking link_lock;\n",
             pthread_self());
-#endif
+    #endif
 
     PTHREAD_MUTEX_LOCK(&link_lock);
     PTHREAD_MUTEX_UNLOCK(&link_lock);

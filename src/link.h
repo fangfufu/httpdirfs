@@ -33,15 +33,22 @@ typedef struct LinkTable LinkTable;
  * \brief Link type data structure
  */
 struct Link {
-    char linkname[MAX_FILENAME_LEN+1]; /**< The link name in the last level of
-                                            the URL */
-    char f_url[MAX_PATH_LEN+1]; /**< The full URL of the file */
-    LinkType type; /**< The type of the link */
-    size_t content_length; /**< CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
-    LinkTable *next_table; /**< The next LinkTable level, if it is a LINK_DIR */
-    long time; /**< CURLINFO_FILETIME obtained from the server */
-    int cache_opened; /**< How many times associated cache has been opened */
-    Cache *cache_ptr; /**< The pointer associated with the cache file */
+    /** \brief The link name in the last level of the URL */
+    char linkname[MAX_FILENAME_LEN+1];
+    /** \brief The full URL of the file */
+    char f_url[MAX_PATH_LEN+1];
+    /** \brief The type of the link */
+    LinkType type;
+    /** \brief CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
+    size_t content_length;
+    /** \brief The next LinkTable level, if it is a LINK_DIR */
+    LinkTable *next_table;
+    /** \brief CURLINFO_FILETIME obtained from the server */
+    long time;
+    /** \brief How many times associated cache has been opened */
+    int cache_opened;
+    /** \brief The pointer associated with the cache file */
+    Cache *cache_ptr;
 };
 
 struct LinkTable {
