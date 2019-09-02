@@ -948,14 +948,16 @@ static void *Cache_bgdl(void *arg)
 }
 
 long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
-                const off_t offset)
+                const off_t offset_start)
 {
     long send;
-    off_t dl_offset = offset / cf->blksz * cf->blksz;
+
+    /* The offset of the segment to be downloaded */
+    off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
 
     /* ------------------ Check if the segment already exists ---------------*/
-    if (Seg_exist(cf, offset)) {
-        send = Data_read(cf, (uint8_t *) output_buf, len, offset);
+    if (Seg_exist(cf, dl_offset)) {
+        send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
         goto bgdl;
     } else {
         /* Wait for any other download thread to finish*/
@@ -964,10 +966,10 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
                 pthread_self());
         #endif
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
-        if (Seg_exist(cf, offset)) {
+        if (Seg_exist(cf, dl_offset)) {
             /* The segment now exists - it was downloaded by another
              * download thread. Send it off and unlock the I/O */
-            send = Data_read(cf, (uint8_t *) output_buf, len, offset);
+            send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
             #ifdef CACHE_LOCK_DEBUG
             fprintf(stderr, "Cache_read(): thread %lu: unlocking w_lock;\n",
                     pthread_self());
@@ -983,13 +985,6 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     fprintf(stderr, "Cache_read(): thread %lu: ", pthread_self());
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                                 dl_offset);
-    if (recv < len) {
-        send = recv;
-    } else {
-        send = len;
-    }
-    memmove(output_buf, recv_buf + (offset - dl_offset), send);
-
     /*
      * check if we have received enough data, write it to the disk
      *
@@ -1006,6 +1001,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
                 "Cache_read(): received %ld, possible network error.\n", recv);
     }
     free(recv_buf);
+    send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
 
     #ifdef CACHE_LOCK_DEBUG
     fprintf(stderr, "Cache_read(): thread %lu: unlocking w_lock;\n",
@@ -1015,7 +1011,9 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
 
     /* -----------Download the next segment in background -------------------*/
     bgdl:
-    if ( (cf->next_offset > dl_offset) &&
+    ;
+    off_t next_offset = round_div(offset_start, cf->blksz) * cf->blksz;
+    if ( (next_offset > dl_offset) &&
         !Seg_exist(cf, cf->next_offset) &&
         cf->next_offset < cf->content_length ){
         /* Stop the spawning of multiple background pthreads */
@@ -1024,7 +1022,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
             fprintf(stderr, "Cache_read(): thread %lu: trylocked bgt_lock;\n",
                     pthread_self());
             #endif
-            cf->next_offset = round_div(offset, cf->blksz) * cf->blksz;
+            cf->next_offset = next_offset;
             if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
                 fprintf(stderr,
                     "Cache_read(): Error creating background download thread\n"
