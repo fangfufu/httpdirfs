@@ -7,7 +7,6 @@
 
 #include <pthread.h>
 #include <stdint.h>
-#include <stdlib.h>
 
 /**
  * \brief the maximum length of a path and a URL.
@@ -28,7 +27,6 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x);
  */
 void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
 
-
 /**
  * \brief append a path
  * \details This function appends a path with the next level, while taking the
@@ -42,6 +40,5 @@ char *path_append(const char *path, const char *filename);
  * \brief division, but rounded to the nearest integer rather than truncating
  */
 int64_t round_div(int64_t a, int64_t b);
-
 
 #endif

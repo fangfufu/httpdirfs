@@ -1,3 +1,5 @@
 *.o
 *.kate-swp
 httpdirfs
+.depend
+doc/html

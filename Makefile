@@ -37,4 +37,10 @@ uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 
-.PHONY: all doc install clean distclean uninstall
+depend: .depend
+.depend: src/*.c
+	rm -f ./.depend
+	$(CC) $(CFLAGS) -MM $^ -MF ./.depend;
+include .depend
+
+.PHONY: all doc install clean distclean uninstall depend
