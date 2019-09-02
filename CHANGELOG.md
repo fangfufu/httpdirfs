@@ -4,16 +4,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.1.9] - 2019-08-31
+## [Unreleased]
+
+## [1.1.9] - 2019-09-02
 ### Changed
-- Improved the performance of directory listing generation while there are
+-   Improved the performance of directory listing generation while there are
 on-going file transfers
-- Wrapped all mutex locking and unlocking functions in error checking macro
+-   Wrapped mutex locking and unlocking functions in error checking functions.
 
 ### Fixed
-- Fixed issue #40 - Crashes with "API function called from within callback".
-- Cache system bug fix - now keep track of the number of times a file has been opened. The on-disk
-  cache file no longer gets opened multiple times, if a file is opened multiple times.
+-   Fixed issue #40 - Crashes with "API function called from within callback".
+-   Cache system: now keep track of the number of times a cache file has been
+opened.
+    -   The on-disk cache file no longer gets opened multiple times, if
+        a file is opened multiple times. This used to cause inconsistencies
+        between two opened cache files.
+-   Cache system: Fixed buffer over-read at the boundary.
+    -   Say we are using a lock size of 1024k, we send a request for 128k at
+    1008k. It won't trigger the download, because we have already downloaded the
+    first 1024k at byte 0. So it would read off from the empty disk space!
+    -   This problem only occurred during the first time you download a file.
+    During subsequent accesses, when you are only reading from the cache, this
+    problem did not occur.
+-   Cache system: Previously it was possible for cache_bgdl()'s download offset
+    to be modified by the parent thread after the child thread had been
+    launched. This used to cause permanent cache file corruption.
+-   Cache system: cache_bgdl() no longer prefetches beyond EOF.
 
 ## [1.1.8] - 2019-08-24
 ### Changed
