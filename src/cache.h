@@ -140,6 +140,6 @@ void Cache_delete(const char *fn);
  * \return the length of the segment the cache system managed to obtain.
  * \note Called by fs_read(), verified to be working
  */
-long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset);
-
+long Cache_read(Cache *cf, char * const output_buf, const off_t len,
+                const off_t offset);
 #endif
