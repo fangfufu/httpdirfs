@@ -922,12 +922,12 @@ static void *Cache_bgdl(void *arg)
     uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_bgdl(): thread %lu: ", pthread_self());
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
-                              cf->next_offset);
+                              cf->next_dl_offset);
     if ( (recv == cf->blksz) ||
-        (cf->next_offset == (cf->content_length / cf->blksz * cf->blksz)) )
+        (cf->next_dl_offset == (cf->content_length / cf->blksz * cf->blksz)) )
     {
-        Data_write(cf, recv_buf, recv, cf->next_offset);
-        Seg_set(cf, cf->next_offset, 1);
+        Data_write(cf, recv_buf, recv, cf->next_dl_offset);
+        Seg_set(cf, cf->next_dl_offset, 1);
     }  else {
         fprintf(stderr,
                 "Cache_bgdl(): received %ld, possible network error.\n", recv);
@@ -1012,17 +1012,19 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     /* -----------Download the next segment in background -------------------*/
     bgdl:
     ;
-    off_t next_offset = round_div(offset_start, cf->blksz) * cf->blksz;
-    if ( (next_offset > dl_offset) &&
-        !Seg_exist(cf, cf->next_offset) &&
-        cf->next_offset < cf->content_length ){
+    off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
+//     printf("offset_start: %ld, next_dl_offset: %ld, dl_offset: %ld, next_seg_exists: %d, content_length :%ld\n",
+//            offset_start, next_dl_offset, dl_offset, Seg_exist(cf, next_dl_offset), cf->content_length);
+    if ( (next_dl_offset > dl_offset) &&
+        !Seg_exist(cf, next_dl_offset) &&
+        cf->next_dl_offset < cf->content_length ){
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
             #ifdef CACHE_LOCK_DEBUG
             fprintf(stderr, "Cache_read(): thread %lu: trylocked bgt_lock;\n",
                     pthread_self());
             #endif
-            cf->next_offset = next_offset;
+            cf->next_dl_offset = next_dl_offset;
             if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
                 fprintf(stderr,
                     "Cache_read(): Error creating background download thread\n"
