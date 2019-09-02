@@ -360,20 +360,23 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
     #endif
     PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
+    long byte_read = 0;
+
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
         fprintf(stderr, "Data_read(): fseeko(): %s\n", strerror(errno));
-
-        #ifdef CACHE_LOCK_DEBUG
-        fprintf(stderr, "Data_read(): thread %lu: unlocking seek_lock;\n",
-                pthread_self());
-        #endif
-        PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
-
-        return -EIO;
+        byte_read = -EIO;
+        goto end;
     }
 
-    long byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
+    if (offset + len > cf->content_length) {
+        len -= offset + len - cf->content_length;
+        if (len < 0) {
+            goto end;
+        }
+    }
+
+    byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_read != len) {
         fprintf(stderr,
                 "Data_read(): fread(): requested %ld, returned %ld!\n",
@@ -390,6 +393,7 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         }
     }
 
+    end:
     #ifdef CACHE_LOCK_DEBUG
     fprintf(stderr, "Data_read(): thread %lu: unlocking seek_lock;\n",
             pthread_self());
@@ -424,19 +428,16 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
     #endif
     PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
+    long byte_written = 0;
+
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
         fprintf(stderr, "Data_write(): fseeko(): %s\n", strerror(errno));
-
-        #ifdef CACHE_LOCK_DEBUG
-        fprintf(stderr, "Data_write(): thread %lu: unlocking seek_lock;\n",
-                pthread_self());
-        #endif
-        PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
-        return -EIO;
+        byte_written = -EIO;
+        goto end;
     }
 
-    long byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
+    byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_written != len) {
         fprintf(stderr,
                 "Data_write(): fwrite(): requested %ld, returned %ld!\n",
@@ -448,6 +449,7 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
         }
     }
 
+    end:
     #ifdef CACHE_LOCK_DEBUG
     fprintf(stderr, "Data_write(): thread %lu: unlocking seek_lock;\n",
             pthread_self());

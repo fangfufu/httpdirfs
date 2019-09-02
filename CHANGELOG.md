@@ -26,10 +26,12 @@ opened.
     -   This problem only occurred during the first time you download a file.
     During subsequent accesses, when you are only reading from the cache, this
     problem did not occur.
--   Cache system: Previously it was possible for cache_bgdl()'s download offset
+-   Cache system: Previously it was possible for Cache_bgdl()'s download offset
     to be modified by the parent thread after the child thread had been
     launched. This used to cause permanent cache file corruption.
--   Cache system: cache_bgdl() no longer prefetches beyond EOF.
+-   Cache system: Cache_bgdl() no longer prefetches beyond EOF.
+-   Cache system: Data_read() no longer gives warning messages when reaching the
+end of the cache file.
 
 ## [1.1.8] - 2019-08-24
 ### Changed
