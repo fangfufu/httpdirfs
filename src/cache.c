@@ -1013,11 +1013,9 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     bgdl:
     ;
     off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
-//     printf("offset_start: %ld, next_dl_offset: %ld, dl_offset: %ld, next_seg_exists: %d, content_length :%ld\n",
-//            offset_start, next_dl_offset, dl_offset, Seg_exist(cf, next_dl_offset), cf->content_length);
     if ( (next_dl_offset > dl_offset) &&
         !Seg_exist(cf, next_dl_offset) &&
-        cf->next_dl_offset < cf->content_length ){
+        next_dl_offset < cf->content_length ){
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
             #ifdef CACHE_LOCK_DEBUG
