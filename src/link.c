@@ -65,7 +65,7 @@ static Link *Link_new(const char *linkname, LinkType type)
     return link;
 }
 
-static LinkType linkname_type(const char *linkname)
+static LinkType linkname_to_LinkType(const char *linkname)
 {
     /* The link name has to start with alphanumerical character */
     if (!isalnum(linkname[0])) {
@@ -81,7 +81,7 @@ static LinkType linkname_type(const char *linkname)
         return LINK_DIR;
     }
 
-    return LINK_FILE;
+    return LINK_UNINITIALISED_FILE;
 }
 
 /**
@@ -97,8 +97,8 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     if (node->v.element.tag == GUMBO_TAG_A &&
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
-        LinkType type = linkname_type(href->value);
-    if ( (type == LINK_DIR) || (type == LINK_FILE) ) {
+        LinkType type = linkname_to_LinkType(href->value);
+    if ( (type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE) ) {
             LinkTable_add(linktbl, Link_new(href->value, type));
         }
     }
@@ -154,8 +154,14 @@ static CURL *Link_to_curl(Link *link)
     return curl;
 }
 
-void Link_get_stat(Link *this_link)
+void Link_req_file_stat(Link *this_link)
 {
+    if (this_link->type != LINK_UNINITIALISED_FILE) {
+        fprintf(stderr, "Link_req_file_stat(), invalid request, LinkType: %c",
+                this_link->type);
+        exit_failure();
+    }
+
     CURL *curl = Link_to_curl(this_link);
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
     curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
@@ -178,7 +184,7 @@ void Link_get_stat(Link *this_link)
     transfer_nonblocking(curl);
 }
 
-void Link_set_stat(Link* this_link, CURL *curl)
+void Link_set_file_stat(Link* this_link, CURL *curl)
 {
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -186,22 +192,57 @@ void Link_set_stat(Link* this_link, CURL *curl)
         double cl = 0;
         curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
         curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-        if (this_link->type == 'F') {
-            if (cl == -1) {
-                this_link->type = LINK_INVALID;
-            } else {
-                this_link->content_length = cl;
-            }
+        if (cl == -1) {
+            this_link->type = LINK_INVALID;
+        } else {
+            this_link->type = LINK_FILE;
+            this_link->content_length = cl;
         }
     } else {
-        fprintf(stderr, "Link_set_stat(): HTTP %ld", http_resp);
-        this_link->type = LINK_INVALID;
+        fprintf(stderr, "Link_set_file_stat(): HTTP %ld", http_resp);
         if (http_resp == HTTP_TOO_MANY_REQUESTS) {
-            fprintf(stderr, ", re-adding the link to the queue");
-            Link_get_stat(this_link);
+            fprintf(stderr, ", retrying later.\n");
+        } else {
+            this_link->type = LINK_INVALID;
         }
         fprintf(stderr, ".\n");
     }
+}
+
+/**
+ * \brief Fill in the uninitialised entries in a link table
+ * \details Try and get the stats for each link in the link table. This will get
+ * repeated until the uninitialised entry count drop to zero.
+ */
+static void LinkTable_uninitialised_fill(LinkTable *linktbl)
+{
+    int u;
+    char s[STATUS_LEN];
+    fprintf(stderr, "LinkTable_uninitialised_fill(): ... ");
+    do {
+        u = 0;
+        for (int i = 0; i < linktbl->num; i++) {
+            Link *this_link = linktbl->links[i];
+            if (this_link->type == LINK_UNINITIALISED_FILE) {
+                Link_req_file_stat(linktbl->links[i]);
+                u++;
+            }
+        }
+        /* Block until the gaps are filled */
+        int n = curl_multi_perform_once();
+        int i = 0;
+        int j = 0;
+        while ( (i = curl_multi_perform_once()) ) {
+            if (j) {
+                erase_string(stderr, STATUS_LEN, s);
+            }
+            snprintf(s, STATUS_LEN, "%d / %d", n-i, n);
+            fprintf(stderr, "%s", s);
+            j++;
+        }
+    } while (u);
+    erase_string(stderr, STATUS_LEN, s);
+    fprintf(stderr, "Done!\n");
 }
 
 static void LinkTable_fill(LinkTable *linktbl)
@@ -220,50 +261,22 @@ static void LinkTable_fill(LinkTable *linktbl)
         strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
         curl_free(unescaped_linkname);
         curl_easy_cleanup(c);
-        Link_get_stat(this_link);
     }
-    /* Block until the LinkTable is filled up */
-    fprintf(stderr, "LinkTable_fill(): ... ");
-    int n = curl_multi_perform_once();
-    int i = 0;
-    int j = 0;
-    char s[STATUS_LEN];
-    while ( (i = curl_multi_perform_once()) ) {
-        if (j) {
-            for (size_t k = 0; k < strnlen(s, STATUS_LEN); k++) {
-                fprintf(stderr, "\b");
-            }
-        }
-        snprintf(s, STATUS_LEN, "%d / %d", i, n);
-        fprintf(stderr, "%s", s);
-        j++;
-    }
-
-    for (size_t k = 0; k < strnlen(s, MAX_FILENAME_LEN); k++) {
-        fprintf(stderr, "\b");
-    }
-    fprintf(stderr, "Done!\n");
+    LinkTable_uninitialised_fill(linktbl);
 }
 
 /**
  * \brief fill in the gaps in a link table
  */
-static void LinkTable_gap_fill(LinkTable *linktbl)
+static void LinkTable_invalid_reset(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        if ((this_link->type != LINK_FILE) &&
-            (this_link->type != LINK_DIR) &&
-            (this_link->type != LINK_HEAD)) {
-            Link_get_stat(linktbl->links[i]);
+        if (this_link->type == LINK_INVALID) {
+            this_link->type = LINK_UNINITIALISED_FILE;
         }
     }
-
-    /* Block until the gaps are filled */
-    while (curl_multi_perform_once())
-        ;
 }
-
 
 static void LinkTable_free(LinkTable *linktbl)
 {
@@ -381,7 +394,8 @@ HTTP %ld\n", url, http_resp);
         LinkTable_fill(linktbl);
     } else {
         /* Fill in the holes in the link table */
-        LinkTable_gap_fill(linktbl);
+        LinkTable_invalid_reset(linktbl);
+        LinkTable_uninitialised_fill(linktbl);
     }
 
     /* Save the link table */

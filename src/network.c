@@ -135,7 +135,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
         if (!curl_msg->data.result) {
             /* Transfer successful, query the file size */
             if (transfer->type == FILESTAT) {
-                Link_set_stat(transfer->link, curl);
+                Link_set_file_stat(transfer->link, curl);
             }
         } else {
             fprintf(stderr, "curl_process_msgs(): %d - %s <%s>\n",

@@ -20,7 +20,8 @@ typedef enum {
     LINK_HEAD = 'H',
     LINK_DIR = 'D',
     LINK_FILE = 'F',
-    LINK_INVALID = 'I'
+    LINK_INVALID = 'I',
+    LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
 
 /**
@@ -74,12 +75,12 @@ void link_system_init();
 /**
  * \brief Add a link to the curl multi bundle for querying stats
  */
-void Link_get_stat(Link *this_link);
+void Link_req_file_stat(Link *this_link);
 
 /**
  * \brief Set the stats of a link, after curl multi handle finished querying
  */
-void Link_set_stat(Link* this_link, CURL *curl);
+void Link_set_file_stat(Link* this_link, CURL *curl);
 
 /**
  * \brief create a new LinkTable

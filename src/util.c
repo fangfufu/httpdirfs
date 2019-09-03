@@ -3,7 +3,6 @@
 #include <execinfo.h>
 #include <unistd.h>
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -71,4 +70,18 @@ void exit_failure()
     backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO);
 
     exit(EXIT_FAILURE);
+}
+
+void erase_string(FILE *file, size_t max_len, char *s)
+{
+    size_t l = strnlen(s, max_len);
+    for (size_t k = 0; k < l; k++) {
+        fprintf(file, "\b");
+    }
+    for (size_t k = 0; k < l; k++) {
+        fprintf(file, " ");
+    }
+    for (size_t k = 0; k < l; k++) {
+        fprintf(file, "\b");
+    }
 }
