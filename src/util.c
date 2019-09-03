@@ -58,7 +58,7 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
     }
 }
 
-void exit_failure()
+void exit_failure(void)
 {
     int nptrs;
     void *buffer[BT_BUF_SIZE];

@@ -46,7 +46,7 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
 /**
  * \brief wrapper for exit(EXIT_FAILURE)
  */
-void exit_failure();
+void exit_failure(void);
 
 
 /**
