@@ -107,7 +107,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
 {
     (void) n_running_curl;
     (void) n_mesgs;
-    static int slept = 0;
+    static volatile int slept = 0;
     if (curl_msg->msg == CURLMSG_DONE) {
         TransferStruct *transfer;
         CURL *curl = curl_msg->easy_handle;
