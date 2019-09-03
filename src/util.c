@@ -42,8 +42,8 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
     int i;
     i = pthread_mutex_unlock(x);
     if (i) {
-        fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i,
-        strerror(i));
+        fprintf(stderr, "thread %lu: pthread_mutex_unlock() failed, %d, %s\n",
+                pthread_self(), i, strerror(i));
         exit_failure();
     }
 }
@@ -53,8 +53,8 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
-        fprintf(stderr, "pthread_mutex_lock failed, %d, %s\n", i,
-        strerror(i));
+        fprintf(stderr, "thread %lu: pthread_mutex_lock() failed, %d, %s\n",
+                pthread_self(), i, strerror(i));
         exit_failure();
     }
 }
