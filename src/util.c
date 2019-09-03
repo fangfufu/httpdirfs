@@ -7,7 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BT_BUF_SIZE 255
+#define BT_BUF_SIZE 100
 
 char *path_append(const char *path, const char *filename)
 {
