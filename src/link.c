@@ -221,8 +221,28 @@ static void LinkTable_fill(LinkTable *linktbl)
         Link_get_stat(this_link);
     }
     /* Block until the LinkTable is filled up */
-    while (curl_multi_perform_once())
-        ;
+    fprintf(stderr, "LinkTable_fill(): ");
+    int n = curl_multi_perform_once();
+    int i = 0;
+    int j = 0;
+    char s[64];
+    while ( (i = curl_multi_perform_once()) ) {
+        if (1) {
+            if (j) {
+                for (size_t k = 0; k < strnlen(s, 64); k++) {
+                    fprintf(stderr, "\b");
+                }
+            }
+            snprintf(s, 64, "... %d / %d", i, n);
+            fprintf(stderr, "%s", s);
+        }
+        j++;
+    }
+
+    for (size_t k = 0; k < strnlen(s, MAX_FILENAME_LEN); k++) {
+        fprintf(stderr, "\b");
+    }
+    fprintf(stderr, "... Done!\n");
 }
 
 /**
