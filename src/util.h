@@ -28,6 +28,11 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x);
 void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
 
 /**
+ * \brief wrapper for exit(EXIT_FAILURE)
+ */
+void exit_failure();
+
+/**
  * \brief append a path
  * \details This function appends a path with the next level, while taking the
  * trailing slash of the upper level into account.

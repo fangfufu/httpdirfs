@@ -1,6 +1,6 @@
 VERSION=1.1.9
 
-CFLAGS+= -g -O2 -Wall -Wextra -Wshadow\
+CFLAGS+= -O2 -Wall -Wextra -Wshadow -rdynamic\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\" \
 	`pkg-config --cflags-only-I gumbo libcurl fuse`
 LDFLAGS+= -pthread -lgumbo -lcurl -lfuse -lcrypto \

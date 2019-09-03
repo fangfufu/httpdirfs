@@ -250,14 +250,14 @@ LinkTable *network_init(const char *url)
     /* ------- Global related ----------*/
     if (curl_global_init(CURL_GLOBAL_ALL)) {
         fprintf(stderr, "network_init(): curl_global_init() failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     /* -------- Share related ----------*/
     CURL_SHARE = curl_share_init();
     if (!(CURL_SHARE)) {
         fprintf(stderr, "network_init(): curl_share_init() failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
@@ -266,7 +266,7 @@ LinkTable *network_init(const char *url)
 
     if (pthread_mutex_init(&curl_lock, NULL) != 0) {
         fprintf(stderr, "network_init(): curl_lock initialisation failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
@@ -275,7 +275,7 @@ LinkTable *network_init(const char *url)
     curl_multi = curl_multi_init();
     if (!curl_multi) {
         fprintf(stderr, "network_init(): curl_multi_init() failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
                       NETWORK_CONFIG.max_conns);
@@ -286,7 +286,7 @@ LinkTable *network_init(const char *url)
     if (pthread_mutex_init(&transfer_lock, NULL)) {
         fprintf(stderr,
                 "network_init(): transfer_lock initialisation failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     /*
@@ -354,7 +354,7 @@ void transfer_blocking(CURL *curl)
     if(res > 0) {
         fprintf(stderr, "transfer_blocking(): %d, %s\n",
                 res, curl_multi_strerror(res));
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     while (transfer.transferring) {
@@ -394,7 +394,7 @@ size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
     if(!mem->memory) {
         /* out of memory! */
         fprintf(stderr, "write_memory_callback(): realloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
         return 0;
     }
 

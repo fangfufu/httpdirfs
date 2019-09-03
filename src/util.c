@@ -1,8 +1,13 @@
 #include "util.h"
 
+#include <execinfo.h>
+#include <unistd.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define BT_BUF_SIZE 255
 
 char *path_append(const char *path, const char *filename)
 {
@@ -17,7 +22,7 @@ char *path_append(const char *path, const char *filename)
     str = calloc(ul + sl + needs_separator + 1, sizeof(char));
     if (!str) {
         fprintf(stderr, "path_append(): calloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     strncpy(str, path, ul);
     if (needs_separator) {
@@ -39,7 +44,7 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
     if (i) {
         fprintf(stderr, "pthread_mutex_unlock failed, %d, %s\n", i,
         strerror(i));
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 }
 
@@ -50,6 +55,20 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
     if (i) {
         fprintf(stderr, "pthread_mutex_lock failed, %d, %s\n", i,
         strerror(i));
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
+}
+
+void exit_failure()
+{
+    int nptrs;
+    void *buffer[BT_BUF_SIZE];
+
+    nptrs = backtrace(buffer, BT_BUF_SIZE);
+    fprintf(stderr, "\nOops! HTTPDirFS crashed! :(\n");
+    fprintf(stderr, "backtrace() returned the following %d addresses:\n",
+            nptrs);
+    backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO);
+
+    exit(EXIT_FAILURE);
 }

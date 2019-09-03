@@ -122,7 +122,7 @@ void CacheSystem_init(const char *path, int url_supplied)
     if (pthread_mutex_init(&cf_lock, NULL) != 0) {
         fprintf(stderr,
                 "CacheSystem_init(): cf_lock initialisation failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     if (url_supplied) {
@@ -136,7 +136,7 @@ void CacheSystem_init(const char *path, int url_supplied)
     if (!dir) {
         fprintf(stderr,
                 "CacheSystem_init(): opendir(): %s\n", strerror(errno));
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     /* Handle the case of missing '/' */
@@ -482,7 +482,7 @@ static Cache *Cache_alloc()
     Cache *cf = calloc(1, sizeof(Cache));
     if (!cf) {
         fprintf(stderr, "Cache_new(): calloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     if (pthread_mutex_init(&cf->seek_lock, NULL)) {
@@ -689,7 +689,7 @@ int Cache_create(Link *this_link)
 
     if (!cf->seg) {
         fprintf(stderr, "Cache_create(): cf->seg calloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     if (Meta_create(cf)) {

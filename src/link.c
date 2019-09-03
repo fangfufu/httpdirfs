@@ -11,6 +11,8 @@
 #include <string.h>
 #include <unistd.h>
 
+#define STATUS_LEN 64
+
 /* ---------------- External variables -----------------------*/
 LinkTable *ROOT_LINK_TBL = NULL;
 int ROOT_LINK_OFFSET = 0;
@@ -29,7 +31,7 @@ void link_system_init()
     if (pthread_mutex_init(&link_lock, NULL) != 0) {
         fprintf(stderr,
                 "link_system_init(): link_lock initialisation failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 }
 
@@ -39,7 +41,7 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
     if (!linktbl->links) {
         fprintf(stderr, "LinkTable_add(): realloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     linktbl->links[linktbl->num - 1] = link;
 }
@@ -49,7 +51,7 @@ static Link *Link_new(const char *linkname, LinkType type)
     Link *link = calloc(1, sizeof(Link));
     if (!link) {
         fprintf(stderr, "Link_new(): calloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
     link->type = type;
@@ -167,7 +169,7 @@ void Link_get_stat(Link *this_link)
     TransferStruct *transfer = malloc(sizeof(TransferStruct));
     if (!transfer) {
         fprintf(stderr, "Link_get_size(): malloc failed!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     transfer->link = this_link;
     transfer->type = FILESTAT;
@@ -225,15 +227,15 @@ static void LinkTable_fill(LinkTable *linktbl)
     int n = curl_multi_perform_once();
     int i = 0;
     int j = 0;
-    char s[64];
+    char s[STATUS_LEN];
     while ( (i = curl_multi_perform_once()) ) {
         if (1) {
             if (j) {
-                for (size_t k = 0; k < strnlen(s, 64); k++) {
+                for (size_t k = 0; k < strnlen(s, STATUS_LEN); k++) {
                     fprintf(stderr, "\b");
                 }
             }
-            snprintf(s, 64, "... %d / %d", i, n);
+            snprintf(s, STATUS_LEN, "... %d / %d", i, n);
             fprintf(stderr, "%s", s);
         }
         j++;
@@ -313,7 +315,7 @@ LinkTable *LinkTable_new(const char *url)
     LinkTable *linktbl = calloc(1, sizeof(LinkTable));
     if (!linktbl) {
         fprintf(stderr, "LinkTable_new(): calloc failure!\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
 
     /* populate the base URL */
@@ -573,7 +575,7 @@ Link *path_to_Link(const char *path)
     char *new_path = strndup(path, MAX_PATH_LEN);
     if (!new_path) {
         fprintf(stderr, "path_to_Link(): cannot allocate memory\n");
-        exit(EXIT_FAILURE);
+        exit_failure();
     }
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
     free(new_path);
