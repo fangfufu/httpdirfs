@@ -12,7 +12,8 @@ typedef enum {
     HTTP_OK                     = 200,
     HTTP_PARTIAL_CONTENT        = 206,
     HTTP_RANGE_NOT_SATISFIABLE  = 416,
-    HTTP_TOO_MANY_REQUESTS      = 429
+    HTTP_TOO_MANY_REQUESTS      = 429,
+    HTTP_UNKNOWN_ERROR          = 520
 } HTTPResponseCode;
 
 typedef enum {

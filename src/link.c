@@ -200,9 +200,11 @@ void Link_set_file_stat(Link* this_link, CURL *curl)
         }
     } else {
         fprintf(stderr, "Link_set_file_stat(): HTTP %ld", http_resp);
-        if (http_resp == HTTP_TOO_MANY_REQUESTS) {
+        if ((http_resp == HTTP_TOO_MANY_REQUESTS) ||
+            (http_resp == HTTP_UNKNOWN_ERROR)) {
             fprintf(stderr, ", retrying later.\n");
         } else {
+            fprintf(stderr, "\n");
             this_link->type = LINK_INVALID;
         }
         fprintf(stderr, ".\n");
