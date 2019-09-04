@@ -26,7 +26,6 @@ static pthread_mutex_t transfer_lock;
 static pthread_mutex_t *crypto_lockarray;
 /** \brief mutex for curl share interface itself */
 static pthread_mutex_t curl_lock;
-/** \brief network configuration */
 
 /* -------------------- Functions -------------------------- */
 #pragma GCC diagnostic push
@@ -37,9 +36,9 @@ static pthread_mutex_t curl_lock;
  */
 static void crypto_lock_callback(int mode, int type, char *file, int line)
 {
-    (void)file;
-    (void)line;
-    if(mode & CRYPTO_LOCK) {
+    (void) file;
+    (void) line;
+    if (mode & CRYPTO_LOCK) {
         PTHREAD_MUTEX_LOCK(&(crypto_lockarray[type]));
     } else {
         PTHREAD_MUTEX_UNLOCK(&(crypto_lockarray[type]));
@@ -133,7 +132,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
         }
 
         if (!curl_msg->data.result) {
-            /* Transfer successful, query the file size */
+            /* Transfer successful, set the file size */
             if (transfer->type == FILESTAT) {
                 Link_set_file_stat(transfer->link, curl);
             }

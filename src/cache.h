@@ -89,7 +89,7 @@ extern int MAX_SEGBC;
  * If these directories do not exist, they will be created.
  * \note Called by parse_arg_list(), verified to be working
  */
-void CacheSystem_init(const char *path, int path_supplied);
+void CacheSystem_init(const char *path, int url_supplied);
 
 /**
  * \brief Create directories under the cache directory structure, if they do
