@@ -266,16 +266,19 @@ static void LinkTable_fill(LinkTable *linktbl)
 }
 
 /**
- * \brief fill in the gaps in a link table
+ * \brief Reset invalid links in the link table
  */
 static void LinkTable_invalid_reset(LinkTable *linktbl)
 {
+    int j = 0;
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         if (this_link->type == LINK_INVALID) {
             this_link->type = LINK_UNINITIALISED_FILE;
+            j++;
         }
     }
+    fprintf(stderr, "LinkTable_invalid_reset(): %d invalid links\n", j);
 }
 
 static void LinkTable_free(LinkTable *linktbl)
@@ -348,12 +351,14 @@ LinkTable *LinkTable_new(const char *url)
         transfer_blocking(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (HTTP_temp_failure(http_resp)) {
-            fprintf(stderr, "LinkTable_new(): URL: %s, HTTP %ld, \
-retrying later.\n", url, http_resp);
+            fprintf(stderr,
+                    "LinkTable_new(): URL: %s, HTTP %ld, retrying later.\n",
+                    url, http_resp);
             sleep(HTTP_WAIT_SEC);
         } else if (http_resp != HTTP_OK) {
-            fprintf(stderr, "LinkTable_new(): cannot retrieve URL: %s, \
-HTTP %ld\n", url, http_resp);
+            fprintf(stderr,
+                    "LinkTable_new(): cannot retrieve URL: %s, HTTP %ld\n",
+                    url, http_resp);
             LinkTable_free(linktbl);
             curl_easy_cleanup(curl);
             return NULL;
@@ -380,6 +385,9 @@ HTTP %ld\n", url, http_resp);
         disk_linktbl = LinkTable_disk_open(unescaped_path);
         if (disk_linktbl) {
             /* Check if we need to update the link table */
+            fprintf(stderr,
+                "LinkTable_new(): disk_linktbl->num: %d, linktbl->num: %d\n",
+                disk_linktbl->num, linktbl->num);
             if (disk_linktbl->num == linktbl->num) {
                 LinkTable_free(linktbl);
                 linktbl = disk_linktbl;
@@ -401,7 +409,9 @@ HTTP %ld\n", url, http_resp);
 
     /* Save the link table */
     if (CACHE_SYSTEM_INIT) {
-        LinkTable_disk_save(linktbl, unescaped_path);
+        if (LinkTable_disk_save(linktbl, unescaped_path)) {
+            exit_failure();
+        }
     }
 
     curl_free(unescaped_path);
@@ -419,8 +429,13 @@ HTTP %ld\n", url, http_resp);
 
 static void LinkTable_disk_delete(const char *dirn)
 {
-    char *metadirn = path_append("cache/meta/", dirn);
-    char *path = path_append(metadirn, ".LinkTable");
+    char *metadirn = path_append(META_DIR, dirn);
+    char *path;
+    if (metadirn[strnlen(metadirn, MAX_PATH_LEN)] == '/') {
+        path = path_append(metadirn, ".LinkTable");
+    } else {
+        path = path_append(metadirn, "/.LinkTable");
+    }
     if(unlink(path)) {
         fprintf(stderr, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
                 strerror(errno));
@@ -431,8 +446,13 @@ static void LinkTable_disk_delete(const char *dirn)
 
 int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 {
-    char *metadirn = path_append("cache/meta/", dirn);
-    char *path = path_append(metadirn, ".LinkTable");
+    char *metadirn = path_append(META_DIR, dirn);
+    char *path;
+    if (metadirn[strnlen(metadirn, MAX_PATH_LEN)] == '/') {
+        path = path_append(metadirn, ".LinkTable");
+    } else {
+        path = path_append(metadirn, "/.LinkTable");
+    }
     FILE *fp = fopen(path, "w");
     free(metadirn);
 
@@ -472,8 +492,13 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 
 LinkTable *LinkTable_disk_open(const char *dirn)
 {
-    char *metadirn = path_append("cache/meta/", dirn);
-    char *path = path_append(metadirn, ".LinkTable");
+    char *metadirn = path_append(META_DIR, dirn);
+    char *path;
+    if (metadirn[strnlen(metadirn, MAX_PATH_LEN)] == '/') {
+        path = path_append(metadirn, ".LinkTable");
+    } else {
+        path = path_append(metadirn, "/.LinkTable");
+    }
     FILE *fp = fopen(path, "r");
     free(metadirn);
 

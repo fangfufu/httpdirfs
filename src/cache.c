@@ -40,6 +40,7 @@ typedef enum {
 int CACHE_SYSTEM_INIT = 0;
 int DATA_BLK_SZ = 0;
 int MAX_SEGBC = DEFAULT_MAX_SEGBC;
+char *META_DIR;
 
 /* ----------------- Static variables ----------------------- */
 
@@ -48,12 +49,6 @@ int MAX_SEGBC = DEFAULT_MAX_SEGBC;
  * \details Ensure cache opening and cache closing is an atomic operation
  */
 static pthread_mutex_t cf_lock;
-
-
-/**
- * \brief The metadata directory
- */
-static char *META_DIR;
 
 /**
  * \brief The data directory
