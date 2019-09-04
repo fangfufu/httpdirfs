@@ -200,14 +200,12 @@ void Link_set_file_stat(Link* this_link, CURL *curl)
         }
     } else {
         fprintf(stderr, "Link_set_file_stat(): HTTP %ld", http_resp);
-        if ((http_resp == HTTP_TOO_MANY_REQUESTS) ||
-            (http_resp == HTTP_UNKNOWN_ERROR)) {
+        if (HTTP_temp_failure(http_resp)) {
             fprintf(stderr, ", retrying later.\n");
         } else {
-            fprintf(stderr, "\n");
             this_link->type = LINK_INVALID;
+            fprintf(stderr, ".\n");
         }
-        fprintf(stderr, ".\n");
     }
 }
 
@@ -344,23 +342,24 @@ LinkTable *LinkTable_new(const char *url)
     buf.memory = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
-    /* If we get HTTP 429, wait for 5 seconds before retry */
-    volatile long http_resp = 0;
+    /* If we get temporary HTTP failure, wait for 5 seconds before retry */
+    long http_resp = 0;
     do {
         transfer_blocking(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-        if (http_resp == HTTP_TOO_MANY_REQUESTS) {
-            fprintf(stderr, "LinkTable_new(): URL: %s, HTTP 429, \
-Too Many Requests\n", url);
-            sleep(HTTP_429_WAIT);
+        if (HTTP_temp_failure(http_resp)) {
+            fprintf(stderr, "LinkTable_new(): URL: %s, HTTP %ld, \
+retrying later.\n", url, http_resp);
+            sleep(HTTP_WAIT_SEC);
         } else if (http_resp != HTTP_OK) {
             fprintf(stderr, "LinkTable_new(): cannot retrieve URL: %s, \
 HTTP %ld\n", url, http_resp);
             LinkTable_free(linktbl);
             curl_easy_cleanup(curl);
             return NULL;
-        };
-    } while (http_resp != HTTP_OK);
+        }
+    } while (HTTP_temp_failure(http_resp));
+
 
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
     curl_easy_cleanup(curl);

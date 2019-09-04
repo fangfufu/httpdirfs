@@ -10,12 +10,12 @@
 #include <unistd.h>
 
 #define DEFAULT_NETWORK_MAX_CONNS   10
-#define DEFAULT_HTTP_429_WAIT       5
+#define DEFAULT_HTTP_WAIT_SEC       5
 
 /* ----------------- External variables ---------------------- */
 CURLSH *CURL_SHARE;
 NetworkConfigStruct NETWORK_CONFIG;
-int HTTP_429_WAIT = DEFAULT_HTTP_429_WAIT;
+int HTTP_WAIT_SEC = DEFAULT_HTTP_WAIT_SEC;
 
 /* ----------------- Static variable ----------------------- */
 /** \brief curl multi interface handle */
@@ -119,12 +119,12 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
         /* Wait for 5 seconds if we get HTTP 429 */
         long http_resp = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-        if (http_resp == HTTP_TOO_MANY_REQUESTS) {
+        if (HTTP_temp_failure(http_resp)) {
             if (!slept) {
                 fprintf(stderr,
-                        "curl_process_msgs(): HTTP 429, sleeping for %d sec\n",
-                        HTTP_429_WAIT);
-                sleep(HTTP_429_WAIT);
+                        "curl_process_msgs(): HTTP %ld, sleeping for %d sec\n",
+                        http_resp, HTTP_WAIT_SEC);
+                sleep(HTTP_WAIT_SEC);
                 slept = 1;
             }
         } else {
@@ -402,4 +402,16 @@ size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
     mem->memory[mem->size] = 0;
 
     return realsize;
+}
+
+int HTTP_temp_failure(HTTPResponseCode http_resp)
+{
+    switch (http_resp) {
+        case HTTP_TOO_MANY_REQUESTS:
+        case HTTP_CLOUDFLARE_UNKNOWN_ERROR:
+        case HTTP_CLOUDFLARE_TIMEOUT:
+            return 1;
+        default:
+            return 0;
+    }
 }

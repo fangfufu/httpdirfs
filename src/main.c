@@ -199,7 +199,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         NETWORK_CONFIG.user_agent = strdup(optarg);
                         break;
                     case 13:
-                        HTTP_429_WAIT = atoi(optarg);
+                        HTTP_WAIT_SEC = atoi(optarg);
                         break;
                     case 14:
                         NETWORK_CONFIG.cache_dir = strdup(optarg);

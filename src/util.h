@@ -18,7 +18,6 @@
 /** \brief the maximum length of a filename. */
 #define MAX_FILENAME_LEN    255
 
-
 /**
  * \brief append a path
  * \details This function appends a path with the next level, while taking the
@@ -47,7 +46,6 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
  * \brief wrapper for exit(EXIT_FAILURE)
  */
 void exit_failure(void);
-
 
 /**
  * \brief erase a string from the terminal
