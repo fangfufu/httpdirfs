@@ -5,12 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-### Changed
-- Updated Makefile, fixed issue #44
-    - When header files get changed, the relevant object will get recompiled.
+### Added
 - Added a progress indicator for LinkTable_fill().
 - Backtrace will now be printed when the program crashes
     - Note that static functions are not included in the printed backtrace!
+
+### Changed
+- Updated Makefile, fixed issue #44
+    - When header files get changed, the relevant object will get recompiled.
+- Improved HTTP temporary failure error handling
+    - Now retry on the following HTTP error codes:
+        - 429 - Too Many Requests
+        - 520 - Cloudflare Unknown Error
+        - 524 - Cloudflare Timeout
+
+### Fixed
+- No longer deadlock after encountering HTTP 429 while filling up a Linktable.
+- LinkTable caching now works again.
 
 ## [1.1.9] - 2019-09-02
 ### Changed
