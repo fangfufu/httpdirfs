@@ -275,7 +275,7 @@ static void LinkTable_invalid_reset(LinkTable *linktbl)
     fprintf(stderr, "LinkTable_invalid_reset(): %d invalid links\n", j);
 }
 
-static void LinkTable_free(LinkTable *linktbl)
+void LinkTable_free(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
         free(linktbl->links[i]);
@@ -312,23 +312,9 @@ static void LinkTable_print(LinkTable *linktbl)
     fprintf(stderr, "--------------------------------------------\n");
 }
 
-LinkTable *LinkTable_new(const char *url)
+MemoryStruct Link_to_MemoryStruct(Link *head_link)
 {
-    #ifdef LINK_LOCK_DEBUG
-    fprintf(stderr,
-            "LinkTable_new(): thread %lu: locking link_lock;\n",
-            pthread_self());
-    #endif
-    PTHREAD_MUTEX_LOCK(&link_lock);
-    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
-
-    /* populate the base URL */
-    LinkTable_add(linktbl, Link_new("/", LINK_HEAD));
-    Link *head_link = linktbl->links[0];
-    head_link->type = LINK_HEAD;
-    strncpy(head_link->f_url, url, MAX_PATH_LEN);
-
-    /* start downloading the base URL */
+    char *url = head_link->f_url;
     CURL *curl = Link_to_curl(head_link);
     MemoryStruct buf;
     buf.size = 0;
@@ -349,15 +335,46 @@ LinkTable *LinkTable_new(const char *url)
             fprintf(stderr,
                     "LinkTable_new(): cannot retrieve URL: %s, HTTP %ld\n",
                     url, http_resp);
-            LinkTable_free(linktbl);
+            buf.size = 0;
             curl_easy_cleanup(curl);
-            return NULL;
+            return buf;
         }
     } while (HTTP_temp_failure(http_resp));
 
 
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
     curl_easy_cleanup(curl);
+    return buf;
+}
+
+LinkTable *LinkTable_alloc(const char *url)
+{
+    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
+
+    /* populate the base URL */
+    Link *head_link = Link_new("/", LINK_HEAD);
+    LinkTable_add(linktbl, head_link);
+    strncpy(head_link->f_url, url, MAX_PATH_LEN);
+    return linktbl;
+}
+
+LinkTable *LinkTable_new(const char *url)
+{
+    #ifdef LINK_LOCK_DEBUG
+    fprintf(stderr,
+            "LinkTable_new(): thread %lu: locking link_lock;\n",
+            pthread_self());
+    #endif
+    PTHREAD_MUTEX_LOCK(&link_lock);
+
+    LinkTable *linktbl = LinkTable_alloc(url);
+
+    /* start downloading the base URL */
+    MemoryStruct buf = Link_to_MemoryStruct(linktbl->links[0]);
+    if (buf.size == 0) {
+        LinkTable_free(linktbl);
+        return NULL;
+    }
 
     /* Otherwise parsed the received data */
     GumboOutput* output = gumbo_parse(buf.memory);

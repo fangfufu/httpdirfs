@@ -7,7 +7,6 @@
  */
 
 #include "util.h"
-
 #include <curl/curl.h>
 
 /** \brief Link type */
@@ -23,6 +22,25 @@ typedef enum {
     LINK_INVALID = 'I',
     LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
+
+/** \brief for storing downloaded data in memory */
+typedef struct {
+    char *memory;
+    size_t size;
+} MemoryStruct;
+
+/** \brief specify the type of data transfer */
+typedef enum {
+    FILESTAT = 's',
+    DATA = 'd'
+} TransferType;
+
+/** \brief for storing the link being transferred, and metadata */
+typedef struct {
+    TransferType type;
+    int transferring;
+    Link *link;
+} TransferStruct;
 
 /**
  * \brief link table type
@@ -118,4 +136,22 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
  * \brief load a link table from the disk.
  */
 LinkTable *LinkTable_disk_open(const char *dirn);
+
+/**
+ * \brief Download a link's content to the memory
+ * \warning You MUST free the memory field in MemoryStruct after use!
+ */
+MemoryStruct Link_to_MemoryStruct(Link *head_link);
+
+/**
+ * \brief Allocate a LinkTable
+ * \note This does not fill in the LinkTable.
+ */
+LinkTable *LinkTable_alloc(const char *url);
+
+/**
+ * \brief free a LinkTable
+ */
+void LinkTable_free(LinkTable *linktbl);
+
 #endif

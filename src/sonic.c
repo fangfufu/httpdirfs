@@ -1,6 +1,7 @@
 #include "sonic.h"
 
 #include "util.h"
+#include "link.h"
 #include "network.h"
 
 
@@ -75,7 +76,7 @@ static char *sonic_gen_url_first_part(char *method)
     return url;
 }
 
-LinkTable *sonic_LinkTable_new(int id)
+LinkTable *sonic_LinkTable_new(const int id)
 {
     char *url;
     if (id > 0) {
@@ -87,18 +88,27 @@ LinkTable *sonic_LinkTable_new(int id)
         url = sonic_gen_url_first_part("getIndexes");
     }
 
-    printf("%s\n", url);
-    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
+    LinkTable *linktbl = LinkTable_alloc(url);
 
+    /* start downloading the base URL */
+    MemoryStruct buf = Link_to_MemoryStruct(linktbl->links[0]);
+    if (buf.size == 0) {
+        LinkTable_free(linktbl);
+        return NULL;
+    }
+
+
+
+    free(url);
     return NULL;
 }
 
-int main(int argc, char **argv)
-{
-    (void) argc;
-    (void) argv;
-
-    sonic_config_init(argv[1], argv[2], argv[3]);
-    sonic_LinkTable_new(0);
-    sonic_LinkTable_new(3);
-}
+// int main(int argc, char **argv)
+// {
+//     (void) argc;
+//     (void) argv;
+//
+//     sonic_config_init(argv[1], argv[2], argv[3]);
+//     sonic_LinkTable_new(0);
+//     sonic_LinkTable_new(3);
+// }

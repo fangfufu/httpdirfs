@@ -13,22 +13,6 @@
  */
 #define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
 
-typedef enum {
-    FILESTAT = 's',
-    DATA = 'd'
-} TransferType;
-
-typedef struct {
-    char *memory;
-    size_t size;
-} MemoryStruct;
-
-typedef struct {
-    TransferType type;
-    int transferring;
-    Link *link;
-} TransferStruct;
-
 typedef struct {
     char *username;
     char *password;
