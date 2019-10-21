@@ -15,7 +15,10 @@
  */
 #define MAX_PATH_LEN        4096
 
-/** \brief the maximum length of a filename. */
+/**
+ * \brief the maximum length of a filename.
+ * \details This corresponds the filename length under Ext4.
+ */
 #define MAX_FILENAME_LEN    255
 
 /**

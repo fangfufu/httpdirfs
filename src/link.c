@@ -172,7 +172,7 @@ void Link_req_file_stat(Link *this_link)
      *
      * It gets freed in curl_multi_perform_once();
      */
-    TransferStruct *transfer = malloc(sizeof(TransferStruct));
+    TransferStruct *transfer = calloc(1, sizeof(TransferStruct));
     if (!transfer) {
         fprintf(stderr, "Link_get_size(): malloc failed!\n");
         exit_failure();

@@ -2,9 +2,9 @@ VERSION=1.1.9
 
 CFLAGS+= -O2 -Wall -Wextra -Wshadow -rdynamic\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\" \
-	`pkg-config --cflags-only-I gumbo libcurl fuse`
-LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto
-COBJS = main.o network.o fuse_local.o link.o cache.o util.o
+	`pkg-config --cflags-only-I gumbo libcurl fuse uuid`
+LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto -luuid
+COBJS = network.o fuse_local.o link.o cache.o util.o sonic.o
 
 prefix ?= /usr/local
 
