@@ -241,7 +241,7 @@ static void print_help(char *program_name, int long_help)
 static void print_version()
 {
     fprintf(stderr,
-            "HTTPDirFS version %s\n", VERSION);
+            "HTTPDirFS version " VERSION "\n");
 }
 
 static void print_long_help()

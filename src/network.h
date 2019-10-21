@@ -8,6 +8,11 @@
 
 #include "link.h"
 
+/**
+ * \brief the default user agent string
+ */
+#define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
+
 typedef enum {
     FILESTAT = 's',
     DATA = 'd'

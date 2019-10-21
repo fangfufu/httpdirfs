@@ -48,11 +48,8 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
 
 static Link *Link_new(const char *linkname, LinkType type)
 {
-    Link *link = calloc(1, sizeof(Link));
-    if (!link) {
-        fprintf(stderr, "Link_new(): calloc failure!\n");
-        exit_failure();
-    }
+    Link *link = CALLOC(1, sizeof(Link));
+
     strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
     link->type = type;
 
@@ -172,11 +169,8 @@ void Link_req_file_stat(Link *this_link)
      *
      * It gets freed in curl_multi_perform_once();
      */
-    TransferStruct *transfer = calloc(1, sizeof(TransferStruct));
-    if (!transfer) {
-        fprintf(stderr, "Link_get_size(): malloc failed!\n");
-        exit_failure();
-    }
+    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
+
     transfer->link = this_link;
     transfer->type = FILESTAT;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
@@ -326,11 +320,7 @@ LinkTable *LinkTable_new(const char *url)
             pthread_self());
     #endif
     PTHREAD_MUTEX_LOCK(&link_lock);
-    LinkTable *linktbl = calloc(1, sizeof(LinkTable));
-    if (!linktbl) {
-        fprintf(stderr, "LinkTable_new(): calloc failure!\n");
-        exit_failure();
-    }
+    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
 
     /* populate the base URL */
     LinkTable_add(linktbl, Link_new("/", LINK_HEAD));
@@ -507,19 +497,12 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         return NULL;
     }
 
-    LinkTable *linktbl = calloc(1, sizeof(LinkTable));
-    if (!linktbl) {
-        fprintf(stderr, "LinkTable_disk_open(): calloc linktbl failed!\n");
-        return NULL;
-    }
+    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
 
     fread(&linktbl->num, sizeof(int), 1, fp);
-    linktbl->links = calloc(linktbl->num, sizeof(Link *));
+    linktbl->links = CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
-        linktbl->links[i] = calloc(1, sizeof(Link));
-        if (!linktbl->links[i]) {
-            fprintf(stderr, "LinkTable_disk_open(): calloc links[i] failed!\n");
-        }
+        linktbl->links[i] = CALLOC(1, sizeof(Link));
         fread(linktbl->links[i]->linkname, sizeof(char), MAX_FILENAME_LEN, fp);
         fread(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp);
         fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp);

@@ -13,7 +13,7 @@ much faster than ``rclone mount``.
 
 ## Usage
 
-	./httpdirfs -f --cache -f $URL $YOUR_MOUNT_POINT
+	./httpdirfs -f --cache $URL $YOUR_MOUNT_POINT
 
 An example URL would be
 [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag

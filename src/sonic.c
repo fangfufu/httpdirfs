@@ -1,48 +1,96 @@
-#include "util.h"
+#include "sonic.h"
 
-#include <openssl/md5.h>
-#include <uuid/uuid.h>
+#include "util.h"
+#include "network.h"
+
+
 
 #include <string.h>
 #include <stdlib.h>
 
-#define MD5_HASH_LEN 32
-#define SALT_LEN 36
+typedef struct {
+    char *server;
+    char *username;
+    char *password;
+    char *client;
+    char *api_version;
+} SonicConfigStruct;
+
+static SonicConfigStruct SONIC_CONFIG;
+
 /**
- * \brief generate the salt for authentication string
- * \details this effectively generates a UUID string, which we use as the salt
- * \return a pointer to a 37-char array with the salt.
+ * \brief initalise Subsonic configuration struct
  */
-char *generate_salt()
+void sonic_config_init(const char *server, const char *username,
+                       const char *password)
 {
-    char *out;
-    out = calloc(SALT_LEN + 1, sizeof(char));
-    uuid_t uu;
-    uuid_generate(uu);
-    uuid_unparse(uu, out);
-    return out;
+    SONIC_CONFIG.server = strndup(server, MAX_PATH_LEN);
+    /* Correct for the extra '/' */
+    size_t server_url_len = strnlen(SONIC_CONFIG.server, MAX_PATH_LEN) - 1;
+    if (SONIC_CONFIG.server[server_url_len] == '/') {
+        SONIC_CONFIG.server[server_url_len] = '\0';
+    }
+    SONIC_CONFIG.username = strndup(username, MAX_FILENAME_LEN);
+    SONIC_CONFIG.password = strndup(password, MAX_FILENAME_LEN);
+    SONIC_CONFIG.client = DEFAULT_USER_AGENT;
+    /*
+     * API 1.13.0 is the minimum version that supports
+     * salt authentication scheme
+     */
+    SONIC_CONFIG.api_version = "1.13.0";
 }
 
 /**
- * \brief generate the md5sum of a string
- * \param[in] str a character array for the input string
- * \return a pointer to a 33-char array with the salt
+ * \brief generate authentication string
  */
-char *generate_md5sum(const char *str)
+static char *sonic_gen_auth_str()
 {
-    MD5_CTX c;
-    unsigned char md5[MD5_DIGEST_LENGTH];
-    size_t len = strnlen(str, MAX_PATH_LEN);
-    char *out = calloc(MD5_HASH_LEN + 1, sizeof(char));
+    char *salt = generate_salt();
+    size_t password_len = strnlen(SONIC_CONFIG.password, MAX_FILENAME_LEN);
+    size_t password_salt_len = password_len + strnlen(salt, MAX_FILENAME_LEN);
+    char *password_salt = CALLOC(password_salt_len + 1, sizeof(char));
+    strncat(password_salt, SONIC_CONFIG.password, MAX_FILENAME_LEN);
+    strncat(password_salt + password_len, salt, MAX_FILENAME_LEN);
+    char *token = generate_md5sum(password_salt);
+    char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
+    snprintf(auth_str, MAX_PATH_LEN,
+                        ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
+                        SONIC_CONFIG.username, token, salt,
+                        SONIC_CONFIG.api_version, SONIC_CONFIG.client);
+    free(salt);
+    free(token);
+    return auth_str;
+}
 
-    MD5_Init(&c);
-    MD5_Update(&c, str, len);
-    MD5_Final(md5, &c);
+/**
+ * \brief generate the first half of the request URL
+ */
+static char *sonic_gen_url_first_part(char *method)
+{
+    char *auth_str = sonic_gen_auth_str();
+    char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
+    snprintf(url, MAX_PATH_LEN, "%s/rest/%s%s", SONIC_CONFIG.server, method,
+             auth_str);
+    free(auth_str);
+    return url;
+}
 
-    for(int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-        sprintf(out + 2 * i, "%02x", md5[i]);
+LinkTable *sonic_LinkTable_new(int id)
+{
+    char *url;
+    if (id > 0) {
+        char *first_part = sonic_gen_url_first_part("getMusicDirectory");
+        url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
+        snprintf(url, MAX_PATH_LEN, "%s&id=%d", first_part, id);
+        free(first_part);
+    } else {
+        url = sonic_gen_url_first_part("getIndexes");
     }
-    return out;
+
+    printf("%s\n", url);
+    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
+
+    return NULL;
 }
 
 int main(int argc, char **argv)
@@ -50,8 +98,7 @@ int main(int argc, char **argv)
     (void) argc;
     (void) argv;
 
-    char *salt = generate_salt();
-    char *md5sum = generate_md5sum(salt);
-
-    printf("%s\n%s\n", salt, md5sum);
+    sonic_config_init(argv[1], argv[2], argv[3]);
+    sonic_LinkTable_new(0);
+    sonic_LinkTable_new(3);
 }

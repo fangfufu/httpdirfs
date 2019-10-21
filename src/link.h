@@ -50,6 +50,11 @@ struct Link {
     int cache_opened;
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
+    /**
+     * \brief Subsonic Music Directory ID
+     * \details We use linkname to store filename
+     */
+    int sonic_id;
 };
 
 struct LinkTable {

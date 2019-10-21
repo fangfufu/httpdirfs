@@ -211,11 +211,8 @@ blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
         fprintf(stderr, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
         return EMEM;
     }
-    cf->seg = calloc(cf->segbc, sizeof(Seg));
-    if (!cf->seg) {
-        fprintf(stderr, "Meta_read(): calloc failure: %s\n", strerror(errno));
-        return EMEM;
-    }
+    cf->seg = CALLOC(cf->segbc, sizeof(Seg));
+
     /* Read all the segment */
     nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
@@ -474,11 +471,7 @@ int CacheDir_create(const char *dirn)
  */
 static Cache *Cache_alloc()
 {
-    Cache *cf = calloc(1, sizeof(Cache));
-    if (!cf) {
-        fprintf(stderr, "Cache_new(): calloc failure!\n");
-        exit_failure();
-    }
+    Cache *cf = CALLOC(1, sizeof(Cache));
 
     if (pthread_mutex_init(&cf->seek_lock, NULL)) {
         fprintf(stderr, "Cache_alloc(): seek_lock initialisation failed!\n");
@@ -680,12 +673,7 @@ int Cache_create(Link *this_link)
     cf->content_length = this_link->content_length;
     cf->blksz = DATA_BLK_SZ;
     cf->segbc = (cf->content_length / cf->blksz) + 1;
-    cf->seg = calloc(cf->segbc, sizeof(Seg));
-
-    if (!cf->seg) {
-        fprintf(stderr, "Cache_create(): cf->seg calloc failure!\n");
-        exit_failure();
-    }
+    cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
     if (Meta_create(cf)) {
         fprintf(stderr, "Cache_create(): cannot create metadata.\n");
@@ -914,7 +902,7 @@ static void *Cache_bgdl(void *arg)
             pthread_self());
     #endif
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
-    uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
+    uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_bgdl(): thread %lu: ", pthread_self());
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                               cf->next_dl_offset);
@@ -976,7 +964,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
 
     /* ------------------------Download the segment -------------------------*/
 
-    uint8_t *recv_buf = calloc(cf->blksz, sizeof(uint8_t));
+    uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_read(): thread %lu: ", pthread_self());
     long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
                                 dl_offset);
