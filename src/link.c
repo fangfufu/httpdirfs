@@ -284,7 +284,7 @@ void LinkTable_free(LinkTable *linktbl)
     free(linktbl);
 }
 
-static void LinkTable_print(LinkTable *linktbl)
+void LinkTable_print(LinkTable *linktbl)
 {
     int j = 0;
     fprintf(stderr, "--------------------------------------------\n");

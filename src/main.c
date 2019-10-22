@@ -20,7 +20,7 @@ int main(int argc, char **argv)
     if (argc < 2) {
         print_help(argv[0], 0);
         fprintf(stderr, "For more information, run \"%s --help.\"\n", argv[0]);
-        exit_failure();
+        exit(EXIT_FAILURE);
     }
 
     /* These are passed into fuse initialiser */
@@ -62,11 +62,11 @@ int main(int argc, char **argv)
     if (strncmp(base_url, "http://", 7) && strncmp(base_url, "https://", 8)) {
         fprintf(stderr, "Error: Please supply a valid URL.\n");
         print_help(argv[0], 0);
-        exit_failure();
+        exit(EXIT_FAILURE);
     } else {
         if(!network_init(base_url)) {
             fprintf(stderr, "Error: Network initialisation failed.\n");
-            exit_failure();
+            exit(EXIT_FAILURE);
         }
     }
 

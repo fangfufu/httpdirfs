@@ -154,4 +154,9 @@ LinkTable *LinkTable_alloc(const char *url);
  */
 void LinkTable_free(LinkTable *linktbl);
 
+/**
+ * \brief print a LinkTable
+ */
+void LinkTable_print(LinkTable *linktbl);
+
 #endif

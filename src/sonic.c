@@ -4,7 +4,7 @@
 #include "link.h"
 #include "network.h"
 
-
+#include <expat.h>
 
 #include <string.h>
 #include <stdlib.h>
@@ -97,8 +97,9 @@ LinkTable *sonic_LinkTable_new(const int id)
         return NULL;
     }
 
+    printf("%s", buf.memory);
 
-
+    free(buf.memory);
     free(url);
     return NULL;
 }
