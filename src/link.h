@@ -25,9 +25,9 @@ typedef enum {
 
 /** \brief for storing downloaded data in memory */
 typedef struct {
-    char *memory;
+    char *data;
     size_t size;
-} MemoryStruct;
+} DataStruct;
 
 /** \brief specify the type of data transfer */
 typedef enum {
@@ -139,9 +139,9 @@ LinkTable *LinkTable_disk_open(const char *dirn);
 
 /**
  * \brief Download a link's content to the memory
- * \warning You MUST free the memory field in MemoryStruct after use!
+ * \warning You MUST free the memory field in DataStruct after use!
  */
-MemoryStruct Link_to_MemoryStruct(Link *head_link);
+DataStruct Link_to_DataStruct(Link *head_link);
 
 /**
  * \brief Allocate a LinkTable

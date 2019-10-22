@@ -26,7 +26,6 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
-
 /** \brief return the attributes for a single file indicated by path */
 static int fs_getattr(const char *path, struct stat *stbuf)
 {

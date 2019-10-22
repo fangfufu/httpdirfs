@@ -360,19 +360,19 @@ size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
                              void *userp)
 {
     size_t realsize = size * nmemb;
-    MemoryStruct *mem = (MemoryStruct *)userp;
+    DataStruct *mem = (DataStruct *)userp;
 
-    mem->memory = realloc(mem->memory, mem->size + realsize + 1);
-    if(!mem->memory) {
+    mem->data = realloc(mem->data, mem->size + realsize + 1);
+    if(!mem->data) {
         /* out of memory! */
         fprintf(stderr, "write_memory_callback(): realloc failure!\n");
         exit_failure();
         return 0;
     }
 
-    memmove(&mem->memory[mem->size], contents, realsize);
+    memmove(&mem->data[mem->size], contents, realsize);
     mem->size += realsize;
-    mem->memory[mem->size] = 0;
+    mem->data[mem->size] = 0;
 
     return realsize;
 }

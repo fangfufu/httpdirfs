@@ -76,6 +76,57 @@ static char *sonic_gen_url_first_part(char *method)
     return url;
 }
 
+/**
+ * \brief Process a single element output by the parser
+ * \details This is the callback function called by the the XML parser.
+ * \param[in] data user supplied data, in this case it is the pointer to the
+ * LinkTable.
+ * \param[in] element the name of this element, it should be either "child" or
+ * "artist"
+ * \param[in] attributes Each attribute seen in a start (or empty) tag occupies
+ * 2 consecutive places in this vector: the attribute name followed by the
+ * attribute value. These pairs are terminated by a null pointer.
+ */
+static void XMLCALL XML_process_single_element(void *data, const char *element,
+                                               const char **attributes)
+{
+    LinkTable *linktbl = (LinkTable *) data;
+    Link *link;
+    if (!strncmp(element, "child", 5)) {
+        /* Return from getMusicDirectory */
+        link = CALLOC(1, sizeof(Link));
+        link->type = LINK_INVALID;
+    } else if (!strncmp(element, "artist", 6)){
+        /* Return from getIndexes */
+        link = CALLOC(1, sizeof(Link));
+        link->type = LINK_DIR;
+    } else {
+        /* The element does not contain directory structural information */
+        return;
+    }
+
+    for (int i = 0; attributes[i]; i += 2) {
+
+    }
+}
+
+/**
+ * \brief parse a XML string in order to fill in the LinkTable
+ */
+static void sonic_XML_to_LinkTable(DataStruct ds, LinkTable *linktbl)
+{
+    XML_Parser parser = XML_ParserCreate(NULL);
+    XML_SetUserData(parser, linktbl);
+    XML_SetStartElementHandler(parser, XML_process_single_element);
+    if (XML_Parse(parser, ds.data, ds.size, 1) == XML_STATUS_ERROR) {
+        fprintf(stderr,
+                "sonic_XML_to_LinkTable(): Parse error at line %lu: %s\n",
+                XML_GetCurrentLineNumber(parser),
+                XML_ErrorString(XML_GetErrorCode(parser)));
+    }
+    XML_ParserFree(parser);
+}
+
 LinkTable *sonic_LinkTable_new(const int id)
 {
     char *url;
@@ -93,15 +144,17 @@ LinkTable *sonic_LinkTable_new(const int id)
     LinkTable *linktbl = LinkTable_alloc(url);
 
     /* start downloading the base URL */
-    MemoryStruct buf = Link_to_MemoryStruct(linktbl->links[0]);
-    if (buf.size == 0) {
+    DataStruct xml = Link_to_DataStruct(linktbl->links[0]);
+    if (xml.size == 0) {
         LinkTable_free(linktbl);
         return NULL;
     }
 
-    printf("%s", buf.memory);
+    sonic_XML_to_LinkTable(xml, linktbl);
 
-    free(buf.memory);
+    LinkTable_print(linktbl);
+
+    free(xml.data);
     free(url);
     return NULL;
 }

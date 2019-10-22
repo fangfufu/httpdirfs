@@ -73,6 +73,9 @@ static void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links[linktbl->num - 1] = link;
 }
 
+/**
+ * \brief create a new Link
+ */
 static Link *Link_new(const char *linkname, LinkType type)
 {
     Link *link = CALLOC(1, sizeof(Link));
@@ -93,11 +96,6 @@ static LinkType linkname_to_LinkType(const char *linkname)
 {
     /* The link name has to start with alphanumerical character */
     if (!isalnum(linkname[0])) {
-        return LINK_INVALID;
-    }
-
-    /* check for http:// and https:// */
-    if ( !strncmp(linkname, "http://", 7) || !strncmp(linkname, "https://", 8) ) {
         return LINK_INVALID;
     }
 
@@ -339,13 +337,13 @@ void LinkTable_print(LinkTable *linktbl)
     fprintf(stderr, "--------------------------------------------\n");
 }
 
-MemoryStruct Link_to_MemoryStruct(Link *head_link)
+DataStruct Link_to_DataStruct(Link *head_link)
 {
     char *url = head_link->f_url;
     CURL *curl = Link_to_curl(head_link);
-    MemoryStruct buf;
+    DataStruct buf;
     buf.size = 0;
-    buf.memory = NULL;
+    buf.data = NULL;
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
     /* If we get temporary HTTP failure, wait for 5 seconds before retry */
@@ -397,17 +395,17 @@ LinkTable *LinkTable_new(const char *url)
     LinkTable *linktbl = LinkTable_alloc(url);
 
     /* start downloading the base URL */
-    MemoryStruct buf = Link_to_MemoryStruct(linktbl->links[0]);
+    DataStruct buf = Link_to_DataStruct(linktbl->links[0]);
     if (buf.size == 0) {
         LinkTable_free(linktbl);
         return NULL;
     }
 
     /* Otherwise parsed the received data */
-    GumboOutput* output = gumbo_parse(buf.memory);
+    GumboOutput* output = gumbo_parse(buf.data);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
-    free(buf.memory);
+    free(buf.data);
 
     int skip_fill = 0;
     char *unescaped_path;
@@ -662,9 +660,9 @@ long path_download(const char *path, char *output_buf, size_t size,
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
     fprintf(stderr, "path_download(%s, %s);\n", path, range_str);
 
-    MemoryStruct buf;
+    DataStruct buf;
     buf.size = 0;
-    buf.memory = NULL;
+    buf.data = NULL;
 
     CURL *curl = Link_to_curl(link);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
@@ -701,8 +699,8 @@ long path_download(const char *path, char *output_buf, size_t size,
         recv = size;
     }
 
-    memmove(output_buf, buf.memory, recv);
+    memmove(output_buf, buf.data, recv);
     curl_easy_cleanup(curl);
-    free(buf.memory);
+    free(buf.data);
     return recv;
 }
