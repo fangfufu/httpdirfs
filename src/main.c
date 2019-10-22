@@ -35,11 +35,11 @@ int main(int argc, char **argv)
     /*--- FUSE expects the first initialisation to be the program's name ---*/
     add_arg(&fuse_argv, &fuse_argc, argv[0]);
 
-    /* initialise link subsystem */
-    link_system_init();
-
     /* initialise network configuration struct */
-    network_config_init();
+    NetworkConfig_init();
+
+    /* initialise network subsystem */
+    NetworkSystem_init();
 
     /* parse the config file, if it exists, store it in all_argv and all_argc */
     parse_config_file(&all_argv, &all_argc);
@@ -51,6 +51,10 @@ int main(int argc, char **argv)
 
     /* parse the combined argument list */
     if (parse_arg_list(all_argc, all_argv, &fuse_argv, &fuse_argc)) {
+        /*
+         * The user basically didn't supply enough arguments, if we reach here
+         * The point is to print some error messages
+         */
         goto fuse_start;
     }
 
@@ -64,7 +68,7 @@ int main(int argc, char **argv)
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
     } else {
-        if(!network_init(base_url)) {
+        if(!LinkSystem_init(base_url)) {
             fprintf(stderr, "Error: Network initialisation failed.\n");
             exit(EXIT_FAILURE);
         }

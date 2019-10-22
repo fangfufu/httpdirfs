@@ -93,7 +93,7 @@ extern int ROOT_LINK_OFFSET;
 /**
  * \brief initialise link sub-system.
  */
-void link_system_init();
+LinkTable *LinkSystem_init(const char *url);
 
 /**
  * \brief Add a link to the curl multi bundle for querying stats

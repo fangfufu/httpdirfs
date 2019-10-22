@@ -46,13 +46,13 @@ extern NetworkConfigStruct NETWORK_CONFIG;
 extern CURLSH *CURL_SHARE;
 
 /** \brief perform one transfer cycle */
-int curl_multi_perform_once();
+int curl_multi_perform_once(void);
 
 /** \brief initialise network config struct */
-void network_config_init();
+void NetworkConfig_init(void);
 
 /** \brief initialise the network module */
-LinkTable *network_init(const char *url);
+void NetworkSystem_init(void);
 
 /** \brief blocking file transfer */
 void transfer_blocking(CURL *curl);

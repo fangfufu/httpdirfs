@@ -158,7 +158,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
  * \details  effectively based on
  * https://curl.haxx.se/libcurl/c/multi-double.html
  */
-int curl_multi_perform_once()
+int curl_multi_perform_once(void)
 {
     #ifdef NETWORK_LOCK_DEBUG
     fprintf(stderr,
@@ -231,7 +231,7 @@ int curl_multi_perform_once()
     return n_running_curl;
 }
 
-void network_config_init()
+void NetworkConfig_init(void)
 {
     NETWORK_CONFIG.username = NULL;
     NETWORK_CONFIG.password = NULL;
@@ -244,7 +244,7 @@ void network_config_init()
     NETWORK_CONFIG.cache_dir = NULL;
 }
 
-LinkTable *network_init(const char *url)
+void NetworkSystem_init(void)
 {
     /* ------- Global related ----------*/
     if (curl_global_init(CURL_GLOBAL_ALL)) {
@@ -297,33 +297,6 @@ LinkTable *network_init(const char *url)
     /* --------- Print off SSL engine version stream --------- */
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
     fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
-
-    /* --------- Set the length of the root link ----------- */
-    /* This is where the '/' should be */
-    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) - 1;
-    if (url[ROOT_LINK_OFFSET] != '/') {
-        /*
-         * If '/' is not there, it is automatically added, so we need to skip 2
-         * characters
-         */
-        ROOT_LINK_OFFSET += 2;
-    } else {
-        /* If '/' is there, we need to skip it */
-        ROOT_LINK_OFFSET += 1;
-    }
-
-    /* -----------  Enable cache system --------------------*/
-    if (NETWORK_CONFIG.cache_enabled) {
-        if (NETWORK_CONFIG.cache_dir) {
-            CacheSystem_init(NETWORK_CONFIG.cache_dir, 0);
-        } else {
-            CacheSystem_init(url, 1);
-        }
-    }
-
-    /* ----------- Create the root link table --------------*/
-    ROOT_LINK_TBL = LinkTable_new(url);
-    return ROOT_LINK_TBL;
 }
 
 void transfer_blocking(CURL *curl)

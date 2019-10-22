@@ -26,13 +26,40 @@ int ROOT_LINK_OFFSET = 0;
  */
 static pthread_mutex_t link_lock;
 
-void link_system_init()
+LinkTable *LinkSystem_init(const char *url)
 {
     if (pthread_mutex_init(&link_lock, NULL) != 0) {
         fprintf(stderr,
                 "link_system_init(): link_lock initialisation failed!\n");
         exit_failure();
     }
+
+    /* --------- Set the length of the root link ----------- */
+    /* This is where the '/' should be */
+    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) - 1;
+    if (url[ROOT_LINK_OFFSET] != '/') {
+        /*
+         * If '/' is not there, it is automatically added, so we need to skip 2
+         * characters
+         */
+        ROOT_LINK_OFFSET += 2;
+    } else {
+        /* If '/' is there, we need to skip it */
+        ROOT_LINK_OFFSET += 1;
+    }
+
+    /* -----------  Enable cache system --------------------*/
+    if (NETWORK_CONFIG.cache_enabled) {
+        if (NETWORK_CONFIG.cache_dir) {
+            CacheSystem_init(NETWORK_CONFIG.cache_dir, 0);
+        } else {
+            CacheSystem_init(url, 1);
+        }
+    }
+
+    /* ----------- Create the root link table --------------*/
+    ROOT_LINK_TBL = LinkTable_new(url);
+    return ROOT_LINK_TBL;
 }
 
 static void LinkTable_add(LinkTable *linktbl, Link *link)

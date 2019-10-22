@@ -88,6 +88,8 @@ LinkTable *sonic_LinkTable_new(const int id)
         url = sonic_gen_url_first_part("getIndexes");
     }
 
+    printf("%s\n", url);
+
     LinkTable *linktbl = LinkTable_alloc(url);
 
     /* start downloading the base URL */
@@ -110,6 +112,10 @@ LinkTable *sonic_LinkTable_new(const int id)
 //     (void) argv;
 //
 //     sonic_config_init(argv[1], argv[2], argv[3]);
+//
+//     link_system_init();
+//     network_config_init();
+//
 //     sonic_LinkTable_new(0);
 //     sonic_LinkTable_new(3);
 // }
