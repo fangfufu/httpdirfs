@@ -106,16 +106,16 @@ LinkTable *sonic_LinkTable_new(const int id)
     return NULL;
 }
 
-// int main(int argc, char **argv)
-// {
-//     (void) argc;
-//     (void) argv;
-//
-//     sonic_config_init(argv[1], argv[2], argv[3]);
-//
-//     link_system_init();
-//     network_config_init();
-//
-//     sonic_LinkTable_new(0);
-//     sonic_LinkTable_new(3);
-// }
+int main(int argc, char **argv)
+{
+    (void) argc;
+    (void) argv;
+
+    sonic_config_init(argv[1], argv[2], argv[3]);
+
+    NetworkConfig_init();
+    NetworkSystem_init();
+
+    sonic_LinkTable_new(0);
+    sonic_LinkTable_new(3);
+}
