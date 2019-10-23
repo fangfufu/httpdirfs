@@ -63,11 +63,11 @@ typedef struct {
     /** \brief The maximum segment count for a single cache file */
     int max_segbc;
 
-    /** \brief Whether we are using the Subsonic mode */
+    /** \brief Whether we are using the Sonic mode */
     int sonic_mode;
-    /** \brief The Subsonic server username */
+    /** \brief The Sonic server username */
     char *sonic_username;
-    /** \brief The Subsonic server password */
+    /** \brief The Sonic server password */
     char *sonic_password;
 } ConfigStruct;
 

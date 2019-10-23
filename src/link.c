@@ -2,6 +2,7 @@
 
 #include "cache.h"
 #include "network.h"
+#include "sonic.h"
 
 #include <gumbo.h>
 
@@ -49,16 +50,25 @@ LinkTable *LinkSystem_init(const char *url)
     }
 
     /* -----------  Enable cache system --------------------*/
-    if (CONFIG.cache_enabled) {
-        if (CONFIG.cache_dir) {
-            CacheSystem_init(CONFIG.cache_dir, 0);
-        } else {
-            CacheSystem_init(url, 1);
+    /* For now, disable cache mode if sonic mode is enabled */
+    if (!CONFIG.sonic_mode) {
+        if (CONFIG.cache_enabled) {
+            if (CONFIG.cache_dir) {
+                CacheSystem_init(CONFIG.cache_dir, 0);
+            } else {
+                CacheSystem_init(url, 1);
+            }
         }
+    } else {
+        sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
     }
 
     /* ----------- Create the root link table --------------*/
-    ROOT_LINK_TBL = LinkTable_new(url);
+    if (!CONFIG.sonic_mode) {
+        ROOT_LINK_TBL = LinkTable_new(url);
+    } else {
+        ROOT_LINK_TBL = sonic_LinkTable_new(0);
+    }
     return ROOT_LINK_TBL;
 }
 
@@ -578,7 +588,11 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
     Link *link = path_to_Link(path);
     if (!link->next_table) {
-        link->next_table = LinkTable_new(link->f_url);
+        if (!CONFIG.sonic_mode) {
+            link->next_table = LinkTable_new(link->f_url);
+        } else {
+            link->next_table = sonic_LinkTable_new(link->sonic_id);
+        }
     }
     return link->next_table;
 }
@@ -622,8 +636,13 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
             if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
                 /* The next sub-directory exists */
                 if (!linktbl->links[i]->next_table) {
-                    linktbl->links[i]->next_table = LinkTable_new(
-                        linktbl->links[i]->f_url);
+                    if (!CONFIG.sonic_mode) {
+                        linktbl->links[i]->next_table = LinkTable_new(
+                            linktbl->links[i]->f_url);
+                    } else {
+                        linktbl->links[i]->next_table = sonic_LinkTable_new(
+                            linktbl->links[i]->sonic_id);
+                    }
                 }
                 return path_to_Link_recursive(
                     next_path, linktbl->links[i]->next_table);

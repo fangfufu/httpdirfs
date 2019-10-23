@@ -69,7 +69,7 @@ struct Link {
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
     /**
-     * \brief Subsonic Music Directory ID
+     * \brief Sonic Music Directory ID
      * \details We use linkname to store filename
      */
     int sonic_id;

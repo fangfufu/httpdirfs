@@ -81,7 +81,7 @@ void Config_init(void)
 
     CONFIG.max_segbc = DEFAULT_MAX_SEGBC;
 
-    /*-------------- Subsonic related -------------*/
+    /*-------------- Sonic related -------------*/
     CONFIG.sonic_mode = 0;
 
     CONFIG.sonic_username = NULL;

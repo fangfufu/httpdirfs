@@ -22,7 +22,7 @@ typedef struct {
 static SonicConfigStruct SONIC_CONFIG;
 
 /**
- * \brief initalise Subsonic configuration struct
+ * \brief initalise Sonic configuration struct
  */
 void sonic_config_init(const char *server, const char *username,
                        const char *password)
@@ -33,8 +33,8 @@ void sonic_config_init(const char *server, const char *username,
     if (SONIC_CONFIG.server[server_url_len] == '/') {
         SONIC_CONFIG.server[server_url_len] = '\0';
     }
-    SONIC_CONFIG.http_username = strndup(username, MAX_FILENAME_LEN);
-    SONIC_CONFIG.http_password = strndup(password, MAX_FILENAME_LEN);
+    SONIC_CONFIG.username = strndup(username, MAX_FILENAME_LEN);
+    SONIC_CONFIG.password = strndup(password, MAX_FILENAME_LEN);
     SONIC_CONFIG.client = DEFAULT_USER_AGENT;
     /*
      * API 1.13.0 is the minimum version that supports
@@ -49,16 +49,16 @@ void sonic_config_init(const char *server, const char *username,
 static char *sonic_gen_auth_str()
 {
     char *salt = generate_salt();
-    size_t password_len = strnlen(SONIC_CONFIG.http_password, MAX_FILENAME_LEN);
+    size_t password_len = strnlen(SONIC_CONFIG.password, MAX_FILENAME_LEN);
     size_t password_salt_len = password_len + strnlen(salt, MAX_FILENAME_LEN);
     char *password_salt = CALLOC(password_salt_len + 1, sizeof(char));
-    strncat(password_salt, SONIC_CONFIG.http_password, MAX_FILENAME_LEN);
+    strncat(password_salt, SONIC_CONFIG.password, MAX_FILENAME_LEN);
     strncat(password_salt + password_len, salt, MAX_FILENAME_LEN);
     char *token = generate_md5sum(password_salt);
     char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(auth_str, MAX_PATH_LEN,
                         ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
-                        SONIC_CONFIG.http_username, token, salt,
+                        SONIC_CONFIG.username, token, salt,
                         SONIC_CONFIG.api_version, SONIC_CONFIG.client);
     free(salt);
     free(token);
@@ -144,10 +144,19 @@ static void XMLCALL XML_process_single_element(void *data, const char *elem,
             continue;
         }
 
-        if (!strcmp("name", attr[i]) || !strcmp("title", attr[i])) {
-            strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
-            linkname_set = 1;
-            continue;
+        if (!linkname_set) {
+            if (!strcmp("name", attr[i])) {
+                strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
+                linkname_set = 1;
+                continue;
+            }
+
+            if (!strcmp("path", attr[i])) {
+                strncpy(link->linkname, strrchr(attr[i+1], '/') + 1,
+                        MAX_FILENAME_LEN);
+                linkname_set = 1;
+                continue;
+            }
         }
 
         if (!strcmp("isDir", attr[i])) {
@@ -225,7 +234,6 @@ static void sonic_XML_to_LinkTable(DataStruct ds, LinkTable *linktbl)
     XML_ParserFree(parser);
 }
 
-
 LinkTable *sonic_LinkTable_new(const int id)
 {
     char *url;
@@ -252,19 +260,5 @@ LinkTable *sonic_LinkTable_new(const int id)
 
     free(xml.data);
     free(url);
-    return NULL;
-}
-
-int main(int argc, char **argv)
-{
-    (void) argc;
-    (void) argv;
-
-    sonic_config_init(argv[1], argv[2], argv[3]);
-
-    Config_init();
-    NetworkSystem_init();
-
-    sonic_LinkTable_new(0);
-    sonic_LinkTable_new(3);
+    return linktbl;
 }
