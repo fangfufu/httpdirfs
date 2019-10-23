@@ -73,6 +73,10 @@ struct Link {
      * \details We use linkname to store filename
      */
     int sonic_id;
+    /**
+     * \brief Sonic Music Directory ID in string format
+     */
+    char sonic_id_str[MAX_FILENAME_LEN+1];
 };
 
 struct LinkTable {

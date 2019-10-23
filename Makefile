@@ -1,7 +1,7 @@
 VERSION=1.1.10
 
 CFLAGS+= -O2 -Wall -Wextra -Wshadow\
-	-rdynamic -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE\
+	-rdynamic -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE -D_GNU_SOURCE\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"\
 	`pkg-config --cflags-only-I gumbo libcurl fuse uuid expat`
 LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto -luuid -lexpat

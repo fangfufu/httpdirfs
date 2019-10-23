@@ -80,8 +80,7 @@ extern ConfigStruct CONFIG;
  * \brief append a path
  * \details This function appends a path with the next level, while taking the
  * trailing slash of the upper level into account.
- *
- * Please free the char * after use.
+ * \note You need to free the char * after use.
  */
 char *path_append(const char *path, const char *filename);
 

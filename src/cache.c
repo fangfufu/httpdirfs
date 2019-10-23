@@ -116,26 +116,45 @@ void CacheSystem_init(const char *path, int url_supplied)
         exit_failure();
     }
 
-    /* Handle the case of missing '/' */
-    if (path[strnlen(path, MAX_PATH_LEN) - 1] == '/') {
-        META_DIR = path_append(path, "meta/");
-        DATA_DIR = path_append(path, "data/");
-    } else {
-        META_DIR = path_append(path, "/meta/");
-        DATA_DIR = path_append(path, "/data/");
-    }
+    META_DIR = path_append(path, "meta/");
+    DATA_DIR = path_append(path, "data/");
 
     /* Check if directories exist, if not, create them */
     if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
         fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
+        exit_failure();
     }
 
     if (mkdir(DATA_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
         fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
                 strerror(errno));
+        exit_failure();
+    }
+
+    if (CONFIG.sonic_mode) {
+        char *sonic_path;
+        /* Create "rest" sub-directory for META_DIR */
+        sonic_path = path_append(META_DIR, "rest/");
+        if (mkdir(sonic_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+            && (errno != EEXIST)) {
+            fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
+                    strerror(errno));
+            exit_failure();
+        }
+        free(sonic_path);
+
+        /* Create "rest" sub-directory for DATA_DIR */
+        sonic_path = path_append(DATA_DIR, "rest/");
+        if (mkdir(sonic_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+            && (errno != EEXIST)) {
+            fprintf(stderr, "CacheSystem_init(): mkdir(): %s\n",
+                    strerror(errno));
+            exit_failure();
+        }
+        free(sonic_path);
     }
 
     CACHE_SYSTEM_INIT = 1;
@@ -410,6 +429,7 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
         fprintf(stderr,
                 "Data_write(): fwrite(): requested %ld, returned %ld!\n",
                 len, byte_written);
+                exit_failure();
         if (ferror(cf->dfp)) {
             /* filesystem error */
             fprintf(stderr,
@@ -558,6 +578,11 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
+    if (CONFIG.sonic_mode) {
+        Link *link = path_to_Link(fn);
+        fn = link->sonic_id_str;
+    }
+
     char *metafn = path_append(META_DIR, fn);
     char *datafn = path_append(DATA_DIR, fn);
     if (!access(metafn, F_OK)) {
@@ -642,7 +667,12 @@ static int Meta_create(Cache *cf)
 int Cache_create(Link *this_link)
 {
     char *fn;
-    fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0, NULL);
+    if (!CONFIG.sonic_mode) {
+        fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0,
+                                NULL);
+    } else {
+        fn = this_link->sonic_id_str;
+    }
     fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
@@ -655,6 +685,7 @@ int Cache_create(Link *this_link)
 
     if (Meta_create(cf)) {
         fprintf(stderr, "Cache_create(): cannot create metadata.\n");
+        exit_failure();
     }
 
     if (fclose(cf->mfp)) {
@@ -689,21 +720,31 @@ int Cache_create(Link *this_link)
      * function returns 0 on success.
      */
     int res = -(!Cache_exist(fn));
-    curl_free(fn);
+    if (!CONFIG.sonic_mode) {
+        curl_free(fn);
+    }
+
     return res;
 }
 
 Cache *Cache_open(const char *fn)
 {
-    /* Check if both metadata and data file exist */
-    if (!Cache_exist(fn)) {
-        return NULL;
-    }
-
     /* Obtain the link structure memory pointer */
     Link *link = path_to_Link(fn);
     if (!link) {
         return NULL;
+    }
+
+    /* Check if both metadata and data file exist */
+    if (!CONFIG.sonic_mode) {
+        if (!Cache_exist(fn)) {
+            return NULL;
+        }
+    } else {
+        if (!Cache_exist(link->sonic_id_str)) {
+            return NULL;
+        }
+        fn = link->sonic_id_str;
     }
 
     /*---------------- Cache_open() critical section -----------------*/

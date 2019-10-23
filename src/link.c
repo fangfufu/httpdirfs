@@ -49,24 +49,24 @@ LinkTable *LinkSystem_init(const char *url)
         ROOT_LINK_OFFSET += 1;
     }
 
-    /* -----------  Enable cache system --------------------*/
-    /* For now, disable cache mode if sonic mode is enabled */
-    if (!CONFIG.sonic_mode) {
-        if (CONFIG.cache_enabled) {
-            if (CONFIG.cache_dir) {
-                CacheSystem_init(CONFIG.cache_dir, 0);
-            } else {
-                CacheSystem_init(url, 1);
-            }
+    /* ---------------------  Enable cache system -------------------- /
+     *
+     * Note that cache system is enabled automatically if sonic mode is
+     * enabled
+     */
+    if (CONFIG.cache_enabled || CONFIG.sonic_mode) {
+        if (CONFIG.cache_dir) {
+            CacheSystem_init(CONFIG.cache_dir, 0);
+        } else {
+            CacheSystem_init(url, 1);
         }
-    } else {
-        sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
     }
 
     /* ----------- Create the root link table --------------*/
     if (!CONFIG.sonic_mode) {
         ROOT_LINK_TBL = LinkTable_new(url);
     } else {
+        sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
         ROOT_LINK_TBL = sonic_LinkTable_new(0);
     }
     return ROOT_LINK_TBL;
@@ -360,9 +360,11 @@ DataStruct Link_to_DataStruct(Link *head_link)
 {
     char *url = head_link->f_url;
     CURL *curl = Link_to_curl(head_link);
+
     DataStruct buf;
     buf.size = 0;
     buf.data = NULL;
+
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
 
     /* If we get temporary HTTP failure, wait for 5 seconds before retry */
@@ -384,7 +386,6 @@ DataStruct Link_to_DataStruct(Link *head_link)
             return buf;
         }
     } while (HTTP_temp_failure(http_resp));
-
 
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
     curl_easy_cleanup(curl);
@@ -705,7 +706,22 @@ long path_download(const char *path, char *output_buf, size_t size,
     PTHREAD_MUTEX_LOCK(&link_lock);
     PTHREAD_MUTEX_UNLOCK(&link_lock);
 
+    DataStruct header;
+    header.size = 0;
+    header.data = NULL;
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)&header);
+
     transfer_blocking(curl);
+
+    /* Check for range seek support */
+    if (!CONFIG.sonic_mode) {
+        if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
+            fprintf(stderr, "Error: This web server does not support HTTP \
+range requests\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+    free(header.data);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
