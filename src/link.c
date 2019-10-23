@@ -49,9 +49,9 @@ LinkTable *LinkSystem_init(const char *url)
     }
 
     /* -----------  Enable cache system --------------------*/
-    if (NETWORK_CONFIG.cache_enabled) {
-        if (NETWORK_CONFIG.cache_dir) {
-            CacheSystem_init(NETWORK_CONFIG.cache_dir, 0);
+    if (CONFIG.cache_enabled) {
+        if (CONFIG.cache_dir) {
+            CacheSystem_init(CONFIG.cache_dir, 0);
         } else {
             CacheSystem_init(url, 1);
         }
@@ -62,7 +62,7 @@ LinkTable *LinkSystem_init(const char *url)
     return ROOT_LINK_TBL;
 }
 
-static void LinkTable_add(LinkTable *linktbl, Link *link)
+void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
     linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
@@ -139,7 +139,7 @@ static CURL *Link_to_curl(Link *link)
         fprintf(stderr, "Link_to_curl(): curl_easy_init() failed!\n");
     }
     /* set up some basic curl stuff */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, NETWORK_CONFIG.user_agent);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
     /* for following directories without the '/' */
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
@@ -151,26 +151,26 @@ static CURL *Link_to_curl(Link *link)
 
 //     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
-    if (NETWORK_CONFIG.username) {
-        curl_easy_setopt(curl, CURLOPT_USERNAME, NETWORK_CONFIG.username);
+    if (CONFIG.http_username) {
+        curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
     }
 
-    if (NETWORK_CONFIG.password) {
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, NETWORK_CONFIG.password);
+    if (CONFIG.http_password) {
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
     }
 
-    if (NETWORK_CONFIG.proxy) {
-        curl_easy_setopt(curl, CURLOPT_PROXY, NETWORK_CONFIG.proxy);
+    if (CONFIG.proxy) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
     }
 
-    if (NETWORK_CONFIG.proxy_user) {
+    if (CONFIG.proxy_username) {
         curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
-                         NETWORK_CONFIG.proxy_user);
+                         CONFIG.proxy_username);
     }
 
-    if (NETWORK_CONFIG.proxy_pass) {
+    if (CONFIG.proxy_password) {
         curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
-                         NETWORK_CONFIG.proxy_pass);
+                         CONFIG.proxy_password);
     }
 
     return curl;
@@ -355,7 +355,7 @@ DataStruct Link_to_DataStruct(Link *head_link)
             fprintf(stderr,
                     "LinkTable_new(): URL: %s, HTTP %ld, retrying later.\n",
                     url, http_resp);
-            sleep(HTTP_WAIT_SEC);
+            sleep(CONFIG.http_wait_sec);
         } else if (http_resp != HTTP_OK) {
             fprintf(stderr,
                     "LinkTable_new(): cannot retrieve URL: %s, HTTP %ld\n",

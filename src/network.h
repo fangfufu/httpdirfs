@@ -8,24 +8,6 @@
 
 #include "link.h"
 
-/**
- * \brief the default user agent string
- */
-#define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
-
-typedef struct {
-    char *username;
-    char *password;
-    char *proxy;
-    char *proxy_user;
-    char *proxy_pass;
-    long max_conns;
-    char *user_agent;
-    int http_429_wait;
-    char *cache_dir;
-    int cache_enabled;
-} NetworkConfigStruct;
-
 /** \brief HTTP response codes */
 typedef enum {
     HTTP_OK                         = 200,
@@ -36,20 +18,11 @@ typedef enum {
     HTTP_CLOUDFLARE_TIMEOUT         = 524
 } HTTPResponseCode;
 
-/** \brief The waiting time after getting HTTP 429 */
-extern int HTTP_WAIT_SEC;
-
-/** \brief CURL configuration */
-extern NetworkConfigStruct NETWORK_CONFIG;
-
 /** \brief curl shared interface */
 extern CURLSH *CURL_SHARE;
 
 /** \brief perform one transfer cycle */
 int curl_multi_perform_once(void);
-
-/** \brief initialise network config struct */
-void NetworkConfig_init(void);
 
 /** \brief initialise the network module */
 void NetworkSystem_init(void);

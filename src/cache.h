@@ -71,16 +71,6 @@ struct Cache {
 extern int CACHE_SYSTEM_INIT;
 
 /**
- * \brief The size of each download segment
- */
-extern int DATA_BLK_SZ;
-
-/**
- * \brief The maximum segment count for a single cache file
- */
-extern int MAX_SEGBC;
-
-/**
  * \brief The metadata directory
  */
 extern char *META_DIR;

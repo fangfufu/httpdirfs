@@ -159,4 +159,8 @@ void LinkTable_free(LinkTable *linktbl);
  */
 void LinkTable_print(LinkTable *linktbl);
 
+/**
+ * \brief add a Link to a LinkTable
+ */
+void LinkTable_add(LinkTable *linktbl, Link *link);
 #endif

@@ -36,7 +36,7 @@ int main(int argc, char **argv)
     add_arg(&fuse_argv, &fuse_argc, argv[0]);
 
     /* initialise network configuration struct */
-    NetworkConfig_init();
+    Config_init();
 
     /* initialise network subsystem */
     NetworkSystem_init();
@@ -140,7 +140,10 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"max-conns", required_argument, NULL, 'L'},        /* 11 */
         {"user-agent", required_argument, NULL, 'L'},       /* 12 */
         {"retry-wait", required_argument, NULL, 'L'},       /* 13 */
-        {"cache-location", required_argument, NULL, 'L'},    /* 14 */
+        {"cache-location", required_argument, NULL, 'L'},   /* 14 */
+        {"sonic-username", required_argument, NULL, 'L'},   /* 15 */
+        {"sonic-password", required_argument, NULL, 'L'},   /* 16 */
+        {"sonic", no_argument, NULL, 'L'},                  /* 17 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -170,43 +173,52 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                 add_arg(fuse_argv, fuse_argc, "-s");
                 break;
             case 'u':
-                NETWORK_CONFIG.username = strdup(optarg);
+                CONFIG.http_username = strdup(optarg);
                 break;
             case 'p':
-                NETWORK_CONFIG.password = strdup(optarg);
+                CONFIG.http_password = strdup(optarg);
                 break;
             case 'P':
-                NETWORK_CONFIG.proxy = strdup(optarg);
+                CONFIG.proxy = strdup(optarg);
                 break;
             case 'L':
                 /* Long options */
                 switch (long_index) {
                     case 6:
-                        NETWORK_CONFIG.proxy_user = strdup(optarg);
+                        CONFIG.proxy_username = strdup(optarg);
                         break;
                     case 7:
-                        NETWORK_CONFIG.proxy_pass = strdup(optarg);
+                        CONFIG.proxy_password = strdup(optarg);
                         break;
                     case 8:
-                        NETWORK_CONFIG.cache_enabled = 1;
+                        CONFIG.cache_enabled = 1;
                         break;
                     case 9:
-                        DATA_BLK_SZ = atoi(optarg) * 1024 * 1024;
+                        CONFIG.data_blksz = atoi(optarg) * 1024 * 1024;
                         break;
                     case 10:
-                        MAX_SEGBC = atoi(optarg);
+                        CONFIG.max_segbc = atoi(optarg);
                         break;
                     case 11:
-                        NETWORK_CONFIG.max_conns = atoi(optarg);
+                        CONFIG.max_conns = atoi(optarg);
                         break;
                     case 12:
-                        NETWORK_CONFIG.user_agent = strdup(optarg);
+                        CONFIG.user_agent = strdup(optarg);
                         break;
                     case 13:
-                        HTTP_WAIT_SEC = atoi(optarg);
+                        CONFIG.http_wait_sec = atoi(optarg);
                         break;
                     case 14:
-                        NETWORK_CONFIG.cache_dir = strdup(optarg);
+                        CONFIG.cache_dir = strdup(optarg);
+                        break;
+                    case 15:
+                        CONFIG.sonic_username = strdup(optarg);
+                        break;
+                    case 16:
+                        CONFIG.sonic_password = strdup(optarg);
+                        break;
+                    case 17:
+                        CONFIG.sonic_mode = 1;
                         break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");

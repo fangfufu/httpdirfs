@@ -10,21 +10,6 @@
 #include <unistd.h>
 
 /**
- * \brief Data file block size
- * \details We set it to 1024*1024*8 = 8MiB
- */
-
-#define DEFAULT_DATA_BLK_SZ         8*1024*1024
-
-/**
- * \brief Maximum segment block count
- * \details This is set to 128*1024 blocks, which uses 128KB. By default,
- * this allows the user to store (128*1024)*(8*1024*1024) = 1TB of data
- */
-
-#define DEFAULT_MAX_SEGBC                   128*1024
-
-/**
  * \brief error associated with metadata
  */
 typedef enum {
@@ -36,10 +21,7 @@ typedef enum {
 } MetaError;
 
 /* ---------------- External variables -----------------------*/
-
 int CACHE_SYSTEM_INIT = 0;
-int DATA_BLK_SZ = 0;
-int MAX_SEGBC = DEFAULT_MAX_SEGBC;
 char *META_DIR;
 
 /* ----------------- Static variables ----------------------- */
@@ -156,10 +138,6 @@ void CacheSystem_init(const char *path, int url_supplied)
                 strerror(errno));
     }
 
-    if (!DATA_BLK_SZ) {
-        DATA_BLK_SZ = DEFAULT_DATA_BLK_SZ;
-    }
-
     CACHE_SYSTEM_INIT = 1;
 }
 
@@ -202,12 +180,12 @@ blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
         return EZERO;
     }
 
-    if (cf->blksz != DATA_BLK_SZ) {
-        fprintf(stderr, "Meta_read(): Warning: cf->blksz != DATA_BLK_SZ\n");
+    if (cf->blksz != CONFIG.data_blksz) {
+        fprintf(stderr, "Meta_read(): Warning: cf->blksz != CONFIG.data_blksz\n");
     }
 
     /* Allocate some memory for the segment */
-    if (cf->segbc > MAX_SEGBC) {
+    if (cf->segbc > CONFIG.max_segbc) {
         fprintf(stderr, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
         return EMEM;
     }
@@ -671,7 +649,7 @@ int Cache_create(Link *this_link)
     cf->path = strndup(fn, MAX_PATH_LEN);
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
-    cf->blksz = DATA_BLK_SZ;
+    cf->blksz = CONFIG.data_blksz;
     cf->segbc = (cf->content_length / cf->blksz) + 1;
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 

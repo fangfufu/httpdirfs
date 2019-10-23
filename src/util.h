@@ -22,6 +22,61 @@
 #define MAX_FILENAME_LEN    255
 
 /**
+ * \brief the default user agent string
+ */
+#define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
+
+
+
+
+
+
+/**
+ * \brief configuration data structure
+ * \note The opening curly bracket should be at line 39, so the code belong
+ * lines up with the initialisation code in util.c
+ */
+typedef struct {
+    /** \brief HTTP username */
+    char *http_username;
+    /** \brief HTTP password */
+    char *http_password;
+    /** \brief HTTP proxy URL */
+    char *proxy;
+    /** \brief HTTP proxy username */
+    char *proxy_username;
+    /** \brief HTTP proxy password */
+    char *proxy_password;
+    /** \brief HTTP maximum connection count */
+    long max_conns;
+    /** \brief HTTP user agent*/
+    char *user_agent;
+    /** \brief The waiting time after getting HTTP 429 (too many requests) */
+    int http_wait_sec;
+
+    /** \brief Whether cache mode is enabled */
+    int cache_enabled;
+    /** \brief The cache location*/
+    char *cache_dir;
+    /** \brief The size of each download segment for cache mode */
+    int data_blksz;
+    /** \brief The maximum segment count for a single cache file */
+    int max_segbc;
+
+    /** \brief Whether we are using the Subsonic mode */
+    int sonic_mode;
+    /** \brief The Subsonic server username */
+    char *sonic_username;
+    /** \brief The Subsonic server password */
+    char *sonic_password;
+} ConfigStruct;
+
+/**
+ * \brief The Configuration data structure
+ */
+extern ConfigStruct CONFIG;
+
+/**
  * \brief append a path
  * \details This function appends a path with the next level, while taking the
  * trailing slash of the upper level into account.
@@ -73,5 +128,10 @@ char *generate_md5sum(const char *str);
  * \brief wrapper for calloc(), with error handling
  */
 void *CALLOC(size_t nmemb, size_t size);
+
+/**
+ * \brief initialise the configuration data structure
+ */
+void Config_init(void);
 
 #endif

@@ -9,13 +9,9 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#define DEFAULT_NETWORK_MAX_CONNS   10
-#define DEFAULT_HTTP_WAIT_SEC       5
 
 /* ----------------- External variables ---------------------- */
 CURLSH *CURL_SHARE;
-NetworkConfigStruct NETWORK_CONFIG;
-int HTTP_WAIT_SEC = DEFAULT_HTTP_WAIT_SEC;
 
 /* ----------------- Static variable ----------------------- */
 /** \brief curl multi interface handle */
@@ -123,8 +119,8 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
             if (!slept) {
                 fprintf(stderr,
                         "curl_process_msgs(): HTTP %ld, sleeping for %d sec\n",
-                        http_resp, HTTP_WAIT_SEC);
-                sleep(HTTP_WAIT_SEC);
+                        http_resp, CONFIG.http_wait_sec);
+                sleep(CONFIG.http_wait_sec);
                 slept = 1;
             }
         } else {
@@ -231,19 +227,6 @@ int curl_multi_perform_once(void)
     return n_running_curl;
 }
 
-void NetworkConfig_init(void)
-{
-    NETWORK_CONFIG.username = NULL;
-    NETWORK_CONFIG.password = NULL;
-    NETWORK_CONFIG.proxy = NULL;
-    NETWORK_CONFIG.proxy_user = NULL;
-    NETWORK_CONFIG.proxy_pass = NULL;
-    NETWORK_CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
-    NETWORK_CONFIG.user_agent = DEFAULT_USER_AGENT;
-    NETWORK_CONFIG.cache_enabled = 0;
-    NETWORK_CONFIG.cache_dir = NULL;
-}
-
 void NetworkSystem_init(void)
 {
     /* ------- Global related ----------*/
@@ -277,9 +260,9 @@ void NetworkSystem_init(void)
         exit_failure();
     }
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
-                      NETWORK_CONFIG.max_conns);
+                      CONFIG.max_conns);
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_HOST_CONNECTIONS,
-                      NETWORK_CONFIG.max_conns);
+                      CONFIG.max_conns);
 
     /* ------------ Initialise locks ---------*/
     if (pthread_mutex_init(&transfer_lock, NULL)) {
