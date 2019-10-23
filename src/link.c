@@ -109,6 +109,15 @@ static LinkType linkname_to_LinkType(const char *linkname)
         return LINK_INVALID;
     }
 
+    /* Check for stray '/' */
+    char *slash = strchr(linkname, '/');
+    if (slash) {
+        int linkname_len = strnlen(linkname, MAX_FILENAME_LEN) - 1;
+        if (slash - linkname != linkname_len) {
+            return LINK_INVALID;
+        }
+    }
+
     if ( linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/' ) {
         return LINK_DIR;
     }
