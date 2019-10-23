@@ -93,11 +93,12 @@ static char *sonic_getMusicDirectory_link(const int id)
 /**
  * \brief generate a download request URL
  */
-static char *sonic_download_link(const int id)
+static char *sonic_stream_link(const int id)
 {
-    char *first_part = sonic_gen_url_first_part("download");
+    char *first_part = sonic_gen_url_first_part("stream");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%d", first_part, id);
+    snprintf(url, MAX_PATH_LEN,
+             "%s&estimateContentLength=true&format=raw&id=%d", first_part, id);
     free(first_part);
     return url;
 }
@@ -211,7 +212,7 @@ static void XMLCALL XML_process_single_element(void *data, const char *elem,
         strncpy(link->f_url, url, MAX_PATH_LEN);
         free(url);
     } else if (link->type == LINK_FILE) {
-        char *url = sonic_download_link(link->sonic_id);
+        char *url = sonic_stream_link(link->sonic_id);
         strncpy(link->f_url, url, MAX_PATH_LEN);
         free(url);
     } else {

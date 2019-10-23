@@ -54,7 +54,7 @@ LinkTable *LinkSystem_init(const char *url)
      * Note that cache system is enabled automatically if sonic mode is
      * enabled
      */
-    if (CONFIG.cache_enabled || CONFIG.sonic_mode) {
+    if (CONFIG.cache_enabled) {
         if (CONFIG.cache_dir) {
             CacheSystem_init(CONFIG.cache_dir, 0);
         } else {
