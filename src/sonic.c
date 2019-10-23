@@ -144,19 +144,26 @@ static void XMLCALL XML_process_single_element(void *data, const char *elem,
             continue;
         }
 
-        if (!linkname_set) {
-            if (!strcmp("name", attr[i])) {
-                strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
-                linkname_set = 1;
-                continue;
-            }
+        /*
+         * "title" is used for directory name,
+         * "name" is for top level directories
+         */
+        if (!strcmp("title", attr[i]) || !strcmp("name", attr[i])) {
+            strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
+            linkname_set = 1;
+            continue;
+        }
 
-            if (!strcmp("path", attr[i])) {
-                strncpy(link->linkname, strrchr(attr[i+1], '/') + 1,
-                        MAX_FILENAME_LEN);
-                linkname_set = 1;
-                continue;
-            }
+        /*
+         * Path always appears after title, it is used for filename.
+         * This is why it is safe to rewrite linkname
+         */
+        if (!strcmp("path", attr[i])) {
+            memset(link->linkname, 0, MAX_FILENAME_LEN);
+            strncpy(link->linkname, strrchr(attr[i+1], '/') + 1,
+                    MAX_FILENAME_LEN);
+            linkname_set = 1;
+            continue;
         }
 
         if (!strcmp("isDir", attr[i])) {
@@ -164,8 +171,6 @@ static void XMLCALL XML_process_single_element(void *data, const char *elem,
                 link->type = LINK_DIR;
             } else if (!strcmp("false", attr[i+1])) {
                 link->type = LINK_FILE;
-            } else {
-                link->type = LINK_DIR;
             }
             continue;
         }

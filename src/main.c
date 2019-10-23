@@ -68,6 +68,14 @@ int main(int argc, char **argv)
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
     } else {
+        if (CONFIG.sonic_username && CONFIG.sonic_password) {
+            CONFIG.sonic_mode = 1;
+        } else if (CONFIG.sonic_username || CONFIG.sonic_password) {
+            fprintf(stderr,
+                    "Error: You have to supply both username and password to\
+activate Sonic mode.\n");
+            exit(EXIT_FAILURE);
+        }
         if(!LinkSystem_init(base_url)) {
             fprintf(stderr, "Error: Network initialisation failed.\n");
             exit(EXIT_FAILURE);
@@ -143,7 +151,6 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"cache-location", required_argument, NULL, 'L'},   /* 14 */
         {"sonic-username", required_argument, NULL, 'L'},   /* 15 */
         {"sonic-password", required_argument, NULL, 'L'},   /* 16 */
-        {"sonic", no_argument, NULL, 'L'},                  /* 17 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -216,9 +223,6 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         break;
                     case 16:
                         CONFIG.sonic_password = strdup(optarg);
-                        break;
-                    case 17:
-                        CONFIG.sonic_mode = 1;
                         break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
