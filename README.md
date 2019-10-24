@@ -13,7 +13,7 @@ This feature is triggered by the ``--cache`` flag. This makes this filesystem
 much faster than ``rclone mount``.
 
 ## News
-HTTPDirFS now supports mounting Airsonic / Subsonic servers
+HTTPDirFS now supports mounting Airsonic / Subsonic servers!!!
 
 ## Usage
 
