@@ -520,8 +520,13 @@ static void Cache_free(Cache *cf)
     if (cf->path) {
         free(cf->path);
     }
+
     if (cf->seg) {
         free(cf->seg);
+    }
+
+    if (cf->fs_path) {
+        free(cf->fs_path);
     }
 
     free(cf);
@@ -664,8 +669,10 @@ static int Meta_create(Cache *cf)
     return 0;
 }
 
-int Cache_create(Link *this_link)
+int Cache_create(const char *path)
 {
+    Link *this_link = path_to_Link(path);
+
     char *fn;
     if (!CONFIG.sonic_mode) {
         fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0,
@@ -732,19 +739,8 @@ Cache *Cache_open(const char *fn)
     /* Obtain the link structure memory pointer */
     Link *link = path_to_Link(fn);
     if (!link) {
+        /* There is no associated link to the path */
         return NULL;
-    }
-
-    /* Check if both metadata and data file exist */
-    if (!CONFIG.sonic_mode) {
-        if (!Cache_exist(fn)) {
-            return NULL;
-        }
-    } else {
-        if (!Cache_exist(link->sonic_id_str)) {
-            return NULL;
-        }
-        fn = link->sonic_id_str;
     }
 
     /*---------------- Cache_open() critical section -----------------*/
@@ -772,8 +768,28 @@ Cache *Cache_open(const char *fn)
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
     /*----------------------------------------------------------------*/
 
+    /* Check if both metadata and data file exist */
+    if (!CONFIG.sonic_mode) {
+        if (!Cache_exist(fn)) {
+            return NULL;
+        }
+    } else {
+        if (!Cache_exist(link->sonic_id_str)) {
+            return NULL;
+        }
+    }
+
     /* Create the cache in-memory data structure */
     Cache *cf = Cache_alloc();
+
+    if (CONFIG.sonic_mode) {
+        /* Fill in the fs_path */
+        cf->fs_path = calloc(MAX_PATH_LEN + 1, sizeof(char));
+        strncpy(cf->fs_path, fn, MAX_PATH_LEN);
+        /* Set the path for the local cache file */
+        fn = link->sonic_id_str;
+    }
+
     cf->path = strndup(fn, MAX_PATH_LEN);
 
     /* Associate the cache structure with a link */
@@ -923,8 +939,14 @@ static void *Cache_bgdl(void *arg)
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_bgdl(): thread %lu: ", pthread_self());
-    long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
+    long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                               cf->next_dl_offset);
+    if (recv < 0) {
+        fprintf(stderr, "\nCache_bgdl(): received %lu bytes, \
+which does't make sense\n", recv);
+        exit_failure();
+    }
+
     if ( (recv == cf->blksz) ||
         (cf->next_dl_offset == (cf->content_length / cf->blksz * cf->blksz)) )
     {
@@ -964,7 +986,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     } else {
         /* Wait for any other download thread to finish*/
         #ifdef CACHE_LOCK_DEBUG
-        fprintf(stderr, "Cache_read(): thread %lu: locking w_lock;\n",
+        fprintf(stderr, "Cache_read(): thread %ld: locking w_lock;\n",
                 pthread_self());
         #endif
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
@@ -985,8 +1007,14 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_read(): thread %lu: ", pthread_self());
-    long recv = path_download(cf->path, (char *) recv_buf, cf->blksz,
+    fprintf(stderr, "cf->fs_path: %s\n", cf->fs_path);
+    long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                                 dl_offset);
+    if (recv < 0) {
+        fprintf(stderr, "\nCache_read(): received %ld bytes, \
+which does't make sense\n", recv);
+        exit_failure();
+    }
     /*
      * check if we have received enough data, write it to the disk
      *

@@ -677,6 +677,10 @@ Link *path_to_Link(const char *path)
 long path_download(const char *path, char *output_buf, size_t size,
                    off_t offset)
 {
+    if (!path) {
+        fprintf(stderr, "\npath_download(): NULL path supplied\n");
+        exit_failure();
+    }
     Link *link;
     link = path_to_Link(path);
     if (!link) {
@@ -746,5 +750,6 @@ range requests\n");
     memmove(output_buf, buf.data, recv);
     curl_easy_cleanup(curl);
     free(buf.data);
+
     return recv;
 }

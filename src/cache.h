@@ -27,11 +27,11 @@ typedef uint8_t Seg;
  * \brief cache data type in-memory data structure
  */
 struct Cache {
-    /** \brief The FILE pointer for the data file*/
+    /** \brief the FILE pointer for the data file*/
     FILE *dfp;
-    /** \brief The FILE pointer for the metadata */
+    /** \brief the FILE pointer for the metadata */
     FILE *mfp;
-    /** \brief the path to the file on the web server */
+    /** \brief the path to the local cache file */
     char *path;
     /** \brief the Link associated with this cache data set */
     Link *link;
@@ -63,6 +63,9 @@ struct Cache {
     pthread_mutexattr_t bgt_lock_attr;
     /** \brief the offset of the next segment to be downloaded in background*/
     off_t next_dl_offset;
+
+    /** \brief the FUSE filesystem path to the remote file*/
+    char *fs_path;
 };
 
 /**
@@ -116,7 +119,7 @@ void Cache_close(Cache *cf);
  *  -   -1, otherwise
  * \note Called by fs_open()
  */
-int Cache_create(Link *this_link);
+int Cache_create(const char *path);
 
 /**
  * \brief delete a cache file set

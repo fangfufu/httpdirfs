@@ -76,7 +76,7 @@ struct Link {
     /**
      * \brief Sonic Music Directory ID in string format
      */
-    char sonic_id_str[MAX_FILENAME_LEN+1];
+    char *sonic_id_str;
 };
 
 struct LinkTable {

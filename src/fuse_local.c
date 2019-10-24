@@ -96,7 +96,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
              * cache creation
              */
             Cache_delete(path);
-            Cache_create(link);
+            Cache_create(path);
             fi->fh = (uint64_t) Cache_open(path);
             /*
              * The cache definitely cannot be opened for some reason.
