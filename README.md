@@ -1,4 +1,4 @@
-# HTTPDirFS - HTTP Directory Filesystem with a permanent cache 
+# HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support!
 
 Have you ever wanted to mount those HTTP directory listings as if it was a
 partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
@@ -13,7 +13,8 @@ This feature is triggered by the ``--cache`` flag. This makes this filesystem
 much faster than ``rclone mount``.
 
 ## News
-HTTPDirFS now supports mounting Airsonic / Subsonic servers!!!
+HTTPDirFS now supports mounting Airsonic / Subsonic servers! This features is 
+dedicated the my Debian package maintainer Jerome Charaoui. 
 
 ## Usage
 
@@ -83,7 +84,8 @@ pull request.
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
 cache file creation. For a list of filesystem that supports sparse allocation,
-please refer to [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
+please refer to 
+[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Airsonic / Subsonic server support
 This is a new feature to 1.2.0. Now you can mount the music collection on your
