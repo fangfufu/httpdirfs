@@ -782,11 +782,12 @@ Cache *Cache_open(const char *fn)
     /* Create the cache in-memory data structure */
     Cache *cf = Cache_alloc();
 
+    /* Fill in the fs_path */
+    cf->fs_path = calloc(MAX_PATH_LEN + 1, sizeof(char));
+    strncpy(cf->fs_path, fn, MAX_PATH_LEN);
+
+    /* Set the path for the local cache file, if we are in sonic mode */
     if (CONFIG.sonic_mode) {
-        /* Fill in the fs_path */
-        cf->fs_path = calloc(MAX_PATH_LEN + 1, sizeof(char));
-        strncpy(cf->fs_path, fn, MAX_PATH_LEN);
-        /* Set the path for the local cache file */
         fn = link->sonic_id_str;
     }
 
@@ -1007,7 +1008,6 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     fprintf(stderr, "Cache_read(): thread %lu: ", pthread_self());
-    fprintf(stderr, "cf->fs_path: %s\n", cf->fs_path);
     long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                                 dl_offset);
     if (recv < 0) {

@@ -1,4 +1,5 @@
-# HTTPDirFS - HTTP Directory Filesystem, with a permanent cache
+# HTTPDirFS - HTTP Directory Filesystem with a permanent cache 
+
 Have you ever wanted to mount those HTTP directory listings as if it was a
 partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
 Text Transfer Protocol Directory Filesystem.
@@ -11,9 +12,12 @@ downloaded, so you don't need to these segments again if you access them later.
 This feature is triggered by the ``--cache`` flag. This makes this filesystem
 much faster than ``rclone mount``.
 
+## News
+HTTPDirFS now supports mounting Airsonic / Subsonic servers
+
 ## Usage
 
-	./httpdirfs -f --cache $URL $YOUR_MOUNT_POINT
+	./httpdirfs -f --cache $URL $MOUNT_POINT
 
 An example URL would be
 [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag
@@ -47,6 +51,10 @@ HTTPDirFS options:
                             after encountering an error. (default: 5)
         --user-agent        Set user agent string (default: "HTTPDirFS")
 
+Subsonic options:
+        --sonic-username    The username for your Airsonic / Subsonic server
+        --sonic-password    The username for your Airsonic / Subsonic server
+
 FUSE options:
 
     -d   -o debug          enable debug output (implies -f)
@@ -76,6 +84,17 @@ The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
 cache file creation. For a list of filesystem that supports sparse allocation,
 please refer to [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
+
+## Airsonic / Subsonic server support
+This is a new feature to 1.2.0. Now you can mount the music collection on your
+Airsonic / Subsonic server, and browse them using your favourite file browser.
+You simply have to supply both ``--sonic-username`` and ``--sonic-password`` to
+trigger the Airsonic / Subsonic server mode. For example:
+
+    ./httpdirfs -f --cache --sonic-username $USERNAME --sonic-password $PASSWORD $URL $MOUNT_POINT
+
+You definitely want to enable the cache for this one, otherwise it is painfully
+slow.
 
 ## Configuration file support
 This program has basic support for using a configuration file. The configuration

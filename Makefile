@@ -1,4 +1,4 @@
-VERSION=1.1.10
+VERSION=1.2.0
 
 CFLAGS+= -O2 -Wall -Wextra -Wshadow\
 	-rdynamic -D_XOPEN_SOURCE=700 -D_DEFAULT_SOURCE -D_GNU_SOURCE\
