@@ -296,9 +296,9 @@ HTTPDirFS options:\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: 5)\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
-
+\n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
         --sonic-password    The username for your Airsonic / Subsonic server\n\
-\n\");
+\n");
 }
