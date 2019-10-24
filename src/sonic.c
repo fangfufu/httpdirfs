@@ -46,7 +46,7 @@ void sonic_config_init(const char *server, const char *username,
 /**
  * \brief generate authentication string
  */
-static char *sonic_gen_auth_str()
+static char *sonic_gen_auth_str(void)
 {
     char *salt = generate_salt();
     size_t password_len = strnlen(SONIC_CONFIG.password, MAX_FILENAME_LEN);

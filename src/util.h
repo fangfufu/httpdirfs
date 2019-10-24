@@ -114,7 +114,7 @@ void erase_string(FILE *file, size_t max_len, char *s);
  * \details this effectively generates a UUID string, which we use as the salt
  * \return a pointer to a 37-char array with the salt.
  */
-char *generate_salt();
+char *generate_salt(void);
 
 /**
  * \brief generate the md5sum of a string

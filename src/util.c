@@ -163,7 +163,7 @@ void erase_string(FILE *file, size_t max_len, char *s)
     }
 }
 
-char *generate_salt()
+char *generate_salt(void)
 {
     char *out;
     out = CALLOC(SALT_LEN + 1, sizeof(char));
