@@ -139,7 +139,6 @@ static void XMLCALL XML_process_single_element(void *data, const char *elem,
     int linkname_set = 0;
 
     for (int i = 0; attr[i]; i += 2) {
-        printf("%s: %s\n", attr[i], attr[i+1]);
         if (!strcmp("id", attr[i])) {
             link->sonic_id = atoi(attr[i+1]);
             link->sonic_id_str = calloc(MAX_FILENAME_LEN, sizeof(char));
