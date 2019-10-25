@@ -69,6 +69,8 @@ typedef struct {
     char *sonic_username;
     /** \brief The Sonic server password */
     char *sonic_password;
+    /** \brief Whether we are using Sonic mode ID3 extension */
+    int sonic_id3;
 } ConfigStruct;
 
 /**

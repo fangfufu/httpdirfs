@@ -87,6 +87,8 @@ void Config_init(void)
     CONFIG.sonic_username = NULL;
 
     CONFIG.sonic_password = NULL;
+
+    CONFIG.sonic_id3 = 0;
 }
 
 char *path_append(const char *path, const char *filename)

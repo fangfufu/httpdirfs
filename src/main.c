@@ -151,6 +151,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"cache-location", required_argument, NULL, 'L'},   /* 14 */
         {"sonic-username", required_argument, NULL, 'L'},   /* 15 */
         {"sonic-password", required_argument, NULL, 'L'},   /* 16 */
+        {"sonic-password", no_argument, NULL, 'L'},         /* 17 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -224,6 +225,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 16:
                         CONFIG.sonic_password = strdup(optarg);
                         break;
+                    case 17:
+                        CONFIG.sonic_id3 = 1;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
                         return 1;
@@ -300,5 +303,7 @@ HTTPDirFS options:\n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
         --sonic-password    The username for your Airsonic / Subsonic server\n\
+        --sonic-id3         Enable ID3 mode - this present the server content in\n\
+                            Artist/Album/Song layout \n\
 \n");
 }
