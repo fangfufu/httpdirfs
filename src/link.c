@@ -718,13 +718,12 @@ long path_download(const char *path, char *output_buf, size_t size,
     transfer_blocking(curl);
 
     /* Check for range seek support */
-    if (!CONFIG.sonic_mode) {
-        if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
-            fprintf(stderr, "Error: This web server does not support HTTP \
+    if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
+        fprintf(stderr, "Error: This web server does not support HTTP \
 range requests\n");
-            exit(EXIT_FAILURE);
-        }
+        exit(EXIT_FAILURE);
     }
+
     free(header.data);
 
     long http_resp;
