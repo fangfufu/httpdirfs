@@ -12,6 +12,9 @@ downloaded, so you don't need to these segments again if you access them later.
 This feature is triggered by the ``--cache`` flag. This makes this filesystem
 much faster than ``rclone mount``.
 
+The support for Airsonic / Subsonic server has also been added. This allows you
+to mount a remote music collection locally. 
+
 ## News
 HTTPDirFS now supports mounting Airsonic / Subsonic servers! This features is 
 dedicated the my Debian package maintainer Jerome Charaoui. 
