@@ -67,7 +67,11 @@ LinkTable *LinkSystem_init(const char *url)
         ROOT_LINK_TBL = LinkTable_new(url);
     } else {
         sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
-        ROOT_LINK_TBL = sonic_LinkTable_new(0);
+        if (!CONFIG.sonic_id3) {
+            ROOT_LINK_TBL = sonic_LinkTable_new_index_mode(0);
+        } else {
+            ROOT_LINK_TBL = sonic_LinkTable_new_id3_mode("/");
+        }
     }
     return ROOT_LINK_TBL;
 }
@@ -597,11 +601,16 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
     Link *link = path_to_Link(path);
-    if (!link->next_table) {
+    LinkTable *next_table = link->next_table;
+    if (next_table) {
         if (!CONFIG.sonic_mode) {
-            link->next_table = LinkTable_new(link->f_url);
+            next_table = LinkTable_new(link->f_url);
         } else {
-            link->next_table = sonic_LinkTable_new(link->sonic_id);
+            if (!CONFIG.sonic_id3) {
+                next_table = sonic_LinkTable_new_index_mode(link->sonic_id);
+            } else {
+                next_table = sonic_LinkTable_new_index_mode(link->sonic_id_str);
+            }
         }
     }
     return link->next_table;
@@ -645,13 +654,19 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
                 /* The next sub-directory exists */
-                if (!linktbl->links[i]->next_table) {
+                LinkTable *next_table = linktbl->links[i]->next_table;
+                if (!next_table) {
                     if (!CONFIG.sonic_mode) {
-                        linktbl->links[i]->next_table = LinkTable_new(
+                        next_table = LinkTable_new(
                             linktbl->links[i]->f_url);
                     } else {
-                        linktbl->links[i]->next_table = sonic_LinkTable_new(
-                            linktbl->links[i]->sonic_id);
+                        if (!CONFIG.sonic_id3) {
+                            next_table = sonic_LinkTable_new_index_mode(
+                                    linktbl->links[i]->sonic_id);
+                        } else {
+                            next_table = sonic_LinkTable_new_id3_mode(
+                                linktbl->links[i]->sonic_id_str);
+                        }
                     }
                 }
                 return path_to_Link_recursive(

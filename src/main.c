@@ -227,6 +227,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         break;
                     case 17:
                         CONFIG.sonic_id3 = 1;
+                        break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
                         return 1;

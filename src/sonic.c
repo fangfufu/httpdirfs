@@ -104,7 +104,7 @@ static char *sonic_stream_link(const int id)
 }
 
 /**
- * \brief Process a single element output by the parser
+ * \brief The parser for Sonic index mode
  * \details This is the callback function called by the the XML parser.
  * \param[in] data user supplied data, in this case it is the pointer to the
  * LinkTable.
@@ -117,7 +117,7 @@ static char *sonic_stream_link(const int id)
  * parser terminates the strings properly, which is a fair assumption,
  * considering how mature expat is.
  */
-static void XMLCALL XML_process_single_element(void *data, const char *elem,
+static void XMLCALL XML_parser_index_mode(void *data, const char *elem,
                                                const char **attr)
 {
     LinkTable *linktbl = (LinkTable *) data;
@@ -232,13 +232,29 @@ static void XMLCALL XML_process_single_element(void *data, const char *elem,
 }
 
 /**
+ * \brief The parser for Sonic ID3 mode
+ * \details Please refer to the details for XML_parser_index_mode()
+ */
+static void XMLCALL XML_parser_id3_mode(void *data, const char *elem,
+                                          const char **attr)
+{
+    LinkTable *linktbl = (LinkTable *) data;
+}
+
+/**
  * \brief parse a XML string in order to fill in the LinkTable
  */
 static void sonic_XML_to_LinkTable(DataStruct ds, LinkTable *linktbl)
 {
     XML_Parser parser = XML_ParserCreate(NULL);
     XML_SetUserData(parser, linktbl);
-    XML_SetStartElementHandler(parser, XML_process_single_element);
+
+    if (!CONFIG.sonic_id3) {
+        XML_SetStartElementHandler(parser, XML_parser_index_mode);
+    } else {
+        XML_SetStartElementHandler(parser, XML_parser_id3_mode);
+    }
+
     if (XML_Parse(parser, ds.data, ds.size, 1) == XML_STATUS_ERROR) {
         fprintf(stderr,
                 "sonic_XML_to_LinkTable(): Parse error at line %lu: %s\n",
@@ -248,7 +264,7 @@ static void sonic_XML_to_LinkTable(DataStruct ds, LinkTable *linktbl)
     XML_ParserFree(parser);
 }
 
-LinkTable *sonic_LinkTable_new(const int id)
+LinkTable *sonic_LinkTable_new_index_mode(const int id)
 {
     char *url;
     if (id > 0) {
@@ -276,3 +292,9 @@ LinkTable *sonic_LinkTable_new(const int id)
     free(url);
     return linktbl;
 }
+
+LinkTable *sonic_LinkTable_new_id3_mode(const char *sonic_id_str)
+{
+    return NULL;
+}
+
