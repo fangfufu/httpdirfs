@@ -31,6 +31,7 @@ the filesystem is visiting.
 ### Useful options
 
 HTTPDirFS options:
+
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to
