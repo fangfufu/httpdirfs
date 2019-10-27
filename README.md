@@ -31,7 +31,6 @@ the filesystem is visiting.
 ### Useful options
 
 HTTPDirFS options:
-
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to
@@ -54,10 +53,14 @@ HTTPDirFS options:
         --retry-wait        Set delay in seconds before retrying an HTTP request
                             after encountering an error. (default: 5)
         --user-agent        Set user agent string (default: "HTTPDirFS")
+        --no-range-check    Disable the build-in check for the server's support
+                            for HTTP range requests
 
-Subsonic options:
+For mounting a Airsonic / Subsonic server:
         --sonic-username    The username for your Airsonic / Subsonic server
         --sonic-password    The username for your Airsonic / Subsonic server
+        --sonic-id3         Enable ID3 mode - this present the server content in
+                            Artist/Album/Song layout
 
 FUSE options:
 
@@ -92,14 +95,31 @@ please refer to
 
 ## Airsonic / Subsonic server support
 This is a new feature to 1.2.0. Now you can mount the music collection on your
-Airsonic / Subsonic server, and browse them using your favourite file browser.
+Airsonic / Subsonic server (*sonic), and browse them using your favourite file browser.
 You simply have to supply both ``--sonic-username`` and ``--sonic-password`` to
-trigger the Airsonic / Subsonic server mode. For example:
+trigger the *sonic server mode. For example:
 
     ./httpdirfs -f --cache --sonic-username $USERNAME --sonic-password $PASSWORD $URL $MOUNT_POINT
 
 You definitely want to enable the cache for this one, otherwise it is painfully
 slow.
+
+There are two ways of mounting your *sonic server
+- the index mode
+- and the ID3 mode.
+
+In the index mode, the filesystem is presented based on the listing on the
+``Index`` link in your *sonic's home page.
+
+In ID3 mode, the filesystem is presented using the following hierarchy:
+ 0. Root
+ 1. Alphabetical indices of the Artists' name
+ 2. The Arists' name
+ 3. All of the albums by a single artist
+ 4. All the songs in an album.
+
+By default, *sonic server is mounted in the Index mode. If you want to mount in
+ID3 mode, please use the ``--sonic-id3`` flag.
 
 ## Configuration file support
 This program has basic support for using a configuration file. The configuration
@@ -143,14 +163,23 @@ enable them, compile the program with the ``-DCACHE_LOCK_DEBUG``, the
     make CPPFLAGS=-DCACHE_LOCK_DEBUG
 
 ## The Technical Details
-This program downloads the HTML web pages/files using
-[libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using
+For the normal HTTP directories, this program downloads the HTML web pages/files
+using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using
 [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 [libfuse](https://github.com/libfuse/libfuse).
+
+For *sonic servers, rather than using the Gumbo parser, this program parse
+*sonic servers' XML responses using
+[expat](https://github.com/libexpat/libexpat).
 
 The cache system stores the metadata and the downloaded file into two
 separate directories. It uses ``uint8_t`` arrays to record which segments of the
 file had been downloaded.
+
+Note that HTTPDirFS requires the server to support HTTP Range Request, some
+servers support this features, but does not present ``"Accept-Ranges: bytes`` in
+the header responses. HTTPDirFS by default checks for this header field. You can
+disable this check by using the ``--no-range-check`` flag.
 
 ## Other projects which incorporate HTTPDirFS
 - [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
