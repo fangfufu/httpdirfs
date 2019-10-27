@@ -244,24 +244,38 @@ static void XMLCALL XML_parser_id3_mode(void *data, const char *elem,
 /**
  * \brief parse a XML string in order to fill in the LinkTable
  */
-static void sonic_XML_to_LinkTable(DataStruct ds, LinkTable *linktbl)
+static LinkTable *sonic_url_to_LinkTable(const char *url,
+                                         XML_StartElementHandler handler)
 {
+    LinkTable *linktbl = LinkTable_alloc(url);
+
+    /* start downloading the base URL */
+    DataStruct xml = Link_to_DataStruct(linktbl->links[0]);
+    if (xml.size == 0) {
+        LinkTable_free(linktbl);
+        return NULL;
+    }
+
     XML_Parser parser = XML_ParserCreate(NULL);
     XML_SetUserData(parser, linktbl);
 
-    if (!CONFIG.sonic_id3) {
-        XML_SetStartElementHandler(parser, XML_parser_index_mode);
-    } else {
-        XML_SetStartElementHandler(parser, XML_parser_id3_mode);
-    }
+    XML_SetStartElementHandler(parser, handler);
 
-    if (XML_Parse(parser, ds.data, ds.size, 1) == XML_STATUS_ERROR) {
+    if (XML_Parse(parser, xml.data, xml.size, 1) == XML_STATUS_ERROR) {
         fprintf(stderr,
                 "sonic_XML_to_LinkTable(): Parse error at line %lu: %s\n",
                 XML_GetCurrentLineNumber(parser),
                 XML_ErrorString(XML_GetErrorCode(parser)));
     }
+
     XML_ParserFree(parser);
+
+    free(xml.data);
+
+    LinkTable_print(linktbl);
+
+    return linktbl;
+
 }
 
 LinkTable *sonic_LinkTable_new_index_mode(const int id)
@@ -272,29 +286,47 @@ LinkTable *sonic_LinkTable_new_index_mode(const int id)
     } else {
         url = sonic_gen_url_first_part("getIndexes");
     }
-
-    printf("%s\n", url);
-
-    LinkTable *linktbl = LinkTable_alloc(url);
-
-    /* start downloading the base URL */
-    DataStruct xml = Link_to_DataStruct(linktbl->links[0]);
-    if (xml.size == 0) {
-        LinkTable_free(linktbl);
-        return NULL;
-    }
-
-    sonic_XML_to_LinkTable(xml, linktbl);
-
-    LinkTable_print(linktbl);
-
-    free(xml.data);
+    LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_index_mode);
     free(url);
     return linktbl;
 }
 
-LinkTable *sonic_LinkTable_new_id3_mode(const char *sonic_id_str)
+LinkTable *sonic_LinkTable_new_id3_root()
 {
+    char *url = sonic_gen_url_first_part("getArtists");
+    LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_index_mode);
+    free(url);
+    return linktbl;
+}
+
+LinkTable *sonic_LinkTable_new_id3_mode(char *sonic_id_str)
+{
+    /* Count the number of '/' */
+    int n = 0;
+    for (char *c = sonic_id_str; *c; c++) {
+        if (*c == '/') {
+            n++;
+        }
+    }
+
+    char *url;
+    switch (n) {
+        /* Root level */
+        case 1:
+            break;
+        /* Index level */
+        case 2:
+            break;
+        /* Artist level */
+        case 3:
+            break;
+        /* Album level*/
+        case 4:
+            break;
+        /* Invalid */
+        default:
+            break;
+    }
     return NULL;
 }
 

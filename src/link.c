@@ -609,7 +609,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
             if (!CONFIG.sonic_id3) {
                 next_table = sonic_LinkTable_new_index_mode(link->sonic_id);
             } else {
-                next_table = sonic_LinkTable_new_index_mode(link->sonic_id_str);
+                next_table = sonic_LinkTable_new_id3_mode(link->sonic_id_str);
             }
         }
     }
@@ -629,6 +629,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         *slash = '\0';
     }
 
+    puts(path);
     slash = strchr(path, '/');
     if ( slash == NULL ) {
         /* We cannot find another '/', we have reached the last level */
