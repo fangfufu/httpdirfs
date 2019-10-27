@@ -11,7 +11,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-
 typedef struct {
     char *server;
     char *username;

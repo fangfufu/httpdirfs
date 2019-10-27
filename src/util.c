@@ -72,6 +72,8 @@ void Config_init(void)
 
     CONFIG.http_wait_sec = DEFAULT_HTTP_WAIT_SEC;
 
+    CONFIG.no_range_check = 0;
+
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 
