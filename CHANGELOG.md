@@ -16,6 +16,8 @@ Jerome Charaoui
 ### Fixed
 - Remove the erroneous error messages when the user supplies wrong command line
 options.
+- The same cache folder is used, irrespective whether the server root URL ends
+with '/'
 
 ## [1.1.10] - 2019-09-10
 ### Added

@@ -151,7 +151,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"cache-location", required_argument, NULL, 'L'},   /* 14 */
         {"sonic-username", required_argument, NULL, 'L'},   /* 15 */
         {"sonic-password", required_argument, NULL, 'L'},   /* 16 */
-        {"sonic-password", no_argument, NULL, 'L'},         /* 17 */
+        {"sonic-id3", no_argument, NULL, 'L'},         /* 17 */
         {0, 0, 0, 0}
     };
     while ((c =

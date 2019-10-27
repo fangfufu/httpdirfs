@@ -16,17 +16,20 @@ void sonic_config_init(const char *server, const char *username,
 /**
  * \brief Create a new Sonic LinkTable in index mode
  */
-LinkTable *sonic_LinkTable_new_index_mode(const int id);
+LinkTable *sonic_LinkTable_new_index(const int id);
 
 /**
  * \brief Create a new Sonic LinkTable in ID3 mode
- * \details In this mode, the filesystem effectively has 4 levels of
- * directories, which are:
- *  1. Root
- *  2. Index
- *  3. Artists
- *  4. Album
+ * \details In this mode, the filesystem effectively has 5 levels of which are:
+ *  0. Root table
+ *  1. Index table
+ *  2. Artist table
+ *  3. Album table
+ *  4. Song table
+ *  5. Individual song
+ * \param[in] depth the level of the requested table
+ * \param[in] id the id of the requested table
  */
-LinkTable *sonic_LinkTable_new_id3_mode(char *sonic_id_str);
+LinkTable *sonic_LinkTable_new_id3(int depth, int id);
 
 #endif
