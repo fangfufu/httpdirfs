@@ -69,14 +69,25 @@ struct Link {
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
     /**
-     * \brief Sonic Music Directory ID
-     * \details We use linkname to store filename
+     * \brief Sonic id field
+     * \details This is used to store the followings:
+     *  - Arist ID
+     *  - Album ID
+     *  - Song ID
+     *  - Sub-directory ID (in the XML response, this is the ID on the "child"
+     *    element)
      */
     int sonic_id;
     /**
-     * \brief Sonic Music Directory ID in string format
+     * \brief Sonic directory depth
+     * \details This is used exclusively in ID3 mode to store the depth of the
+     * current directory.
      */
-    char *sonic_id_str;
+    int sonic_depth;
+    /**
+     * \brief The sonic song's ID in character array format.
+     */
+    char *sonic_song_id_str;
 };
 
 struct LinkTable {
@@ -97,7 +108,7 @@ extern int ROOT_LINK_OFFSET;
 /**
  * \brief initialise link sub-system.
  */
-LinkTable *LinkSystem_init(const char *url);
+LinkTable *LinkSystem_init(const char *raw_url);
 
 /**
  * \brief Add a link to the curl multi bundle for querying stats

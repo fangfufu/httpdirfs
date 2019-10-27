@@ -72,7 +72,7 @@ int main(int argc, char **argv)
             CONFIG.sonic_mode = 1;
         } else if (CONFIG.sonic_username || CONFIG.sonic_password) {
             fprintf(stderr,
-                    "Error: You have to supply both username and password to\
+                    "Error: You have to supply both username and password to \
 activate Sonic mode.\n");
             exit(EXIT_FAILURE);
         }
@@ -151,6 +151,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"cache-location", required_argument, NULL, 'L'},   /* 14 */
         {"sonic-username", required_argument, NULL, 'L'},   /* 15 */
         {"sonic-password", required_argument, NULL, 'L'},   /* 16 */
+        {"sonic-id3", no_argument, NULL, 'L'},              /* 17 */
+        {"no-range-check", no_argument, NULL, 'L'},         /* 18 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -224,6 +226,12 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 16:
                         CONFIG.sonic_password = strdup(optarg);
                         break;
+                    case 17:
+                        CONFIG.sonic_id3 = 1;
+                        break;
+                    case 18:
+                        CONFIG.no_range_check = 1;
+                        break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
                         return 1;
@@ -296,9 +304,13 @@ HTTPDirFS options:\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: 5)\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
+        --no-range-check    Disable the build-in check for the server's support\n\
+                            for HTTP range requests\n\
 \n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
         --sonic-password    The username for your Airsonic / Subsonic server\n\
+        --sonic-id3         Enable ID3 mode - this present the server content in\n\
+                            Artist/Album/Song layout \n\
 \n");
 }

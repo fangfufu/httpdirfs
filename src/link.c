@@ -6,6 +6,7 @@
 
 #include <gumbo.h>
 
+#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -27,8 +28,15 @@ int ROOT_LINK_OFFSET = 0;
  */
 static pthread_mutex_t link_lock;
 
-LinkTable *LinkSystem_init(const char *url)
+LinkTable *LinkSystem_init(const char *raw_url)
 {
+    /* Remove excess '/' if it is there */
+    char *url = strdup(raw_url);
+    int url_len = strnlen(url, MAX_PATH_LEN) - 1;
+    if (url[url_len] == '/') {
+        url[url_len] = '\0';
+    }
+
     if (pthread_mutex_init(&link_lock, NULL) != 0) {
         fprintf(stderr,
                 "link_system_init(): link_lock initialisation failed!\n");
@@ -37,17 +45,7 @@ LinkTable *LinkSystem_init(const char *url)
 
     /* --------- Set the length of the root link ----------- */
     /* This is where the '/' should be */
-    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) - 1;
-    if (url[ROOT_LINK_OFFSET] != '/') {
-        /*
-         * If '/' is not there, it is automatically added, so we need to skip 2
-         * characters
-         */
-        ROOT_LINK_OFFSET += 2;
-    } else {
-        /* If '/' is there, we need to skip it */
-        ROOT_LINK_OFFSET += 1;
-    }
+    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) + 1;
 
     /* ---------------------  Enable cache system -------------------- /
      *
@@ -67,7 +65,11 @@ LinkTable *LinkSystem_init(const char *url)
         ROOT_LINK_TBL = LinkTable_new(url);
     } else {
         sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
-        ROOT_LINK_TBL = sonic_LinkTable_new(0);
+        if (!CONFIG.sonic_id3) {
+            ROOT_LINK_TBL = sonic_LinkTable_new_index(0);
+        } else {
+            ROOT_LINK_TBL = sonic_LinkTable_new_id3(0, 0);
+        }
     }
     return ROOT_LINK_TBL;
 }
@@ -400,6 +402,7 @@ LinkTable *LinkTable_alloc(const char *url)
     Link *head_link = Link_new("/", LINK_HEAD);
     LinkTable_add(linktbl, head_link);
     strncpy(head_link->f_url, url, MAX_PATH_LEN);
+    assert(linktbl->num == 1);
     return linktbl;
 }
 
@@ -597,14 +600,21 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
     Link *link = path_to_Link(path);
-    if (!link->next_table) {
+    LinkTable *next_table = link->next_table;
+    if (!next_table) {
         if (!CONFIG.sonic_mode) {
-            link->next_table = LinkTable_new(link->f_url);
+            next_table = LinkTable_new(link->f_url);
         } else {
-            link->next_table = sonic_LinkTable_new(link->sonic_id);
+            if (!CONFIG.sonic_id3) {
+                next_table = sonic_LinkTable_new_index(link->sonic_id);
+            } else {
+                next_table = sonic_LinkTable_new_id3(link->sonic_depth,
+                                                     link->sonic_id);
+            }
         }
     }
-    return link->next_table;
+    link->next_table = next_table;
+    return next_table;
 }
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
@@ -645,17 +655,24 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         for (int i = 1; i < linktbl->num; i++) {
             if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
                 /* The next sub-directory exists */
-                if (!linktbl->links[i]->next_table) {
+                LinkTable *next_table = linktbl->links[i]->next_table;
+                if (!next_table) {
                     if (!CONFIG.sonic_mode) {
-                        linktbl->links[i]->next_table = LinkTable_new(
+                        next_table = LinkTable_new(
                             linktbl->links[i]->f_url);
                     } else {
-                        linktbl->links[i]->next_table = sonic_LinkTable_new(
-                            linktbl->links[i]->sonic_id);
+                        if (!CONFIG.sonic_id3) {
+                            next_table = sonic_LinkTable_new_index(
+                                    linktbl->links[i]->sonic_id);
+                        } else {
+                            next_table = sonic_LinkTable_new_id3(
+                                linktbl->links[i]->sonic_depth,
+                                linktbl->links[i]->sonic_id);
+                        }
                     }
                 }
-                return path_to_Link_recursive(
-                    next_path, linktbl->links[i]->next_table);
+                linktbl->links[i]->next_table = next_table;
+                return path_to_Link_recursive(next_path, next_table);
             }
         }
     }
@@ -718,10 +735,12 @@ long path_download(const char *path, char *output_buf, size_t size,
     transfer_blocking(curl);
 
     /* Check for range seek support */
-    if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
-        fprintf(stderr, "Error: This web server does not support HTTP \
+    if (!CONFIG.no_range_check) {
+        if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
+            fprintf(stderr, "Error: This web server does not support HTTP \
 range requests\n");
-        exit(EXIT_FAILURE);
+            exit(EXIT_FAILURE);
+        }
     }
 
     free(header.data);

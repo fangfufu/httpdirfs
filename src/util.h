@@ -53,6 +53,8 @@ typedef struct {
     char *user_agent;
     /** \brief The waiting time after getting HTTP 429 (too many requests) */
     int http_wait_sec;
+    /** \brief Disable check for the server's support of HTTP range request */
+    int no_range_check;
 
     /** \brief Whether cache mode is enabled */
     int cache_enabled;
@@ -69,6 +71,8 @@ typedef struct {
     char *sonic_username;
     /** \brief The Sonic server password */
     char *sonic_password;
+    /** \brief Whether we are using Sonic mode ID3 extension */
+    int sonic_id3;
 } ConfigStruct;
 
 /**
