@@ -149,8 +149,8 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
     Link *link;
     if (!strcmp(elem, "child") || !strcmp(elem, "artist")) {
         link = CALLOC(1, sizeof(Link));
-        /* Initialise to LINK_INVALID, as the link->type is set by isDir */
-        link->type = LINK_INVALID;
+        /* Initialise to LINK_DIR, as the LINK_FILE is set later. */
+        link->type = LINK_DIR;
     } else {
         /* The element does not contain directory structural information */
         return;
@@ -169,20 +169,6 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
             continue;
         }
 
-        /*
-         * "title" is used for directory name,
-         * "name" is for top level directories
-         */
-        if (!strcmp("title", attr[i]) || !strcmp("name", attr[i])) {
-            strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
-            linkname_set = 1;
-            continue;
-        }
-
-        /*
-         * Path always appears after title, it is used for filename.
-         * This is why it is safe to rewrite linkname
-         */
         if (!strcmp("path", attr[i])) {
             memset(link->linkname, 0, MAX_FILENAME_LEN);
             /* Skip to the last '/' if it exists */
@@ -196,10 +182,21 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
             continue;
         }
 
+        /*
+         * "title" is used for directory name,
+         * "name" is for top level directories
+         * N.B. "path" attribute is given the preference
+         */
+        if (!linkname_set) {
+            if (!strcmp("title", attr[i]) || !strcmp("name", attr[i])) {
+                strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
+                linkname_set = 1;
+                continue;
+            }
+        }
+
         if (!strcmp("isDir", attr[i])) {
-            if (!strcmp("true", attr[i+1])) {
-                link->type = LINK_DIR;
-            } else if (!strcmp("false", attr[i+1])) {
+            if (!strcmp("false", attr[i+1])) {
                 link->type = LINK_FILE;
                 char *url = sonic_stream_link(link->sonic_id);
                 strncpy(link->f_url, url, MAX_PATH_LEN);
@@ -222,14 +219,8 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
         }
     }
 
-    /* Clean up if linkname is not set */
+    /* Clean up if linkname or id is not set */
     if (!linkname_set || !id_set) {
-        free(link);
-        return;
-    }
-
-    if (link->type == LINK_INVALID) {
-        /* Invalid link */
         free(link);
         return;
     }
