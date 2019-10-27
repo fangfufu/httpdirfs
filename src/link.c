@@ -602,7 +602,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
     Link *link = path_to_Link(path);
     LinkTable *next_table = link->next_table;
-    if (next_table) {
+    if (!next_table) {
         if (!CONFIG.sonic_mode) {
             next_table = LinkTable_new(link->f_url);
         } else {
@@ -613,7 +613,8 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
             }
         }
     }
-    return link->next_table;
+    link->next_table = next_table;
+    return next_table;
 }
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
@@ -629,7 +630,6 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         *slash = '\0';
     }
 
-    puts(path);
     slash = strchr(path, '/');
     if ( slash == NULL ) {
         /* We cannot find another '/', we have reached the last level */
@@ -670,8 +670,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                         }
                     }
                 }
-                return path_to_Link_recursive(
-                    next_path, linktbl->links[i]->next_table);
+                linktbl->links[i]->next_table = next_table;
+                return path_to_Link_recursive(next_path, next_table);
             }
         }
     }
