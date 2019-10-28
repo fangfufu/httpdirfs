@@ -313,7 +313,7 @@ HTTPDirFS options:\n\
 \n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
-        --sonic-password    The username for your Airsonic / Subsonic server\n\
+        --sonic-password    The password for your Airsonic / Subsonic server\n\
         --sonic-id3         Enable ID3 mode - this present the server content in\n\
                             Artist/Album/Song layout \n\
         --sonic-insecure    Authenticate against your Airsonic / Subsonic server\n\
