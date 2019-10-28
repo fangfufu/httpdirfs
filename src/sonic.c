@@ -190,7 +190,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
     } else if (!strcmp(elem, "album") && linktbl->links[0]->sonic_depth == 3) {
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_DIR;
-        /* This table should be a level 3 album table */
+        /* The new table should be a level 4 song table */
         link->sonic_depth = 4;
     } else if (!strcmp(elem, "song") && linktbl->links[0]->sonic_depth == 4) {
         link = CALLOC(1, sizeof(Link));
@@ -394,7 +394,7 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
     } else if (!strcmp(elem, "artist")) {
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_DIR;
-        /* This table should be a level 3 album table */
+        /* The new table should be a level 3 album table */
         link->sonic_depth = 3;
         for (int i = 0; attr[i]; i += 2) {
             if (!strcmp("name", attr[i])) {

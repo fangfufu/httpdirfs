@@ -26,7 +26,7 @@ LinkTable *sonic_LinkTable_new_index(const char *id);
  *  2. Artist table
  *  3. Album table
  *  4. Song table
- *  5. Individual song
+ *  5. Individual song (not a table)
  * \param[in] depth the level of the requested table
  * \param[in] id the id of the requested table
  */
