@@ -154,6 +154,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"sonic-id3", no_argument, NULL, 'L'},              /* 17 */
         {"no-range-check", no_argument, NULL, 'L'},         /* 18 */
         {"sonic-insecure", no_argument, NULL, 'L'},         /* 19 */
+        {"insecure-tls", no_argument, NULL, 'L'},           /* 20 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -236,6 +237,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 19:
                         CONFIG.sonic_insecure = 1;
                         break;
+                    case 20:
+                        CONFIG.insecure_tls = 1;
+                        break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
                         return 1;
@@ -310,6 +314,8 @@ HTTPDirFS options:\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
         --no-range-check    Disable the build-in check for the server's support\n\
                             for HTTP range requests\n\
+        --insecure_tls      Disable licurl TLS certificate verification by\n\
+                            setting CURLOPT_SSL_VERIFYHOST to 0\n\
 \n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\

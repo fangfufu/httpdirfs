@@ -74,6 +74,8 @@ void Config_init(void)
 
     CONFIG.no_range_check = 0;
 
+    CONFIG.insecure_tls = 0;
+
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 

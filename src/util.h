@@ -55,6 +55,8 @@ typedef struct {
     int http_wait_sec;
     /** \brief Disable check for the server's support of HTTP range request */
     int no_range_check;
+    /** \brief Disable TLS certificate verification */
+    int insecure_tls;
 
     /** \brief Whether cache mode is enabled */
     int cache_enabled;

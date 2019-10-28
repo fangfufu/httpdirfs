@@ -169,6 +169,9 @@ static CURL *Link_to_curl(Link *link)
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
     curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
+    if (CONFIG.insecure_tls) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    }
 
 //     curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
