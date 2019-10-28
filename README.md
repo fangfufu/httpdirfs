@@ -19,6 +19,45 @@ to mount a remote music collection locally.
 HTTPDirFS now supports mounting Airsonic / Subsonic servers! This features is 
 dedicated the my Debian package maintainer Jerome Charaoui. 
 
+## Installation
+### Debian 11 "Bullseye"
+HTTPDirFS is available as a package in Debian 11 "Bullseye, which is the current
+Testing version. If you are on Debian Bullseye, you can simply run the following
+command as ``root``: 
+
+	apt install httpdirfs
+
+For more information on the status of HTTDirFS in Debian, please refer to 
+[Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
+
+### Arch Linux
+HTTPDirFS is available in the
+[Arch User Repository](https://aur.archlinux.org/packages/httpdirfs). 
+
+## Compilation
+### Debian 10 "Buster" and newer versions
+Under Debian 10 "Buster" and newer versions, you need the following packages:
+
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev
+
+### Debian 9 "Stretch"
+Under Debian 9 "Stretch", you need the following packages:
+
+    libgumbo-dev libfuse-dev libssl1.0-dev libcurl4-openssl-dev
+
+If you get the following warnings during compilation,
+
+    /usr/bin/ld: warning: libcrypto.so.1.0.2, needed by /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/libcurl.so, may conflict with libcrypto.so.1.1
+
+then this program will crash if you connect to HTTPS website. You need to check
+if you have ``libssl1.0-dev`` installed rather than ``libssl-dev``.
+This is you likely have the binaries of OpenSSL 1.0.2 installed alongside with
+the header files for OpenSSL 1.1. The header files for OpenSSL 1.0.2 link in
+additional mutex related callback functions, whereas the header files for
+OpenSSL 1.1 do not.
+
+You can check your SSL engine version using the ``--version`` flag.
+
 ## Usage
 
 	./httpdirfs -f --cache $URL $MOUNT_POINT
@@ -56,6 +95,8 @@ HTTPDirFS options:
         --user-agent        Set user agent string (default: "HTTPDirFS")
         --no-range-check    Disable the build-in check for the server's support
                             for HTTP range requests
+        --insecure_tls      Disable licurl TLS certificate verification by
+                            setting CURLOPT_SSL_VERIFYHOST to 0
 
 For mounting a Airsonic / Subsonic server:
 
@@ -109,10 +150,13 @@ HTTPDirFS is also known to work with the following applications, which implement
 some or all of Subsonic API:
 
 - [Funkwhale](https://funkwhale.audio/) (requires ``--sonic-id3`` and
-``--no-range-check``)
+``--no-range-check``, more information in 
+[issue #45](https://github.com/fangfufu/httpdirfs/issues/45))
 - [LMS](https://github.com/epoupon/lms) (requires ``--sonic-insecure`` and
-``--no-range-check``. To mount the [demo instance](https://lms.demo.poupon.io/),
-you might also need ``--insecure-tls``
+``--no-range-check``, more information in 
+[issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the 
+[demo instance](https://lms.demo.poupon.io/), you might also need 
+``--insecure-tls``)
 
 ## Permanent cache system
 You can cache all the files you have looked at permanently on your hard drive by
@@ -152,30 +196,6 @@ please supply one option per line. For example:
 
 Alternatively, you can specify your own configuration file by using the
 ``--config`` option.
-
-## Compilation
-### Debian 10 "Buster" and newer versions
-Under Debian 10 "Buster" and newer versions, you need the following packages:
-
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev
-
-### Debian 9 "Stretch"
-Under Debian 9 "Stretch", you need the following packages:
-
-    libgumbo-dev libfuse-dev libssl1.0-dev libcurl4-openssl-dev
-
-If you get the following warnings during compilation,
-
-    /usr/bin/ld: warning: libcrypto.so.1.0.2, needed by /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/libcurl.so, may conflict with libcrypto.so.1.1
-
-then this program will crash if you connect to HTTPS website. You need to check
-if you have ``libssl1.0-dev`` installed rather than ``libssl-dev``.
-This is you likely have the binaries of OpenSSL 1.0.2 installed alongside with
-the header files for OpenSSL 1.1. The header files for OpenSSL 1.0.2 link in
-additional mutex related callback functions, whereas the header files for
-OpenSSL 1.1 do not.
-
-You can check your SSL engine version using the ``--version`` flag.
 
 ### Debugging Mutexes
 By default the debugging output associated with mutexes are not compiled. To
