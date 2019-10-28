@@ -160,22 +160,41 @@ static char *sonic_stream_link(const char *id)
  * parser terminates the strings properly, which is a fair assumption,
  * considering how mature expat is.
  */
-static void XMLCALL XML_parser_index(void *data, const char *elem,
+static void XMLCALL XML_parser_general(void *data, const char *elem,
                                                const char **attr)
 {
+    /* Error checking */
     if (!strcmp(elem, "error")) {
-        fprintf(stderr, "XML_parser_index() error:\n");
+        fprintf(stderr, "XML_parser_general() error:\n");
         for (int i = 0; attr[i]; i += 2) {
             fprintf(stderr, "%s: %s\n", attr[i], attr[i+1]);
         }
         exit(EXIT_FAILURE);
     }
+
     LinkTable *linktbl = (LinkTable *) data;
     Link *link;
-    if (!strcmp(elem, "child") || !strcmp(elem, "artist")) {
+
+    /*
+     * Please refer to the documentation at the function prototype of
+     * sonic_LinkTable_new_id3()
+     */
+    if (!strcmp(elem, "child")) {
         link = CALLOC(1, sizeof(Link));
         /* Initialise to LINK_DIR, as the LINK_FILE is set later. */
         link->type = LINK_DIR;
+    } else if (!strcmp(elem, "artist") && linktbl->links[0]->sonic_depth != 3) {
+        /* We want to skip the first "artist" element in the album table */
+        link = CALLOC(1, sizeof(Link));
+        link->type = LINK_DIR;
+    } else if (!strcmp(elem, "album") && linktbl->links[0]->sonic_depth == 3) {
+        link = CALLOC(1, sizeof(Link));
+        link->type = LINK_DIR;
+        /* This table should be a level 3 album table */
+        link->sonic_depth = 4;
+    } else if (!strcmp(elem, "song") && linktbl->links[0]->sonic_depth == 4) {
+        link = CALLOC(1, sizeof(Link));
+        link->type = LINK_FILE;
     } else {
         /* The element does not contain directory structural information */
         return;
@@ -184,6 +203,9 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
     int id_set = 0;
     int linkname_set = 0;
 
+    int track = 0;
+    char *title = "";
+    char *suffix = "";
     for (int i = 0; attr[i]; i += 2) {
         if (!strcmp("id", attr[i])) {
             link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
@@ -221,9 +243,6 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
         if (!strcmp("isDir", attr[i])) {
             if (!strcmp("false", attr[i+1])) {
                 link->type = LINK_FILE;
-                char *url = sonic_stream_link(link->sonic_id);
-                strncpy(link->f_url, url, MAX_PATH_LEN);
-                free(url);
             }
             continue;
         }
@@ -240,12 +259,39 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
             link->content_length = atoll(attr[i+1]);
             continue;
         }
+
+        if (!strcmp("track", attr[i])) {
+            track = atoi(attr[i+1]);
+            continue;
+        }
+
+        if (!strcmp("title", attr[i])) {
+            title = (char *) attr[i+1];
+            continue;
+        }
+
+        if (!strcmp("suffix", attr[i])) {
+            suffix = (char *) attr[i+1];
+            continue;
+        }
+    }
+
+    if (!linkname_set && strlen(title) > 0 && strlen(suffix) > 0) {
+        snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s",
+                 track, title, suffix);
+        linkname_set = 1;
     }
 
     /* Clean up if linkname or id is not set */
     if (!linkname_set || !id_set) {
         free(link);
         return;
+    }
+
+    if (link->type == LINK_FILE) {
+        char *url = sonic_stream_link(link->sonic_id);
+        strncpy(link->f_url, url, MAX_PATH_LEN);
+        free(url);
     }
 
     LinkTable_add(linktbl, link);
@@ -298,7 +344,7 @@ LinkTable *sonic_LinkTable_new_index(const char *id)
     } else {
         url = sonic_gen_url_first_part("getIndexes");
     }
-    LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_index, 0);
+    LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_general, 0);
     free(url);
     return linktbl;
 }
@@ -373,118 +419,10 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
 
         LinkTable_add(this_linktbl, link);
     }
-    /* If we reach here, this element does not contain directory structural
-     * information */
-}
-
-static void XMLCALL XML_parser_id3(void *data, const char *elem,
-                                        const char **attr)
-{
-    if (!strcmp(elem, "error")) {
-        fprintf(stderr, "XML_parser_id3() error:\n");
-        for (int i = 0; attr[i]; i += 2) {
-            fprintf(stderr, "%s: %s\n", attr[i], attr[i+1]);
-        }
-        exit(EXIT_FAILURE);
-    }
-
-    LinkTable *linktbl = (LinkTable *) data;
-    Link *link;
-
     /*
-     * Please refer to the documentation at the function prototype of
-     * sonic_LinkTable_new_id3()
+     * If we reach here, then this element does not contain directory structural
+     * information
      */
-    if (!strcmp(elem, "album") && linktbl->links[0]->sonic_depth == 3) {
-        link = CALLOC(1, sizeof(Link));
-        link->type = LINK_DIR;
-        /* This table should be a level 3 album table */
-        link->sonic_depth = 4;
-    } else if (!strcmp(elem, "song") && linktbl->links[0]->sonic_depth == 4) {
-        link = CALLOC(1, sizeof(Link));
-        link->type = LINK_FILE;
-    } else {
-        return;
-    }
-
-    int id_set = 0;
-    int linkname_set = 0;
-
-    int track = 0;
-    char *title = "";
-    char *suffix = "";
-    for (int i = 0; attr[i]; i += 2) {
-        if (!strcmp("id", attr[i])) {
-            link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
-            strncpy(link->sonic_id, attr[i+1], MAX_FILENAME_LEN);
-            id_set = 1;
-            continue;
-        }
-
-        if (!strcmp("size", attr[i])) {
-            link->content_length = atoll(attr[i+1]);
-            continue;
-        }
-
-        if (!strcmp("created", attr[i])) {
-            struct tm *tm = calloc(1, sizeof(struct tm));
-            strptime(attr[i+1], "%Y-%m-%dT%H:%M:%S.000Z", tm);
-            link->time = mktime(tm);
-            free(tm);
-            continue;
-        }
-
-        /* This is used by the album table */
-        if (!strcmp("name", attr[i])) {
-            strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
-            linkname_set = 1;
-            continue;
-        }
-
-        if (!strcmp("path", attr[i])) {
-            memset(link->linkname, 0, MAX_FILENAME_LEN);
-            /* Skip to the last '/' if it exists */
-            char *s = strrchr(attr[i+1], '/');
-            if (s) {
-                strncpy(link->linkname, s + 1, MAX_FILENAME_LEN);
-            } else {
-                strncpy(link->linkname, attr[i+1], MAX_FILENAME_LEN);
-            }
-            linkname_set = 1;
-            continue;
-        }
-
-        if (!strcmp("track", attr[i])) {
-            track = atoi(attr[i+1]);
-        }
-
-        if (!strcmp("title", attr[i])) {
-            title = (char *) attr[i+1];
-        }
-
-        if (!strcmp("suffix", attr[i])) {
-            suffix = (char *) attr[i+1];
-        }
-    }
-
-    if (!linkname_set && strlen(title) > 0 && strlen(suffix) > 0) {
-        snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s",
-                 track, title, suffix);
-        linkname_set = 1;
-    }
-
-    if (!linkname_set || !id_set) {
-        free(link);
-        return;
-    }
-
-    if (link->type == LINK_FILE) {
-        char *url = sonic_stream_link(link->sonic_id);
-        strncpy(link->f_url, url, MAX_PATH_LEN);
-        free(url);
-    }
-
-    LinkTable_add(linktbl, link);
 }
 
 LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
@@ -501,13 +439,13 @@ LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
         /* Album table - get all the albums of an artist */
         case 3:
             url = sonic_getArtist_link(id);
-            linktbl = sonic_url_to_LinkTable(url, XML_parser_id3, depth);
+            linktbl = sonic_url_to_LinkTable(url, XML_parser_general, depth);
             free(url);
             break;
         /* Song table - get all the songs of an album */
         case 4:
             url = sonic_getAlbum_link(id);
-            linktbl = sonic_url_to_LinkTable(url, XML_parser_id3, depth);
+            linktbl = sonic_url_to_LinkTable(url, XML_parser_general, depth);
             free(url);
             break;
         default:
