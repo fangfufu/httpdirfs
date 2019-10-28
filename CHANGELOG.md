@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Subsonic server support - this is dedicated to my Debian package maintainer
 Jerome Charaoui
+- You can now specify which configuration file to use by using the ``--config``
+flag.
+- Added support for turning off TLS certificate check.
+- Now check for server's support for HTTP range request, which can be turned off
+using the ``--no-range-check`` flag.
 
 ### Changed
 - Wrapped all calloc() calls with error handling functions.

@@ -276,10 +276,6 @@ void NetworkSystem_init(void)
      * https://curl.haxx.se/libcurl/c/threaded-ssl.html
      */
     crypto_lock_init();
-
-    /* --------- Print off SSL engine version stream --------- */
-    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
-    fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
 }
 
 void transfer_blocking(CURL *curl)

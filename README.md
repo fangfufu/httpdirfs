@@ -73,31 +73,6 @@ FUSE options:
     -f                     foreground operation
     -s                     disable multi-threaded operation
 
-## Permanent cache system
-You can cache all the files you have looked at permanently on your hard drive by
-using the ``--cache`` flag. The file it caches persist across sessions.
-
-By default, the cache files are stored under ``${XDG_CACHE_HOME}/httpdirfs``,
-which by default is ``${HOME}/.cache/httpdirfs``. Each HTTP directory gets its
-own cache folder, they are named using the escaped URL of the HTTP directory.
-
-Once a segment of the file has been downloaded once, it won't be downloaded
-again.
-
-Please note that due to the way the permanent cache system is implemented. The
-maximum download speed is around 15MiB/s, as measured using my localhost as the
-web server. However after you have accessed a file once, accessing it again will
-be the same speed as accessing your hard drive.
-
-If you have any patches to make the initial download go faster, please submit a
-pull request.
-
-The permanent cache system relies on sparse allocation. Please make sure your
-filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
-cache file creation. For a list of filesystem that supports sparse allocation,
-please refer to 
-[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
-
 ## Airsonic / Subsonic server support
 This is a new feature to 1.2.0. Now you can mount the music collection on your
 Airsonic / Subsonic server (*sonic), and browse them using your favourite file browser.
@@ -128,11 +103,45 @@ ID3 mode, please use the ``--sonic-id3`` flag.
 
 Please note that the cache feature is unaffected by how you mount your *sonic
 server. If you mounted your server in index mode, the cache is still valid in
-ID3 mode, and vice versa. 
+ID3 mode, and vice versa.
+
+HTTPDirFS is also known to work with the following applications, which implement
+some or all of Subsonic API:
+
+- [Funkwhale](https://funkwhale.audio/) (requires ``--sonic-id3`` and
+``--no-range-check``)
+- [LMS](https://github.com/epoupon/lms) (requires ``--sonic-insecure`` and
+``--no-range-check``. To mount the [demo instance](https://lms.demo.poupon.io/),
+you might also need ``--insecure-tls``
+
+## Permanent cache system
+You can cache all the files you have looked at permanently on your hard drive by
+using the ``--cache`` flag. The file it caches persist across sessions.
+
+By default, the cache files are stored under ``${XDG_CACHE_HOME}/httpdirfs``,
+which by default is ``${HOME}/.cache/httpdirfs``. Each HTTP directory gets its
+own cache folder, they are named using the escaped URL of the HTTP directory.
+
+Once a segment of the file has been downloaded once, it won't be downloaded
+again.
+
+Please note that due to the way the permanent cache system is implemented. The
+maximum download speed is around 15MiB/s, as measured using my localhost as the
+web server. However after you have accessed a file once, accessing it again will
+be the same speed as accessing your hard drive.
+
+If you have any patches to make the initial download go faster, please submit a
+pull request.
+
+The permanent cache system relies on sparse allocation. Please make sure your
+filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
+cache file creation. For a list of filesystem that supports sparse allocation,
+please refer to 
+[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Configuration file support
-This program has basic support for using a configuration file. The configuration
-file that the program reads is ``${XDG_CONFIG_HOME}/httpdirfs/config``, which by
+This program has basic support for using a configuration file. By default, the configuration file which the program reads is
+``${XDG_CONFIG_HOME}/httpdirfs/config``, which by
 default is at ``${HOME}/.config/httpdirfs/config``. You will have to create the
 sub-directory and the configuration file yourself. In the configuration file,
 please supply one option per line. For example:
@@ -140,6 +149,9 @@ please supply one option per line. For example:
 	--username test
 	--password test
 	-f
+
+Alternatively, you can specify your own configuration file by using the
+``--config`` option.
 
 ## Compilation
 ### Debian 10 "Buster" and newer versions
@@ -163,6 +175,7 @@ the header files for OpenSSL 1.1. The header files for OpenSSL 1.0.2 link in
 additional mutex related callback functions, whereas the header files for
 OpenSSL 1.1 do not.
 
+You can check your SSL engine version using the ``--version`` flag.
 
 ### Debugging Mutexes
 By default the debugging output associated with mutexes are not compiled. To

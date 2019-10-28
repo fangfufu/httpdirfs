@@ -14,6 +14,8 @@ static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
 void parse_config_file(char ***argv, int *argc);
 
+static char *config_path = NULL;
+
 int main(int argc, char **argv)
 {
     /* Automatically print help if not enough arguments are supplied */
@@ -41,13 +43,16 @@ int main(int argc, char **argv)
     /* initialise network subsystem */
     NetworkSystem_init();
 
-    /* parse the config file, if it exists, store it in all_argv and all_argc */
-    parse_config_file(&all_argv, &all_argc);
-
     /* Copy the command line argument list to the combined argument list */
     for (int i = 1; i < argc; i++) {
         add_arg(&all_argv, &all_argc, argv[i]);
+        if (!strcmp(argv[i], "--config")) {
+            config_path = strdup(argv[i+1]);
+        }
     }
+
+    /* parse the config file, if it exists, store it in all_argv and all_argc */
+    parse_config_file(&all_argv, &all_argc);
 
     /* parse the combined argument list */
     if (parse_arg_list(all_argc, all_argv, &fuse_argv, &fuse_argc)) {
@@ -90,13 +95,18 @@ activate Sonic mode.\n");
 
 void parse_config_file(char ***argv, int *argc)
 {
-    char *xdg_config_home = getenv("XDG_CONFIG_HOME");
-    if (!xdg_config_home) {
-        char *home = getenv("HOME");
-        char *xdg_config_home_default = "/.config";
-        xdg_config_home = path_append(home, xdg_config_home_default);
+    char *full_path;
+    if (!config_path) {
+        char *xdg_config_home = getenv("XDG_CONFIG_HOME");
+        if (!xdg_config_home) {
+            char *home = getenv("HOME");
+            char *xdg_config_home_default = "/.config";
+            xdg_config_home = path_append(home, xdg_config_home_default);
+        }
+        full_path = path_append(xdg_config_home, "/httpdirfs/config");
+    } else {
+        full_path = config_path;
     }
-    char *full_path = path_append(xdg_config_home, "/httpdirfs/config");
 
     /* The buffer has to be able to fit a URL */
     int buf_len = MAX_PATH_LEN;
@@ -155,6 +165,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"no-range-check", no_argument, NULL, 'L'},         /* 18 */
         {"sonic-insecure", no_argument, NULL, 'L'},         /* 19 */
         {"insecure-tls", no_argument, NULL, 'L'},           /* 20 */
+        {"config", required_argument, NULL, 'L'},           /* 21 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -240,6 +251,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     case 20:
                         CONFIG.insecure_tls = 1;
                         break;
+                    case 21:
+                    /* This is for --config, we don't need to do anything */
+                        break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
                         return 1;
@@ -276,8 +290,10 @@ static void print_help(char *program_name, int long_help)
 
 static void print_version()
 {
-    fprintf(stderr,
-            "HTTPDirFS version " VERSION "\n");
+    fprintf(stderr, "HTTPDirFS version " VERSION "\n");
+    /* --------- Print off SSL engine version  --------- */
+    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
+    fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
 }
 
 static void print_long_help()
@@ -285,9 +301,10 @@ static void print_long_help()
     fprintf(stderr,
 "\n\
 general options:\n\
-    -o opt,[opt...]        mount options\n\
-    -h   --help            print help\n\
-    -V   --version         print version\n\
+        --config            Specify a configuration file \n\
+    -o opt,[opt...]         Mount options\n\
+    -h  --help              Print help\n\
+    -V  --version           Print version\n\
 \n\
 HTTPDirFS options:\n\
     -u  --username          HTTP authentication username\n\

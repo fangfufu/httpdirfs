@@ -298,7 +298,6 @@ LinkTable *sonic_LinkTable_new_index(const char *id)
     } else {
         url = sonic_gen_url_first_part("getIndexes");
     }
-    puts(url);
     LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_index, 0);
     free(url);
     return linktbl;
