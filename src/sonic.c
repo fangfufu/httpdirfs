@@ -100,11 +100,11 @@ static char *sonic_gen_url_first_part(char *method)
 /**
  * \brief generate a getMusicDirectory request URL
  */
-static char *sonic_getMusicDirectory_link(const int id)
+static char *sonic_getMusicDirectory_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("getMusicDirectory");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%d", first_part, id);
+    snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
     free(first_part);
     return url;
 }
@@ -112,11 +112,11 @@ static char *sonic_getMusicDirectory_link(const int id)
 /**
  * \brief generate a getArtist request URL
  */
-static char *sonic_getArtist_link(const int id)
+static char *sonic_getArtist_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("getArtist");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%d", first_part, id);
+    snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
     free(first_part);
     return url;
 }
@@ -124,11 +124,11 @@ static char *sonic_getArtist_link(const int id)
 /**
  * \brief generate a getAlbum request URL
  */
-static char *sonic_getAlbum_link(const int id)
+static char *sonic_getAlbum_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("getAlbum");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%d", first_part, id);
+    snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
     free(first_part);
     return url;
 }
@@ -136,12 +136,12 @@ static char *sonic_getAlbum_link(const int id)
 /**
  * \brief generate a download request URL
  */
-static char *sonic_stream_link(const int id)
+static char *sonic_stream_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("stream");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(url, MAX_PATH_LEN,
-             "%s&format=raw&id=%d", first_part, id);
+             "%s&format=raw&id=%s", first_part, id);
     free(first_part);
     return url;
 }
@@ -186,10 +186,8 @@ static void XMLCALL XML_parser_index(void *data, const char *elem,
 
     for (int i = 0; attr[i]; i += 2) {
         if (!strcmp("id", attr[i])) {
-            link->sonic_id = atoi(attr[i+1]);
-            link->sonic_song_id_str = calloc(MAX_FILENAME_LEN, sizeof(char));
-            snprintf(link->sonic_song_id_str, MAX_FILENAME_LEN, "%d",
-                     link->sonic_id);
+            link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
+            strncpy(link->sonic_id, attr[i+1], MAX_FILENAME_LEN);
             id_set = 1;
             continue;
         }
@@ -292,14 +290,15 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
 
 }
 
-LinkTable *sonic_LinkTable_new_index(const int id)
+LinkTable *sonic_LinkTable_new_index(const char *id)
 {
     char *url;
-    if (id > 0) {
+    if (strcmp(id, "0")) {
         url = sonic_getMusicDirectory_link(id);
     } else {
         url = sonic_gen_url_first_part("getIndexes");
     }
+    puts(url);
     LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_index, 0);
     free(url);
     return linktbl;
@@ -360,7 +359,8 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
             }
 
             if (!strcmp("id", attr[i])) {
-                link->sonic_id = atoi(attr[i+1]);
+                link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
+                strncpy(link->sonic_id, attr[i+1], MAX_FILENAME_LEN);
                 id_set = 1;
                 continue;
             }
@@ -416,10 +416,8 @@ static void XMLCALL XML_parser_id3(void *data, const char *elem,
     char *suffix = "";
     for (int i = 0; attr[i]; i += 2) {
         if (!strcmp("id", attr[i])) {
-            link->sonic_id = atoi(attr[i+1]);
-            link->sonic_song_id_str = calloc(MAX_FILENAME_LEN, sizeof(char));
-            snprintf(link->sonic_song_id_str, MAX_FILENAME_LEN, "%d",
-                     link->sonic_id);
+            link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
+            strncpy(link->sonic_id, attr[i+1], MAX_FILENAME_LEN);
             id_set = 1;
             continue;
         }
@@ -490,7 +488,7 @@ static void XMLCALL XML_parser_id3(void *data, const char *elem,
     LinkTable_add(linktbl, link);
 }
 
-LinkTable *sonic_LinkTable_new_id3(int depth, int id)
+LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
 {
     char *url;
     LinkTable *linktbl = ROOT_LINK_TBL;

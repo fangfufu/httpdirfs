@@ -77,17 +77,13 @@ struct Link {
      *  - Sub-directory ID (in the XML response, this is the ID on the "child"
      *    element)
      */
-    int sonic_id;
+    char *sonic_id;
     /**
      * \brief Sonic directory depth
      * \details This is used exclusively in ID3 mode to store the depth of the
      * current directory.
      */
     int sonic_depth;
-    /**
-     * \brief The sonic song's ID in character array format.
-     */
-    char *sonic_song_id_str;
 };
 
 struct LinkTable {

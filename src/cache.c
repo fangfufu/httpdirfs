@@ -585,7 +585,7 @@ void Cache_delete(const char *fn)
 {
     if (CONFIG.sonic_mode) {
         Link *link = path_to_Link(fn);
-        fn = link->sonic_song_id_str;
+        fn = link->sonic_id;
     }
 
     char *metafn = path_append(META_DIR, fn);
@@ -678,7 +678,7 @@ int Cache_create(const char *path)
         fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0,
                                 NULL);
     } else {
-        fn = this_link->sonic_song_id_str;
+        fn = this_link->sonic_id;
     }
     fprintf(stderr, "Cache_create(): Creating cache files for %s.\n", fn);
 
@@ -774,7 +774,7 @@ Cache *Cache_open(const char *fn)
             return NULL;
         }
     } else {
-        if (!Cache_exist(link->sonic_song_id_str)) {
+        if (!Cache_exist(link->sonic_id)) {
             return NULL;
         }
     }
@@ -788,7 +788,7 @@ Cache *Cache_open(const char *fn)
 
     /* Set the path for the local cache file, if we are in sonic mode */
     if (CONFIG.sonic_mode) {
-        fn = link->sonic_song_id_str;
+        fn = link->sonic_id;
     }
 
     cf->path = strndup(fn, MAX_PATH_LEN);

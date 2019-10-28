@@ -16,7 +16,7 @@ void sonic_config_init(const char *server, const char *username,
 /**
  * \brief Create a new Sonic LinkTable in index mode
  */
-LinkTable *sonic_LinkTable_new_index(const int id);
+LinkTable *sonic_LinkTable_new_index(const char *id);
 
 /**
  * \brief Create a new Sonic LinkTable in ID3 mode
@@ -30,6 +30,6 @@ LinkTable *sonic_LinkTable_new_index(const int id);
  * \param[in] depth the level of the requested table
  * \param[in] id the id of the requested table
  */
-LinkTable *sonic_LinkTable_new_id3(int depth, int id);
+LinkTable *sonic_LinkTable_new_id3(int depth, const char *id);
 
 #endif

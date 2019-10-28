@@ -66,9 +66,9 @@ LinkTable *LinkSystem_init(const char *raw_url)
     } else {
         sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
         if (!CONFIG.sonic_id3) {
-            ROOT_LINK_TBL = sonic_LinkTable_new_index(0);
+            ROOT_LINK_TBL = sonic_LinkTable_new_index("0");
         } else {
-            ROOT_LINK_TBL = sonic_LinkTable_new_id3(0, 0);
+            ROOT_LINK_TBL = sonic_LinkTable_new_id3(0, "0");
         }
     }
     return ROOT_LINK_TBL;
@@ -356,8 +356,7 @@ void LinkTable_print(LinkTable *linktbl)
         }
     }
     fprintf(stderr, "--------------------------------------------\n");
-    fprintf(stderr, "LinkTable_print(): Invalid link count: %d, %s.\n", j,
-            linktbl->links[0]->f_url);
+    fprintf(stderr, "LinkTable_print(): Invalid link count: %d\n", j);
     fprintf(stderr, "--------------------------------------------\n");
 }
 
