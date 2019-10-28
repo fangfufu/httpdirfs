@@ -36,11 +36,19 @@ void sonic_config_init(const char *server, const char *username,
     SONIC_CONFIG.username = strndup(username, MAX_FILENAME_LEN);
     SONIC_CONFIG.password = strndup(password, MAX_FILENAME_LEN);
     SONIC_CONFIG.client = DEFAULT_USER_AGENT;
-    /*
-     * API 1.13.0 is the minimum version that supports
-     * salt authentication scheme
-     */
-    SONIC_CONFIG.api_version = "1.13.0";
+
+    if (!CONFIG.sonic_insecure) {
+        /*
+         * API 1.13.0 is the minimum version that supports
+         * salt authentication scheme
+         */
+        SONIC_CONFIG.api_version = "1.13.0";
+    } else {
+        /*
+         * API 1.8.0 is the minimum version that supports ID3 mode
+         */
+        SONIC_CONFIG.api_version = "1.8.0";
+    }
 }
 
 /**
@@ -48,21 +56,32 @@ void sonic_config_init(const char *server, const char *username,
  */
 static char *sonic_gen_auth_str(void)
 {
-    char *salt = generate_salt();
-    size_t password_len = strnlen(SONIC_CONFIG.password, MAX_FILENAME_LEN);
-    size_t password_salt_len = password_len + strnlen(salt, MAX_FILENAME_LEN);
-    char *password_salt = CALLOC(password_salt_len + 1, sizeof(char));
-    strncat(password_salt, SONIC_CONFIG.password, MAX_FILENAME_LEN);
-    strncat(password_salt + password_len, salt, MAX_FILENAME_LEN);
-    char *token = generate_md5sum(password_salt);
-    char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(auth_str, MAX_PATH_LEN,
-                        ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
-                        SONIC_CONFIG.username, token, salt,
-                        SONIC_CONFIG.api_version, SONIC_CONFIG.client);
-    free(salt);
-    free(token);
-    return auth_str;
+    if (!CONFIG.sonic_insecure) {
+        char *salt = generate_salt();
+        size_t pwd_len = strnlen(SONIC_CONFIG.password, MAX_FILENAME_LEN);
+        size_t pwd_salt_len = pwd_len + strnlen(salt, MAX_FILENAME_LEN);
+        char *pwd_salt = CALLOC(pwd_salt_len + 1, sizeof(char));
+        strncat(pwd_salt, SONIC_CONFIG.password, MAX_FILENAME_LEN);
+        strncat(pwd_salt + pwd_len, salt, MAX_FILENAME_LEN);
+        char *token = generate_md5sum(pwd_salt);
+        char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
+        snprintf(auth_str, MAX_PATH_LEN,
+                            ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
+                            SONIC_CONFIG.username, token, salt,
+                            SONIC_CONFIG.api_version, SONIC_CONFIG.client);
+        free(salt);
+        free(token);
+        return auth_str;
+    } else {
+        char *pwd_hex = str_to_hex(SONIC_CONFIG.password);
+        char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
+        snprintf(auth_str, MAX_PATH_LEN,
+                 ".view?u=%s&p=enc:%s&v=%s&c=%s",
+                 SONIC_CONFIG.username, pwd_hex, SONIC_CONFIG.api_version,
+                 SONIC_CONFIG.client);
+        free(pwd_hex);
+        return auth_str;
+    }
 }
 
 /**
@@ -144,6 +163,13 @@ static char *sonic_stream_link(const int id)
 static void XMLCALL XML_parser_index(void *data, const char *elem,
                                                const char **attr)
 {
+    if (!strcmp(elem, "error")) {
+        fprintf(stderr, "XML_parser_index() error:\n");
+        for (int i = 0; attr[i]; i += 2) {
+            fprintf(stderr, "%s: %s\n", attr[i], attr[i+1]);
+        }
+        exit(EXIT_FAILURE);
+    }
     LinkTable *linktbl = (LinkTable *) data;
     Link *link;
     if (!strcmp(elem, "child") || !strcmp(elem, "artist")) {
@@ -283,6 +309,14 @@ LinkTable *sonic_LinkTable_new_index(const int id)
 static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
                                    const char **attr)
 {
+    if (!strcmp(elem, "error")) {
+        fprintf(stderr, "XML_parser_id3_root() error:\n");
+        for (int i = 0; attr[i]; i += 2) {
+            fprintf(stderr, "%s: %s\n", attr[i], attr[i+1]);
+        }
+        exit(EXIT_FAILURE);
+    }
+
     LinkTable *root_linktbl = (LinkTable *) data;
     LinkTable *this_linktbl = NULL;
 
@@ -347,6 +381,14 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
 static void XMLCALL XML_parser_id3(void *data, const char *elem,
                                         const char **attr)
 {
+    if (!strcmp(elem, "error")) {
+        fprintf(stderr, "XML_parser_id3() error:\n");
+        for (int i = 0; attr[i]; i += 2) {
+            fprintf(stderr, "%s: %s\n", attr[i], attr[i+1]);
+        }
+        exit(EXIT_FAILURE);
+    }
+
     LinkTable *linktbl = (LinkTable *) data;
     Link *link;
 

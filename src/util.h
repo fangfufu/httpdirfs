@@ -71,8 +71,10 @@ typedef struct {
     char *sonic_username;
     /** \brief The Sonic server password */
     char *sonic_password;
-    /** \brief Whether we are using Sonic mode ID3 extension */
+    /** \brief Whether we are using sonic mode ID3 extension */
     int sonic_id3;
+    /** \brief Whether we use the legacy sonic authentication mode */
+    int sonic_insecure;
 } ConfigStruct;
 
 /**
@@ -131,6 +133,11 @@ char *generate_md5sum(const char *str);
  * \brief wrapper for calloc(), with error handling
  */
 void *CALLOC(size_t nmemb, size_t size);
+
+/**
+ * \brief Convert a string to hex
+ */
+char *str_to_hex(char *s);
 
 /**
  * \brief initialise the configuration data structure

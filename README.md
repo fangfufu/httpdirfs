@@ -58,10 +58,14 @@ HTTPDirFS options:
                             for HTTP range requests
 
 For mounting a Airsonic / Subsonic server:
+
         --sonic-username    The username for your Airsonic / Subsonic server
-        --sonic-password    The username for your Airsonic / Subsonic server
+        --sonic-password    The password for your Airsonic / Subsonic server
         --sonic-id3         Enable ID3 mode - this present the server content in
                             Artist/Album/Song layout
+        --sonic-insecure    Authenticate against your Airsonic / Subsonic server
+                            using the insecure username / hex encoded password
+                            scheme
 
 FUSE options:
 

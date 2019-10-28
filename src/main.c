@@ -153,6 +153,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"sonic-password", required_argument, NULL, 'L'},   /* 16 */
         {"sonic-id3", no_argument, NULL, 'L'},              /* 17 */
         {"no-range-check", no_argument, NULL, 'L'},         /* 18 */
+        {"sonic-insecure", no_argument, NULL, 'L'},         /* 19 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -231,6 +232,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         break;
                     case 18:
                         CONFIG.no_range_check = 1;
+                        break;
+                    case 19:
+                        CONFIG.sonic_insecure = 1;
                         break;
                     default:
                         fprintf(stderr, "see httpdirfs -h for usage\n");
@@ -312,5 +316,8 @@ HTTPDirFS options:\n\
         --sonic-password    The username for your Airsonic / Subsonic server\n\
         --sonic-id3         Enable ID3 mode - this present the server content in\n\
                             Artist/Album/Song layout \n\
+        --sonic-insecure    Authenticate against your Airsonic / Subsonic server\n\
+                            using the insecure username / hex encoded password\n\
+                            scheme\n\
 \n");
 }

@@ -91,6 +91,8 @@ void Config_init(void)
     CONFIG.sonic_password = NULL;
 
     CONFIG.sonic_id3 = 0;
+
+    CONFIG.sonic_insecure = 0;
 }
 
 char *path_append(const char *path, const char *filename)
@@ -204,3 +206,11 @@ void *CALLOC(size_t nmemb, size_t size)
     return ptr;
 }
 
+char *str_to_hex(char *s)
+{
+    char *hex = CALLOC(strlen(s) * 2 + 1, sizeof(char));
+    for (char *c = s, *h = hex; *c; c++, h+=2) {
+        sprintf(h, "%x", *c);
+    }
+    return hex;
+}
