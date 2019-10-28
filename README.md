@@ -118,13 +118,17 @@ In the index mode, the filesystem is presented based on the listing on the
 
 In ID3 mode, the filesystem is presented using the following hierarchy:
  0. Root
- 1. Alphabetical indices of the Artists' name
- 2. The Arists' name
+ 1. Alphabetical indices of the artists' names
+ 2. The arists' names
  3. All of the albums by a single artist
  4. All the songs in an album.
 
-By default, *sonic server is mounted in the Index mode. If you want to mount in
+By default, *sonic server is mounted in the index mode. If you want to mount in
 ID3 mode, please use the ``--sonic-id3`` flag.
+
+Please note that the cache feature is unaffected by how you mount your *sonic
+server. If you mounted your server in index mode, the cache is still valid in
+ID3 mode, and vice versa. 
 
 ## Configuration file support
 This program has basic support for using a configuration file. The configuration
