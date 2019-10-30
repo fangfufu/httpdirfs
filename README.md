@@ -71,6 +71,7 @@ the filesystem is visiting.
 
 HTTPDirFS options:
 
+        --config            Specify a configuration file 
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to

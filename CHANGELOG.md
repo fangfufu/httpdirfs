@@ -10,7 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Jerome Charaoui
 - You can now specify which configuration file to use by using the ``--config``
 flag.
-- Added support for turning off TLS certificate check.
+- Added support for turning off TLS certificate check (``--insecure_tls`` flag).
 - Now check for server's support for HTTP range request, which can be turned off
 using the ``--no-range-check`` flag.
 
