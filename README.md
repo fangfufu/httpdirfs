@@ -58,6 +58,24 @@ OpenSSL 1.1 do not.
 
 You can check your SSL engine version using the ``--version`` flag.
 
+### FreeBSD
+The following dependencies are required from either pkg or ports:
+
+Packages:
+
+    gmake fusefs-libs gumbo e2fsprogs-libuuid curl expat
+
+Ports:
+
+    devel/gmake sysutils/fusefs-libs devel/gumbo misc/e2fsprogs-libuuid ftp/curl textproc/expat2
+
+**Note:** If you want brotli compression support, you will need to install curl from ports and enable the option.
+    
+You can then build + install with:
+
+    gmake
+    sudo gmake install
+
 ## Usage
 
 	./httpdirfs -f --cache $URL $MOUNT_POINT
