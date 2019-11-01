@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2019-10-24
+## [1.2.0] - 2019-11-01
 ### Added
 - Subsonic server support - this is dedicated to my Debian package maintainer
 Jerome Charaoui
@@ -23,6 +23,7 @@ using the ``--no-range-check`` flag.
 options.
 - The same cache folder is used, irrespective whether the server root URL ends
 with '/'
+- FreeBSD support
 
 ## [1.1.10] - 2019-09-10
 ### Added

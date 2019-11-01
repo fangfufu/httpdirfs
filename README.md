@@ -253,6 +253,8 @@ for this piece of software. Thank you so much for packaging it!
 - I would like to thank
 [Cosmin Gorgovan](https://scholar.google.co.uk/citations?user=S7UZ6MAAAAAJ&hl=en)
 for the technical and moral support. Your wisdom is much appreciated!
+- I would like to thank [Edenist](https://github.com/edenist) for providing FreeBSD
+compatibility patches.
 - I would like to thank [-Archivist](https://www.reddit.com/user/-Archivist/)
 for not providing FTP or WebDAV access to his server. This piece of software was
 written in direct response to his appalling behaviour.
