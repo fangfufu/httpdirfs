@@ -3,8 +3,14 @@ VERSION=1.2.0
 CFLAGS += -O2 -Wall -Wextra -Wshadow -rdynamic -D_GNU_SOURCE\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"\
 	`pkg-config --cflags-only-I gumbo libcurl fuse uuid expat`
+LDFLAGS += `pkg-config --libs-only-L gumbo libcurl fuse uuid expat`
 LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto -luuid -lexpat
 COBJS = main.o network.o fuse_local.o link.o cache.o util.o sonic.o
+
+OS := $(shell uname)
+ifeq ($(OS),FreeBSD)
+  LIBS    +=  -lexecinfo
+endif
 
 prefix ?= /usr/local
 
@@ -17,10 +23,19 @@ httpdirfs: $(COBJS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 install:
+ifeq ($(OS),Linux)
 	install -m 755 -D httpdirfs \
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	install -m 644 -D doc/man/httpdirfs.1 \
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+endif
+ifeq ($(OS),FreeBSD)
+	install -m 755 httpdirfs \
+		$(DESTDIR)$(prefix)/bin/httpdirfs
+	gzip -f -k doc/man/httpdirfs.1
+	install -m 644 doc/man/httpdirfs.1.gz \
+		$(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
+endif
 
 doc:
 	doxygen Doxyfile
@@ -34,7 +49,12 @@ distclean: clean
 
 uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
+ifeq ($(OS),Linux)
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+endif
+ifeq ($(OS),FreeBSD)
+	-rm -f $(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
+endif
 
 depend: .depend
 .depend: src/*.c
