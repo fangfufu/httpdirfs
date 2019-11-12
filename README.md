@@ -34,6 +34,10 @@ For more information on the status of HTTDirFS in Debian, please refer to
 HTTPDirFS is available in the
 [Arch User Repository](https://aur.archlinux.org/packages/httpdirfs). 
 
+### FreeBSD
+HTTPDirFS is available in the
+[FreeBSD Ports Collection](https://www.freshports.org/www/httpdirfs/).
+
 ## Compilation
 ### Debian 10 "Buster" and newer versions
 Under Debian 10 "Buster" and newer versions, you need the following packages:
@@ -75,6 +79,9 @@ You can then build + install with:
 
     gmake
     sudo gmake install
+
+Alternatively, you may use the FreeBSD [ports(7)](https://man.freebsd.org/ports/7)
+infrastructure to build HTTPDirFS from source with the modifications you need.
 
 ## Usage
 
