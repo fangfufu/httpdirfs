@@ -36,7 +36,7 @@ HTTPDirFS is available in the
 
 ### FreeBSD
 HTTPDirFS is available in the
-[FreeBSD Ports Collection](https://www.freshports.org/www/httpdirfs/).
+[FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
 
 ## Compilation
 ### Debian 10 "Buster" and newer versions
