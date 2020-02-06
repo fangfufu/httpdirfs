@@ -39,6 +39,11 @@ HTTPDirFS is available in the
 [FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
 
 ## Compilation
+### Ubuntu
+Under Ubuntu 18.04.4 LTS, you need the following packages:
+
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev
+
 ### Debian 10 "Buster" and newer versions
 Under Debian 10 "Buster" and newer versions, you need the following packages:
 
@@ -74,7 +79,7 @@ Ports:
     devel/gmake sysutils/fusefs-libs devel/gumbo misc/e2fsprogs-libuuid ftp/curl textproc/expat2
 
 **Note:** If you want brotli compression support, you will need to install curl from ports and enable the option.
-    
+
 You can then build + install with:
 
     gmake
