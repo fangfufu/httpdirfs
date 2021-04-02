@@ -47,7 +47,7 @@ Under Ubuntu 18.04.4 LTS, you need the following packages:
 ### Debian 10 "Buster" and newer versions
 Under Debian 10 "Buster" and newer versions, you need the following packages:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev
 
 ### Debian 9 "Stretch"
 Under Debian 9 "Stretch", you need the following packages:
