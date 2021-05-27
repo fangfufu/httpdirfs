@@ -177,7 +177,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/Unreleased...1.2.0
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/Unreleased...1.2.1
+[1.2.1]: https://github.com/fangfufu/httpdirfs/compare/Unreleased...1.2.0
 [1.2.0]: https://github.com/fangfufu/httpdirfs/compare/1.2.0...1.1.10
 [1.1.10]: https://github.com/fangfufu/httpdirfs/compare/1.1.9...1.1.10
 [1.1.9]: https://github.com/fangfufu/httpdirfs/compare/1.1.8...1.1.9
