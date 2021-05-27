@@ -88,6 +88,19 @@ You can then build + install with:
 Alternatively, you may use the FreeBSD [ports(7)](https://man.freebsd.org/ports/7)
 infrastructure to build HTTPDirFS from source with the modifications you need.
 
+### macOS
+You need to install macFUSE, cURL, gumbo, and OpenSSL from Homebrew:
+
+    brew install macfuse curl gumbo-parser openssl pkg-config
+
+Build and install:
+
+    make
+    sudo make install
+
+Apple's command-line build tools are usually installed as part of setting up Homebrew.
+HTTPDirFS will be installed in ``/usr/local``.
+
 ## Usage
 
 	./httpdirfs -f --cache $URL $MOUNT_POINT

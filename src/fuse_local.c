@@ -42,7 +42,11 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         }
         struct timespec spec;
         spec.tv_sec = link->time;
+#if defined(__APPLE__) && defined(__MACH__)
+        stbuf->st_mtimespec = spec;
+#else
         stbuf->st_mtim = spec;
+#endif
         switch (link->type) {
             case LINK_DIR:
                 stbuf->st_mode = S_IFDIR | 0755;
