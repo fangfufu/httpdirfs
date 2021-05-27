@@ -4,10 +4,19 @@ CFLAGS += -O2 -Wall -Wextra -Wshadow -rdynamic -D_GNU_SOURCE\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"\
 	`pkg-config --cflags-only-I gumbo libcurl fuse uuid expat`
 LDFLAGS += `pkg-config --libs-only-L gumbo libcurl fuse uuid expat`
-LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto -luuid -lexpat
+LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto -lexpat
 COBJS = main.o network.o fuse_local.o link.o cache.o util.o sonic.o
 
 OS := $(shell uname)
+ifeq ($(OS),Darwin)
+  BREW_PREFIX := $(shell brew --prefix)
+  CFLAGS  +=  -I$(BREW_PREFIX)/opt/openssl/include \
+	-I$(BREW_PREFIX)/opt/curl/include
+  LDFLAGS +=  -L$(BREW_PREFIX)/opt/openssl/lib \
+	-L$(BREW_PREFIX)/opt/curl/lib
+else
+  LIBS    +=  -luuid
+endif
 ifeq ($(OS),FreeBSD)
   LIBS    +=  -lexecinfo
 endif
