@@ -45,6 +45,13 @@ ifeq ($(OS),FreeBSD)
 	install -m 644 doc/man/httpdirfs.1.gz \
 		$(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
 endif
+ifeq ($(OS),Darwin)
+	install -m 755 httpdirfs \
+		$(DESTDIR)$(prefix)/bin/httpdirfs
+	install -d $(DESTDIR)$(prefix)/share/man/man1
+	install -m 644 doc/man/httpdirfs.1 \
+		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+endif
 
 doc:
 	doxygen Doxyfile
