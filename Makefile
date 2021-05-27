@@ -46,6 +46,7 @@ ifeq ($(OS),FreeBSD)
 		$(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
 endif
 ifeq ($(OS),Darwin)
+	install -d $(DESTDIR)$(prefix)/bin
 	install -m 755 httpdirfs \
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	install -d $(DESTDIR)$(prefix)/share/man/man1
