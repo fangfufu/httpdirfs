@@ -280,6 +280,8 @@ for this piece of software. Thank you so much for packaging it!
 for the technical and moral support. Your wisdom is much appreciated!
 - I would like to thank [Edenist](https://github.com/edenist) for providing FreeBSD
 compatibility patches.
+- I would like to thank [hiliev](https://github.com/hiliev) for providing macOS
+compatibility patches. 
 - I would like to thank [-Archivist](https://www.reddit.com/user/-Archivist/)
 for not providing FTP or WebDAV access to his server. This piece of software was
 written in direct response to his appalling behaviour.
