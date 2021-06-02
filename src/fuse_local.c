@@ -113,7 +113,12 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
-/** \brief read the directory indicated by the path*/
+/**
+ * \brief read the directory indicated by the path
+ * \note releasedir() is not implemented, because I don't see why anybody want
+ * the LinkTables to be evicted from the memory during the runtime of this
+ * program. If you want to evict LinkTables, just unmount the filesystem.
+ */
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
                       off_t offset, struct fuse_file_info *fi)
 {
