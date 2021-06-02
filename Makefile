@@ -28,8 +28,11 @@ all: httpdirfs
 %.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
 
-httpdirfs: $(COBJS)
+httpdirfs: httpdirfs.o $(COBJS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+
+# sonicfs: sonicfs.o $(COBJS)
+# 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 install:
 ifeq ($(OS),Linux)
