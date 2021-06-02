@@ -120,7 +120,6 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     (void) offset;
     (void) fi;
 
-    Link *link;
     LinkTable *linktbl;
 
     if (!strcmp(path, "/")) {
@@ -136,7 +135,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     dir_add(buf, ".", NULL, 0);
     dir_add(buf, "..", NULL, 0);
     for (int i = 1; i < linktbl->num; i++) {
-        link = linktbl->links[i];
+        Link *link = linktbl->links[i];
         if (link->type != LINK_INVALID) {
             dir_add(buf, link->linkname, NULL, 0);
         }
