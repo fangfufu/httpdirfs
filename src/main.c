@@ -245,7 +245,13 @@ HTTPDirFS options:\n\
                             for HTTP range requests\n\
         --insecure_tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
-\n\
+\n");
+}
+
+void print_sonic_help()
+{
+    fprintf(stderr,
+"\n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
         --sonic-password    The password for your Airsonic / Subsonic server\n\
