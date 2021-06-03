@@ -201,6 +201,8 @@ some or all of Subsonic API:
 [issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the 
 [demo instance](https://lms.demo.poupon.io/), you might also need 
 ``--insecure-tls``)
+- [Navidrome](https://github.com/navidrome/navidrome), more information in
+[issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
 
 ## Permanent cache system
 You can cache all the files you have looked at permanently on your hard drive by
