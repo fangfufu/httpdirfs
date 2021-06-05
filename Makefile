@@ -99,9 +99,6 @@ ifeq ($(OS),Darwin)
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/sonicfs.1
 endif
-ifeq ($(OS),Darwin)
-	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
-endif
 
 depend: .depend
 .depend: src/*.c
