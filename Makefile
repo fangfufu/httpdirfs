@@ -23,7 +23,7 @@ endif
 
 prefix ?= /usr/local
 
-all: httpdirfs
+all: httpdirfs sonicfs
 
 %.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
@@ -31,18 +31,18 @@ all: httpdirfs
 httpdirfs: httpdirfs.o $(COBJS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-# sonicfs: sonicfs.o $(COBJS)
-# 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
+sonicfs: sonicfs.o $(COBJS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
 install:
 ifeq ($(OS),Linux)
-	install -m 755 -D httpdirfs \
+	install -m 755 -D httpdirfs sonicfs \
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	install -m 644 -D doc/man/httpdirfs.1 \
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 endif
 ifeq ($(OS),FreeBSD)
-	install -m 755 httpdirfs \
+	install -m 755 httpdirfs sonicfs\
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	gzip -f -k doc/man/httpdirfs.1
 	install -m 644 doc/man/httpdirfs.1.gz \
@@ -50,7 +50,7 @@ ifeq ($(OS),FreeBSD)
 endif
 ifeq ($(OS),Darwin)
 	install -d $(DESTDIR)$(prefix)/bin
-	install -m 755 httpdirfs \
+	install -m 755 httpdirfs sonicfs\
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	install -d $(DESTDIR)$(prefix)/share/man/man1
 	install -m 644 doc/man/httpdirfs.1 \
@@ -62,18 +62,21 @@ doc:
 
 clean:
 	-rm -f *.o
-	-rm -f httpdirfs
-	-rm -rf doc/html
+	-rm -f httpdirfs sonicfs
 
 distclean: clean
 
 uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
+	-rm -f $(DESTDIR)$(prefix)/bin/sonicfs
 ifeq ($(OS),Linux)
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 endif
 ifeq ($(OS),FreeBSD)
 	-rm -f $(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
+endif
+ifeq ($(OS),Darwin)
+	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 endif
 
 depend: .depend

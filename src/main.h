@@ -42,5 +42,8 @@ void print_long_help();
  */
 void print_sonic_help();
 
+/**
+ * @brief The old main function that is common to both HTTPDirFS and SonicFS
+ */
 int common_main(int *argc_in, char ***argv_in);
 #endif

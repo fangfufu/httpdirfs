@@ -202,7 +202,13 @@ void print_help(char *program_name, int long_help)
 
 void print_version()
 {
-    fprintf(stderr, "HTTPDirFS version " VERSION "\n");
+    char *fs_name;
+    if (!CONFIG.sonic_mode) {
+        fs_name = "HTTPDirFS";
+    } else {
+        fs_name = "SonicFS";
+    }
+    fprintf(stderr, "%s version " VERSION "\n", fs_name);
     /* --------- Print off SSL engine version  --------- */
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
     fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
@@ -212,7 +218,7 @@ void print_long_help()
 {
     fprintf(stderr,
 "\n\
-general options:\n\
+General options:\n\
         --config            Specify a configuration file \n\
     -o opt,[opt...]         Mount options\n\
     -h  --help              Print help\n\
@@ -246,13 +252,16 @@ HTTPDirFS options:\n\
         --insecure_tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
 \n");
+    if (CONFIG.sonic_mode) {
+        print_sonic_help();
+    }
 }
 
 void print_sonic_help()
 {
     fprintf(stderr,
 "\n\
-    For mounting a Airsonic / Subsonic server:\n\
+Airsonic / Subsonic server specific options:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
         --sonic-password    The password for your Airsonic / Subsonic server\n\
         --sonic-id3         Enable ID3 mode - this present the server content in\n\
@@ -322,19 +331,19 @@ int common_main(int *argc_in, char ***argv_in)
         fprintf(stderr, "Error: Please supply a valid URL.\n");
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
-    } else {
-        if (CONFIG.sonic_username && CONFIG.sonic_password) {
-            CONFIG.sonic_mode = 1;
-        } else if (CONFIG.sonic_username || CONFIG.sonic_password) {
-            fprintf(stderr,
-                    "Error: You have to supply both username and password to \
-activate Sonic mode.\n");
-            exit(EXIT_FAILURE);
-        }
-        if(!LinkSystem_init(base_url)) {
-            fprintf(stderr, "Error: Network initialisation failed.\n");
-            exit(EXIT_FAILURE);
-        }
+    }
+
+    if (CONFIG.sonic_mode &&
+        !(CONFIG.sonic_username && CONFIG.sonic_password)) {
+        fprintf(stderr,
+                "Error: You have to supply both username and password for your\
+Sonic server account.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if(!LinkSystem_init(base_url)) {
+        fprintf(stderr, "Error: Network initialisation failed.\n");
+        exit(EXIT_FAILURE);
     }
 
     fuse_start:
