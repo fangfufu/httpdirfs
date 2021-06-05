@@ -72,6 +72,9 @@ endif
 ifeq ($(OS),FreeBSD)
 	-rm -f $(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
 endif
+ifeq ($(OS),Darwin)
+	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+endif
 
 depend: .depend
 .depend: src/*.c
