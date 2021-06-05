@@ -21,7 +21,7 @@ dedicated the my Debian package maintainer Jerome Charaoui.
 
 ## Installation
 ### Debian 11 "Bullseye"
-HTTPDirFS is available as a package in Debian 11 "Bullseye, which is the current
+HTTPDirFS is available as a package in Debian 11 "Bullseye", which is the current
 Testing version. If you are on Debian Bullseye, you can simply run the following
 command as ``root``: 
 
