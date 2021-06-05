@@ -60,11 +60,16 @@ endif
 doc:
 	doxygen Doxyfile
 
+man: all
+	help2man --no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
+	help2man --no-discard-stderr ./httpdirfs > doc/man/sonicfs.1
+
 clean:
 	-rm -f *.o
 	-rm -f httpdirfs sonicfs
 
 distclean: clean
+	-rm -rf doc/html
 
 uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
