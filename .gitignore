@@ -2,6 +2,6 @@
 *.kate-swp
 httpdirfs
 .depend
-doc/html
+doc
 .vscode
 sonicfs

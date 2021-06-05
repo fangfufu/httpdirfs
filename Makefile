@@ -34,27 +34,40 @@ httpdirfs: httpdirfs.o $(COBJS)
 sonicfs: sonicfs.o $(COBJS)
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LIBS)
 
-install:
+install: all
 ifeq ($(OS),Linux)
-	install -m 755 -D httpdirfs sonicfs \
+	install -m 755 -D httpdirfs \
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	install -m 644 -D doc/man/httpdirfs.1 \
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+	install -m 755 -D sonicfs \
+		$(DESTDIR)$(prefix)/bin/sonicfs
+	install -m 644 -D doc/man/sonicfs.1 \
+		$(DESTDIR)$(prefix)/share/man/man1/sonicfs.1
 endif
 ifeq ($(OS),FreeBSD)
-	install -m 755 httpdirfs sonicfs\
+	install -m 755 httpdirfs\
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	gzip -f -k doc/man/httpdirfs.1
 	install -m 644 doc/man/httpdirfs.1.gz \
 		$(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
+	install -m 755 sonicfs\
+		$(DESTDIR)$(prefix)/bin/sonicfs
+	gzip -f -k doc/man/sonicfs.1
+	install -m 644 doc/man/sonicfs.1.gz \
+		$(DESTDIR)$(prefix)/man/man1/sonicfs.1.gz
 endif
 ifeq ($(OS),Darwin)
 	install -d $(DESTDIR)$(prefix)/bin
-	install -m 755 httpdirfs sonicfs\
+	install -m 755 httpdirfs\
 		$(DESTDIR)$(prefix)/bin/httpdirfs
+	install -m 755 sonicfs\
+		$(DESTDIR)$(prefix)/bin/sonicfs
 	install -d $(DESTDIR)$(prefix)/share/man/man1
 	install -m 644 doc/man/httpdirfs.1 \
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+	install -m 644 doc/man/sonicfs.1 \
+		$(DESTDIR)$(prefix)/share/man/man1/sonicfs.1
 endif
 
 doc:
@@ -62,7 +75,7 @@ doc:
 
 man: all
 	help2man --no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
-	help2man --no-discard-stderr ./httpdirfs > doc/man/sonicfs.1
+	help2man --no-discard-stderr ./sonicfs > doc/man/sonicfs.1
 
 clean:
 	-rm -f *.o
@@ -76,12 +89,15 @@ uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/sonicfs
 ifeq ($(OS),Linux)
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+	-rm -f $(DESTDIR)$(prefix)/share/man/man1/sonicfs.1
 endif
 ifeq ($(OS),FreeBSD)
 	-rm -f $(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
+	-rm -f $(DESTDIR)$(prefix)/man/man1/sonicfs.1.gz
 endif
 ifeq ($(OS),Darwin)
 	-rm -f $(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
+	-rm -f $(DESTDIR)$(prefix)/share/man/man1/sonicfs.1
 endif
 
 depend: .depend
@@ -90,4 +106,4 @@ depend: .depend
 	$(CC) $(CFLAGS) -MM $^ -MF ./.depend;
 include .depend
 
-.PHONY: all doc install clean distclean uninstall depend
+.PHONY: all doc man install clean distclean uninstall depend
