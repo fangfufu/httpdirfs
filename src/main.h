@@ -41,4 +41,6 @@ void print_long_help();
  * \brief Print Sonic server related help information
  */
 void print_sonic_help();
+
+int common_main(int *argc_in, char ***argv_in);
 #endif
