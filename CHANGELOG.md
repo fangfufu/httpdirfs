@@ -10,7 +10,7 @@ Now generate separate binaries
 - ``HTTDirFS`` for mounting HTTP directory listings.
 - ``SonicFS`` for mounting Airsonic / Subsonic server.
 ### Fixed
-- macOS uninstall in Makefile.
+- macOS uninstallation in Makefile.
 ## [1.2.1] - 2021-05-27
 ### Added
 - macOS compilation support.
