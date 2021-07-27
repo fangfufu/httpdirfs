@@ -266,7 +266,9 @@ static int Meta_write(Cache *cf)
     fwrite(&cf->content_length, sizeof(off_t), 1, fp);
     fwrite(&cf->blksz, sizeof(int), 1, fp);
     fwrite(&cf->segbc, sizeof(long), 1, fp);
-    fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
+    if (cf->content_length){
+        fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
+    }
 
     /* Error checking for fwrite */
     if (ferror(fp)) {
@@ -807,7 +809,7 @@ Cache *Cache_open(const char *fn)
     /*
      * Internally inconsistent or corrupt metadata
      */
-    if ((rtn == EINCONSIST) || (rtn == EZERO) || (rtn == EMEM)) {
+    if ((rtn == EINCONSIST) || (rtn == EMEM)) {
         Cache_free(cf);
         fprintf(stderr, "Cache_open(): metadata error: %s, %d.\n", fn, rtn);
         return NULL;
