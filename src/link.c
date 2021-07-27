@@ -125,6 +125,19 @@ static LinkType linkname_to_LinkType(const char *linkname)
         return LINK_INVALID;
     }
 
+    if (NULL == linkname || strlen(linkname) < 2) {
+        return LINK_INVALID;
+    }
+
+    if (linkname[0] == '%') {
+        if (linkname[1] == 'E') {
+            if (linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/') {
+                return LINK_DIR;
+            }
+            return LINK_UNINITIALISED_FILE;
+        }
+    }
+
     /* Check for stray '/' */
     char *slash = strchr(linkname, '/');
     if (slash) {
