@@ -106,6 +106,20 @@ static Link *Link_new(const char *linkname, LinkType type)
 
 static LinkType linkname_to_LinkType(const char *linkname)
 {
+
+    if (NULL == linkname || strlen(linkname) < 2) {
+        return LINK_INVALID;
+    }
+
+    if (linkname[0] == '%') {
+        if (linkname[1] == 'E') {
+            if(linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/') {
+                return LINK_DIR;
+            }
+            return LINK_UNINITIALISED_FILE;
+        }
+    }
+
     /* The link name has to start with alphanumerical character */
     if (!isalnum(linkname[0])) {
         return LINK_INVALID;
