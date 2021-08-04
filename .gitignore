@@ -3,3 +3,5 @@
 httpdirfs
 .depend
 doc/html
+.vscode
+httpdirfs.code-workspace
