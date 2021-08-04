@@ -107,7 +107,7 @@ static Link *Link_new(const char *linkname, LinkType type)
 static LinkType linkname_to_LinkType(const char *linkname)
 {
     /* The link name has to start with alphanumerical character */
-    if (!isalnum(linkname[0])) {
+    if (!isalnum(linkname[0]) && (linkname[0] != '%')) {
         return LINK_INVALID;
     }
 
