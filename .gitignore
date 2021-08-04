@@ -1,7 +1,15 @@
-*.o
-*.kate-swp
+# Binaries
 httpdirfs
-.depend
-doc
-.vscode
 sonicfs
+
+# Intermediates
+*.o
+.depend
+
+# Documentation
+doc
+
+# Editor related
+.vscode
+httpdirfs.code-workspace
+*.kate-swp
