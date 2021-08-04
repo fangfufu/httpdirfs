@@ -4,9 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0]
+### Changed
+Now generate separate binaries
+- ``HTTDirFS`` for mounting HTTP directory listings.
+- ``SonicFS`` for mounting Airsonic / Subsonic server.
+### Fixed
+- macOS uninstallation in Makefile.
 ## [1.2.1] - 2021-05-27
 ### Added
-- macOS compilation support
+- macOS compilation support.
 
 ## [1.2.0] - 2019-11-01
 ### Added
@@ -177,8 +184,9 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/Unreleased...1.2.1
-[1.2.1]: https://github.com/fangfufu/httpdirfs/compare/Unreleased...1.2.0
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/Unreleased...1.3.0
+[1.3.0]: https://github.com/fangfufu/httpdirfs/compare/1.3.0...1.2.1
+[1.2.1]: https://github.com/fangfufu/httpdirfs/compare/1.2.1...1.2.0
 [1.2.0]: https://github.com/fangfufu/httpdirfs/compare/1.2.0...1.1.10
 [1.1.10]: https://github.com/fangfufu/httpdirfs/compare/1.1.9...1.1.10
 [1.1.9]: https://github.com/fangfufu/httpdirfs/compare/1.1.8...1.1.9

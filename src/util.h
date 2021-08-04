@@ -26,11 +26,6 @@
  */
 #define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
 
-
-
-
-
-
 /**
  * \brief configuration data structure
  * \note The opening curly bracket should be at line 39, so the code belong
