@@ -11,6 +11,7 @@ Now generate separate binaries
 - ``SonicFS`` for mounting Airsonic / Subsonic server.
 ### Fixed
 - macOS uninstallation in Makefile.
+- Filenames start with percentage encoding are now parsed properly
 ## [1.2.1] - 2021-05-27
 ### Added
 - macOS compilation support.
