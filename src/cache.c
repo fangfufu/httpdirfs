@@ -785,7 +785,7 @@ Cache *Cache_open(const char *fn)
     Cache *cf = Cache_alloc();
 
     /* Fill in the fs_path */
-    cf->fs_path = calloc(MAX_PATH_LEN + 1, sizeof(char));
+    cf->fs_path = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     strncpy(cf->fs_path, fn, MAX_PATH_LEN);
 
     /* Set the path for the local cache file, if we are in sonic mode */
