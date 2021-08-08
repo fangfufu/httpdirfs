@@ -113,14 +113,23 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     return 0;
 }
 
-/** \brief read the directory indicated by the path*/
+/**
+ * \brief read the directory indicated by the path
+ * \note
+ *  - releasedir() is not implemented, because I don't see why anybody want
+ * the LinkTables to be evicted from the memory during the runtime of this
+ * program. If you want to evict LinkTables, just unmount the filesystem.
+ *  - There is no real need to associate the LinkTable with the fi of each
+ * directory data structure. If you want a deep level directory, you need to
+ * generate the LinkTables for previous level directories. We might
+ * as well maintain our own tree structure.
+ */
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
                       off_t offset, struct fuse_file_info *fi)
 {
     (void) offset;
     (void) fi;
 
-    Link *link;
     LinkTable *linktbl;
 
     if (!strcmp(path, "/")) {
@@ -136,7 +145,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     dir_add(buf, ".", NULL, 0);
     dir_add(buf, "..", NULL, 0);
     for (int i = 1; i < linktbl->num; i++) {
-        link = linktbl->links[i];
+        Link *link = linktbl->links[i];
         if (link->type != LINK_INVALID) {
             dir_add(buf, link->linkname, NULL, 0);
         }
