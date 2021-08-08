@@ -128,6 +128,26 @@ static LinkType linkname_to_LinkType(const char *linkname)
 }
 
 /**
+ * \brief check if two link names are equal, after taking the '/' into account.
+ */
+static int linknames_equal(char *linkname, const char *linkname_new)
+{
+    if (!strncmp(linkname, linkname_new, MAX_FILENAME_LEN)) {
+        return 1;
+    }
+
+    /* check if the link names differ by a single '/' */
+    if (!strncmp(linkname, linkname_new, strnlen(linkname, MAX_FILENAME_LEN))) {
+        size_t linkname_new_len = strnlen(linkname_new, MAX_FILENAME_LEN);
+        if ( (linkname_new_len - strnlen(linkname, MAX_FILENAME_LEN) == 1) &&
+            (linkname_new[linkname_new_len - 1] == '/')) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
  * Shamelessly copied and pasted from:
  * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
  */
@@ -141,8 +161,19 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         (href = gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         /* if it is valid, copy the link onto the heap */
         LinkType type = linkname_to_LinkType(href->value);
-    if ( (type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE) ) {
-            LinkTable_add(linktbl, Link_new(href->value, type));
+        /*
+         * We also check if the link being added is the same as the last link.
+         * This is to prevent duplicated link, if an Apache server has the
+         * IconsAreLinks option.
+         */
+        size_t comp_len = strnlen(href->value, MAX_FILENAME_LEN);
+        if (type == LINK_DIR) {
+            comp_len--;
+        }
+        if (((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) &&
+            !linknames_equal(linktbl->links[linktbl->num - 1]->linkname,
+                                href->value)) {
+                LinkTable_add(linktbl, Link_new(href->value, type));
         }
     }
     /* Note the recursive call, lol. */
