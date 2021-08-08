@@ -1,4 +1,4 @@
-VERSION = 1.2.1
+VERSION = 1.2.2
 
 CFLAGS += -O2 -Wall -Wextra -Wshadow -rdynamic -D_GNU_SOURCE\
 	-D_FILE_OFFSET_BITS=64 -DVERSION=\"$(VERSION)\"\
