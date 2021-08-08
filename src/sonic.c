@@ -208,7 +208,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
     char *suffix = "";
     for (int i = 0; attr[i]; i += 2) {
         if (!strcmp("id", attr[i])) {
-            link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
+            link->sonic_id = CALLOC(MAX_FILENAME_LEN + 1, sizeof(char));
             strncpy(link->sonic_id, attr[i+1], MAX_FILENAME_LEN);
             id_set = 1;
             continue;
@@ -248,7 +248,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
         }
 
         if (!strcmp("created", attr[i])) {
-            struct tm *tm = calloc(1, sizeof(struct tm));
+            struct tm *tm = CALLOC(1, sizeof(struct tm));
             strptime(attr[i+1], "%Y-%m-%dT%H:%M:%S.000Z", tm);
             link->time = mktime(tm);
             free(tm);
@@ -404,7 +404,7 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
             }
 
             if (!strcmp("id", attr[i])) {
-                link->sonic_id = calloc(MAX_FILENAME_LEN + 1, sizeof(char));
+                link->sonic_id = CALLOC(MAX_FILENAME_LEN + 1, sizeof(char));
                 strncpy(link->sonic_id, attr[i+1], MAX_FILENAME_LEN);
                 id_set = 1;
                 continue;
