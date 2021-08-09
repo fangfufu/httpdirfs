@@ -983,7 +983,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
 
     /* ------------------ Check if the segment already exists ---------------*/
-    if (Seg_exist(cf, dl_offset)) {
+    if (dl_offset == 0 || Seg_exist(cf, dl_offset)) {
         send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
         goto bgdl;
     } else {
