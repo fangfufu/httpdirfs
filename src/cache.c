@@ -983,7 +983,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
 
     /* ------------------ Check if the segment already exists ---------------*/
-    if (Seg_exist(cf, dl_offset)) {
+    if (cSeg_exist(cf, dl_offset)) {
         send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
         goto bgdl;
     } else {
@@ -993,7 +993,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
                 pthread_self());
         #endif
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
-        if (Seg_exist(cf, dl_offset)) {
+        if (dl_offset == 0 || Seg_exist(cf, dl_offset)) {
             /* The segment now exists - it was downloaded by another
              * download thread. Send it off and unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
