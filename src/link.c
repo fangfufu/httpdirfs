@@ -71,6 +71,7 @@ LinkTable *LinkSystem_init(const char *raw_url)
             ROOT_LINK_TBL = sonic_LinkTable_new_id3(0, "0");
         }
     }
+    free(url);
     return ROOT_LINK_TBL;
 }
 
