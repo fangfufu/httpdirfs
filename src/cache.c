@@ -88,6 +88,7 @@ static char *CacheSystem_calc_dir(const char *url)
         fprintf(stderr, "CacheSystem_calc_dir(): mkdir(): %s\n",
                 strerror(errno));
         }
+    free(fn);
     free(cache_dir_root);
     curl_free(escaped_url);
     curl_easy_cleanup(c);
@@ -115,10 +116,9 @@ void CacheSystem_init(const char *path, int url_supplied)
                 "CacheSystem_init(): opendir(): %s\n", strerror(errno));
         exit_failure();
     }
-
+    closedir(dir);
     META_DIR = path_append(path, "meta/");
     DATA_DIR = path_append(path, "data/");
-
     /* Check if directories exist, if not, create them */
     if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
@@ -463,6 +463,8 @@ int CacheDir_create(const char *dirn)
     if (i && (errno != EEXIST)) {
         fprintf(stderr, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
     }
+    free(datadirn);
+    free(metadirn);
     return -i;
 }
 
