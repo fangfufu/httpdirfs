@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 
+
 /**
  * \brief error associated with metadata
  */
@@ -62,7 +63,7 @@ static char *CacheSystem_calc_dir(const char *url)
 
     char *fn = path_append(cache_dir_root, "/CACHEDIR.TAG");
     FILE *fp = fopen(fn, "w");
-    if (fn) {
+    if (fp) {
         fprintf(fp,
 "Signature: 8a477f597d28d172789f06886806bc55\n\
 # This file is a cache directory tag created by httpdirfs.\n\
