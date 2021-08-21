@@ -5,7 +5,8 @@ CFLAGS += -O2 -Wall -Wextra -Wshadow -rdynamic -D_GNU_SOURCE\
 	`pkg-config --cflags-only-I gumbo libcurl fuse uuid expat`
 LDFLAGS += `pkg-config --libs-only-L gumbo libcurl fuse uuid expat`
 LIBS = -pthread -lgumbo -lcurl -lfuse -lcrypto -lexpat
-COBJS = main.o network.o fuse_local.o link.o cache.o util.o sonic.o
+COBJS = main.o network.o fuse_local.o link.o cache.o util.o sonic.o log.o\
+	config.o
 
 OS := $(shell uname)
 ifeq ($(OS),Darwin)

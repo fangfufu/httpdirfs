@@ -1,6 +1,7 @@
 #include "network.h"
 
 #include "cache.h"
+#include "config.h"
 
 #include <openssl/crypto.h>
 

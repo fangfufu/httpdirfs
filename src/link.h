@@ -5,7 +5,7 @@
  * \file link.h
  * \brief link related structures and functions
  */
-
+#include "config.h"
 #include "util.h"
 #include <curl/curl.h>
 
