@@ -68,5 +68,7 @@ void Config_init(void)
     CONFIG.sonic_insecure = 0;
 
     /*--------------- Log related -------------*/
-    CONFIG.log_level = log_init();
+    CONFIG.log_level = log_level_init();
+
+    CONFIG.log_verbosity = log_verbosity_init();
 }

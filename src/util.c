@@ -56,7 +56,7 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
     int i;
     i = pthread_mutex_unlock(x);
     if (i) {
-        fprintf(stderr, "thread %lu: pthread_mutex_unlock() failed, %d, %s\n",
+        lprintf(debug, "thread %lu: pthread_mutex_unlock() failed, %d, %s\n",
                 pthread_self(), i, strerror(i));
         exit_failure();
     }
@@ -67,7 +67,7 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
-        fprintf(stderr, "thread %lu: pthread_mutex_lock() failed, %d, %s\n",
+        lprintf(debug, "thread %lu: pthread_mutex_lock() failed, %d, %s\n",
                 pthread_self(), i, strerror(i));
         exit_failure();
     }
@@ -79,8 +79,8 @@ void exit_failure(void)
     void *buffer[BT_BUF_SIZE];
 
     nptrs = backtrace(buffer, BT_BUF_SIZE);
-    fprintf(stderr, "\nOops! HTTPDirFS crashed! :(\n");
-    fprintf(stderr, "backtrace() returned the following %d addresses:\n",
+    lprintf(debug, "\nOops! HTTPDirFS crashed! :(\n");
+    lprintf(debug, "backtrace() returned the following %d addresses:\n",
             nptrs);
     backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO);
 
@@ -132,7 +132,7 @@ void *CALLOC(size_t nmemb, size_t size)
 {
     void *ptr = calloc(nmemb, size);
     if (!ptr) {
-        fprintf(stderr, "calloc() failed, %s!\n", strerror(errno));
+        lprintf(debug, "calloc() failed, %s!\n", strerror(errno));
         exit_failure();
     }
     return ptr;

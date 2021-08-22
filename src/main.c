@@ -2,6 +2,7 @@
 #include "cache.h"
 #include "fuse_local.h"
 #include "network.h"
+#include "log.h"
 
 #include <getopt.h>
 #include <stdlib.h>
@@ -22,7 +23,7 @@ int main(int argc, char **argv)
     /* Automatically print help if not enough arguments are supplied */
     if (argc < 2) {
         print_help(argv[0], 0);
-        fprintf(stderr, "For more information, run \"%s --help.\"\n", argv[0]);
+        lprintf(debug, "For more information, run \"%s --help.\"\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -70,20 +71,20 @@ int main(int argc, char **argv)
     /* The second last remaining argument is the URL */
     char *base_url = argv[argc-2];
     if (strncmp(base_url, "http://", 7) && strncmp(base_url, "https://", 8)) {
-        fprintf(stderr, "Error: Please supply a valid URL.\n");
+        lprintf(debug, "Error: Please supply a valid URL.\n");
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
     } else {
         if (CONFIG.sonic_username && CONFIG.sonic_password) {
             CONFIG.sonic_mode = 1;
         } else if (CONFIG.sonic_username || CONFIG.sonic_password) {
-            fprintf(stderr,
+            lprintf(debug,
                     "Error: You have to supply both username and password to \
 activate Sonic mode.\n");
             exit(EXIT_FAILURE);
         }
         if(!LinkSystem_init(base_url)) {
-            fprintf(stderr, "Error: Network initialisation failed.\n");
+            lprintf(debug, "Error: Network initialisation failed.\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -257,12 +258,12 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                     /* This is for --config, we don't need to do anything */
                         break;
                     default:
-                        fprintf(stderr, "see httpdirfs -h for usage\n");
+                        lprintf(debug, "see httpdirfs -h for usage\n");
                         return 1;
                 }
                 break;
             default:
-                fprintf(stderr, "see httpdirfs -h for usage\n");
+                lprintf(debug, "see httpdirfs -h for usage\n");
                 return 1;
         }
     };
@@ -283,7 +284,7 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 
 static void print_help(char *program_name, int long_help)
 {
-    fprintf(stderr,
+    lprintf(debug,
             "usage: %s [options] URL mountpoint\n", program_name);
     if (long_help) {
         print_long_help();
@@ -292,15 +293,15 @@ static void print_help(char *program_name, int long_help)
 
 static void print_version()
 {
-    fprintf(stderr, "HTTPDirFS version " VERSION "\n");
+    lprintf(debug, "HTTPDirFS version " VERSION "\n");
     /* --------- Print off SSL engine version  --------- */
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
-    fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
+    lprintf(debug, "libcurl SSL engine: %s\n", data->ssl_version);
 }
 
 static void print_long_help()
 {
-    fprintf(stderr,
+    lprintf(debug,
 "\n\
 general options:\n\
         --config            Specify a configuration file \n\
