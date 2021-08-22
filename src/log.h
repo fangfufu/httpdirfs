@@ -18,7 +18,7 @@
 /**
  * \brief The default log level
  */
-#define DEFAULT_LOG_LEVEL notice
+#define DEFAULT_LOG_LEVEL debug
 
 /**
  * \brief Display filename in log
