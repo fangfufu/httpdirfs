@@ -284,8 +284,7 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 
 static void print_help(char *program_name, int long_help)
 {
-    lprintf(debug,
-            "usage: %s [options] URL mountpoint\n", program_name);
+    printf("usage: %s [options] URL mountpoint\n", program_name);
     if (long_help) {
         print_long_help();
     }
@@ -293,15 +292,15 @@ static void print_help(char *program_name, int long_help)
 
 static void print_version()
 {
-    lprintf(debug, "HTTPDirFS version " VERSION "\n");
+    printf("HTTPDirFS version " VERSION "\n");
     /* --------- Print off SSL engine version  --------- */
     curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
-    lprintf(debug, "libcurl SSL engine: %s\n", data->ssl_version);
+    printf("libcurl SSL engine: %s\n", data->ssl_version);
 }
 
 static void print_long_help()
 {
-    lprintf(debug,
+    printf(
 "\n\
 general options:\n\
         --config            Specify a configuration file \n\
