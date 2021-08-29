@@ -48,11 +48,7 @@ LinkTable *LinkSystem_init(const char *raw_url)
     /* This is where the '/' should be */
     ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) + 1;
 
-    /* ---------------------  Enable cache system -------------------- /
-     *
-     * Note that cache system is enabled automatically if sonic mode is
-     * enabled
-     */
+    /* ---------------------  Enable cache system -------------------- */
     if (CONFIG.cache_enabled) {
         if (CONFIG.cache_dir) {
             CacheSystem_init(CONFIG.cache_dir, 0);
@@ -313,12 +309,12 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
                 erase_string(stderr, STATUS_LEN, s);
             }
             snprintf(s, STATUS_LEN, "%d / %d", n-i, n);
-            lprintf(debug, "%s", s);
+            fprintf(stderr, "%s", s);
             j++;
         }
     } while (u);
     erase_string(stderr, STATUS_LEN, s);
-    lprintf(debug, "Done!\n");
+    fprintf(stderr, "Done!\n");
 }
 
 static void LinkTable_fill(LinkTable *linktbl)
