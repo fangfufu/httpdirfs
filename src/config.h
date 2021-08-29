@@ -40,6 +40,8 @@ typedef enum {
 typedef struct {
     /** \brief Operation Mode */
     OperationMode mode;
+    /** \brief Current log level */
+    int log_level;
     /*---------------- Network related --------------*/
     /** \brief HTTP username */
     char *http_username;
@@ -79,17 +81,6 @@ typedef struct {
     int sonic_id3;
     /** \brief Whether we use the legacy sonic authentication mode */
     int sonic_insecure;
-    /*--------------- Log related -------------*/
-    /** \brief Current log level */
-    int log_level;
-    /**
-     * \brief Whether we print the filename and line number in log
-     * \details
-     *  - 0 : No filename and line nubmer
-     *  - 1 : Filename only
-     *  - 2 : Filename and line number
-     */
-    int log_verbosity;
 } ConfigStruct;
 
 /**

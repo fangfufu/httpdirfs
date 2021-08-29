@@ -1,39 +1,21 @@
 #ifndef LOG_H
 #define LOG_H
-/**
- * \brief Log type: Informational
- */
-#define linfo  1 << 0
 
 /**
- * \brief Log type: Error
+ * \brief Log types
  */
-#define lerror   1 << 1
-
-/**
- * \brief Log type: Debug
- */
-#define ldebug   1 << 2
+typedef enum {
+    fatal       = 1 << 0,
+    error       = 1 << 1,
+    warning     = 1 << 2,
+    info        = 1 << 3,
+    debug       = 1 << 4,
+} LogType;
 
 /**
  * \brief The default log level
  */
-#define DEFAULT_LOG_LEVEL ldebug
-
-/**
- * \brief Display filename in log
- */
-#define LOG_SHOW_FILENAME   1
-
-/**
- * \brief Display line number in log
- */
-#define LOG_SHOW_FILENAME_LINE_NUM  2
-
-/**
- * \brief The default log verbosity
- */
-#define DEFAULT_LOG_VERBOSITY LOG_SHOW_FILENAME_LINE_NUM
+#define DEFAULT_LOG_LEVEL fatal | error | warning | info | debug
 
 /**
  * \brief Get the log level from the environment.
@@ -41,15 +23,10 @@
 int log_level_init();
 
 /**
- * \brief Get the log verbosity from the environment
- */
-int log_verbosity_init();
-
-/**
  * \brief Log printf
  * \details This is for printing nice log messages
  */
-void log_printf(int type, const char *file, int line, const char *format, ...);
+void log_printf(LogType type, const char *file, int line, const char *format, ...);
 
 /**
  * \brief Log type printf

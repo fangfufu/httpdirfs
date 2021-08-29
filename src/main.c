@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     /* Automatically print help if not enough arguments are supplied */
     if (argc < 2) {
         print_help(argv[0], 0);
-        lprintf(ldebug, "For more information, run \"%s --help.\"\n", argv[0]);
+        lprintf(debug, "For more information, run \"%s --help.\"\n", argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -71,20 +71,20 @@ int main(int argc, char **argv)
     /* The second last remaining argument is the URL */
     char *base_url = argv[argc-2];
     if (strncmp(base_url, "http://", 7) && strncmp(base_url, "https://", 8)) {
-        lprintf(ldebug, "Error: Please supply a valid URL.\n");
+        lprintf(debug, "Error: Please supply a valid URL.\n");
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
     } else {
         if (CONFIG.sonic_username && CONFIG.sonic_password) {
             CONFIG.mode = SONIC;
         } else if (CONFIG.sonic_username || CONFIG.sonic_password) {
-            lprintf(ldebug,
+            lprintf(debug,
                     "Error: You have to supply both username and password to \
 activate Sonic mode.\n");
             exit(EXIT_FAILURE);
         }
         if(!LinkSystem_init(base_url)) {
-            lprintf(ldebug, "Error: Network initialisation failed.\n");
+            lprintf(debug, "Error: Network initialisation failed.\n");
             exit(EXIT_FAILURE);
         }
     }
@@ -262,12 +262,12 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         CONFIG.mode = SINGLE_FILE;
                         break;
                     default:
-                        lprintf(ldebug, "see httpdirfs -h for usage\n");
+                        lprintf(debug, "see httpdirfs -h for usage\n");
                         return 1;
                 }
                 break;
             default:
-                lprintf(ldebug, "see httpdirfs -h for usage\n");
+                lprintf(debug, "see httpdirfs -h for usage\n");
                 return 1;
         }
     };

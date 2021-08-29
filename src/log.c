@@ -15,46 +15,40 @@ int log_level_init()
     return DEFAULT_LOG_LEVEL;
 }
 
-int log_verbosity_init()
+void log_printf(LogType type, const char *file, int line, const char *format, ...)
 {
-    char *env = getenv("HTTPDIRFS_LOG_VERBOSITY");
-    if (env) {
-        return atoi(env);
-    }
-    return DEFAULT_LOG_VERBOSITY;
-}
-
-void log_printf(int type, const char *file, int line, const char *format, ...)
-{
+    FILE *out = stderr;
     if (type & CONFIG.log_level) {
         switch (type) {
-            case linfo:
+            case fatal:
+                fprintf(out, "Fatal: ");
+                break;
+            case error:
+                fprintf(out, "Error: ");
+                break;
+            case warning:
+                fprintf(out, "Warning: ");
+                break;
+            case info:
+                out = stdout;
                 goto print_actual_message;
                 break;
-            case lerror:
-                fprintf(stderr, "Error: ");
-                break;
-            case ldebug:
-                fprintf(stderr, "Debug: ");
+            case debug:
+                fprintf(out, "Debug: ");
                 break;
             default:
-                fprintf(stderr, "Unknown (%x):", type);
+                fprintf(out, "Unknown (%x):", type);
                 break;
         }
-        switch (CONFIG.log_verbosity) {
-            case LOG_SHOW_FILENAME:
-                fprintf(stderr, "(%s): ", file);
-                break;
-            case LOG_SHOW_FILENAME_LINE_NUM:
-                fprintf(stderr, "(%s:%d): ", file, line);
-                break;
-        }
+
+        fprintf(out, "(%s:%d): ", file, line);
+
         print_actual_message:
         /* A label can only be part of a statement, this is a statement. lol*/
         {}
         va_list args;
         va_start(args, format);
-        vfprintf(stderr, format, args);
+        vfprintf(out, format, args);
         va_end(args);
     }
 }

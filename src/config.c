@@ -28,8 +28,10 @@ ConfigStruct CONFIG;
  */
 void Config_init(void)
 {
-    /** \brief Operation Mode */
     CONFIG.mode = NORMAL;
+
+    CONFIG.log_level = log_level_init();
+
     /*---------------- Network related --------------*/
     CONFIG.http_username = NULL;
 
@@ -68,10 +70,4 @@ void Config_init(void)
     CONFIG.sonic_id3 = 0;
 
     CONFIG.sonic_insecure = 0;
-
-    /*--------------- Log related -------------*/
-    CONFIG.log_level = log_level_init();
-
-    CONFIG.log_verbosity = log_verbosity_init();
-
 }
