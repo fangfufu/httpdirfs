@@ -11,3 +11,4 @@ doc
 
 # Editor related
 *.kate-swp
+.vscode
