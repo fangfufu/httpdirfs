@@ -81,6 +81,9 @@ typedef struct {
      *  - 2 : Filename and line number
      */
     int log_verbosity;
+    /*-----------Single file mode related ----------*/
+    /** \brief Single file mode */
+    int single_file_mode;
 } ConfigStruct;
 
 /**

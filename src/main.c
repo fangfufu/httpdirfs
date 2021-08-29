@@ -169,6 +169,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         {"sonic-insecure", no_argument, NULL, 'L'},         /* 19 */
         {"insecure-tls", no_argument, NULL, 'L'},           /* 20 */
         {"config", required_argument, NULL, 'L'},           /* 21 */
+        {"single-file-mode", required_argument, NULL, 'L'}, /* 22 */
         {0, 0, 0, 0}
     };
     while ((c =
@@ -255,7 +256,10 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                         CONFIG.insecure_tls = 1;
                         break;
                     case 21:
-                    /* This is for --config, we don't need to do anything */
+                        /* This is for --config, we don't need to do anything */
+                        break;
+                    case 22:
+                        CONFIG.single_file_mode = 1;
                         break;
                     default:
                         lprintf(debug, "see httpdirfs -h for usage\n");
@@ -335,6 +339,9 @@ HTTPDirFS options:\n\
                             for HTTP range requests\n\
         --insecure_tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
+        --single-file-mode  Single file mode - rather than mounting a whole\n\
+                            directory, present a single file inside a virtual\n\
+                            directory.\n\
 \n\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\

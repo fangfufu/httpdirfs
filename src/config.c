@@ -71,4 +71,7 @@ void Config_init(void)
     CONFIG.log_level = log_level_init();
 
     CONFIG.log_verbosity = log_verbosity_init();
+
+    /*-----------Single file mode related ----------*/
+    CONFIG.single_file_mode = 0;
 }
