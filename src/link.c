@@ -39,7 +39,7 @@ LinkTable *LinkSystem_init(const char *raw_url)
     }
 
     if (pthread_mutex_init(&link_lock, NULL) != 0) {
-        lprintf(debug,
+        lprintf(ldebug,
                 "link_system_init(): link_lock initialisation failed!\n");
         exit_failure();
     }
@@ -58,9 +58,9 @@ LinkTable *LinkSystem_init(const char *raw_url)
     }
 
     /* ----------- Create the root link table --------------*/
-    if (!CONFIG.sonic_mode) {
+    if (CONFIG.mode == NORMAL) {
         ROOT_LINK_TBL = LinkTable_new(url);
-    } else {
+    } else if (CONFIG.mode == SONIC) {
         sonic_config_init(url, CONFIG.sonic_username, CONFIG.sonic_password);
         if (!CONFIG.sonic_id3) {
             ROOT_LINK_TBL = sonic_LinkTable_new_index("0");
@@ -77,7 +77,7 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->num++;
     linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
     if (!linktbl->links) {
-        lprintf(debug, "LinkTable_add(): realloc failure!\n");
+        lprintf(ldebug, "LinkTable_add(): realloc failure!\n");
         exit_failure();
     }
     linktbl->links[linktbl->num - 1] = link;
@@ -186,7 +186,7 @@ static CURL *Link_to_curl(Link *link)
 {
     CURL *curl = curl_easy_init();
     if (!curl) {
-        lprintf(debug, "Link_to_curl(): curl_easy_init() failed!\n");
+        lprintf(ldebug, "Link_to_curl(): curl_easy_init() failed!\n");
     }
     /* set up some basic curl stuff */
     curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
@@ -232,7 +232,7 @@ static CURL *Link_to_curl(Link *link)
 void Link_req_file_stat(Link *this_link)
 {
     if (this_link->type != LINK_UNINITIALISED_FILE) {
-        lprintf(debug, "Link_req_file_stat(), invalid request, LinkType: %c",
+        lprintf(ldebug, "Link_req_file_stat(), invalid request, LinkType: %c",
                 this_link->type);
         exit_failure();
     }
@@ -271,12 +271,12 @@ void Link_set_file_stat(Link* this_link, CURL *curl)
             this_link->content_length = cl;
         }
     } else {
-        lprintf(debug, "Link_set_file_stat(): HTTP %ld", http_resp);
+        lprintf(ldebug, "Link_set_file_stat(): HTTP %ld", http_resp);
         if (HTTP_temp_failure(http_resp)) {
-            lprintf(debug, ", retrying later.\n");
+            lprintf(ldebug, ", retrying later.\n");
         } else {
             this_link->type = LINK_INVALID;
-            lprintf(debug, ".\n");
+            lprintf(ldebug, ".\n");
         }
     }
 }
@@ -290,7 +290,7 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
 {
     int u;
     char s[STATUS_LEN];
-    lprintf(debug, "LinkTable_uninitialised_fill(): ... ");
+    lprintf(ldebug, "LinkTable_uninitialised_fill(): ... ");
     do {
         u = 0;
         for (int i = 0; i < linktbl->num; i++) {
@@ -350,7 +350,7 @@ static void LinkTable_invalid_reset(LinkTable *linktbl)
             j++;
         }
     }
-    lprintf(debug, "LinkTable_invalid_reset(): %d invalid links\n", j);
+    lprintf(ldebug, "LinkTable_invalid_reset(): %d invalid links\n", j);
 }
 
 void LinkTable_free(LinkTable *linktbl)
@@ -365,13 +365,13 @@ void LinkTable_free(LinkTable *linktbl)
 void LinkTable_print(LinkTable *linktbl)
 {
     int j = 0;
-    lprintf(debug, "--------------------------------------------\n");
-    lprintf(debug, " LinkTable %p for %s\n", linktbl,
+    lprintf(ldebug, "--------------------------------------------\n");
+    lprintf(ldebug, " LinkTable %p for %s\n", linktbl,
             linktbl->links[0]->f_url);
-    lprintf(debug, "--------------------------------------------\n");
+    lprintf(ldebug, "--------------------------------------------\n");
     for (int i = 0; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        lprintf(debug, "%d %c %lu %s %s\n",
+        lprintf(ldebug, "%d %c %lu %s %s\n",
                 i,
                 this_link->type,
                 this_link->content_length,
@@ -384,9 +384,9 @@ void LinkTable_print(LinkTable *linktbl)
             j++;
         }
     }
-    lprintf(debug, "--------------------------------------------\n");
-    lprintf(debug, "LinkTable_print(): Invalid link count: %d\n", j);
-    lprintf(debug, "--------------------------------------------\n");
+    lprintf(ldebug, "--------------------------------------------\n");
+    lprintf(ldebug, "LinkTable_print(): Invalid link count: %d\n", j);
+    lprintf(ldebug, "--------------------------------------------\n");
 }
 
 DataStruct Link_to_DataStruct(Link *head_link)
@@ -406,12 +406,12 @@ DataStruct Link_to_DataStruct(Link *head_link)
         transfer_blocking(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (HTTP_temp_failure(http_resp)) {
-            lprintf(debug,
+            lprintf(ldebug,
                     "LinkTable_new(): URL: %s, HTTP %ld, retrying later.\n",
                     url, http_resp);
             sleep(CONFIG.http_wait_sec);
         } else if (http_resp != HTTP_OK) {
-            lprintf(debug,
+            lprintf(ldebug,
                     "LinkTable_new(): cannot retrieve URL: %s, HTTP %ld\n",
                     url, http_resp);
             buf.size = 0;
@@ -440,7 +440,7 @@ LinkTable *LinkTable_alloc(const char *url)
 LinkTable *LinkTable_new(const char *url)
 {
     #ifdef LINK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "LinkTable_new(): thread %lu: locking link_lock;\n",
             pthread_self());
     #endif
@@ -471,7 +471,7 @@ LinkTable *LinkTable_new(const char *url)
         disk_linktbl = LinkTable_disk_open(unescaped_path);
         if (disk_linktbl) {
             /* Check if we need to update the link table */
-            lprintf(debug,
+            lprintf(ldebug,
                 "LinkTable_new(): disk_linktbl->num: %d, linktbl->num: %d\n",
                 disk_linktbl->num, linktbl->num);
             if (disk_linktbl->num == linktbl->num) {
@@ -505,7 +505,7 @@ LinkTable *LinkTable_new(const char *url)
 
     LinkTable_print(linktbl);
 #ifdef LINK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "LinkTable_new(): thread %lu: unlocking link_lock;\n",
             pthread_self());
 #endif
@@ -523,7 +523,7 @@ static void LinkTable_disk_delete(const char *dirn)
         path = path_append(metadirn, "/.LinkTable");
     }
     if(unlink(path)) {
-        lprintf(debug, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
+        lprintf(ldebug, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
                 strerror(errno));
     }
     free(path);
@@ -543,7 +543,7 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     free(metadirn);
 
     if (!fp) {
-        lprintf(debug, "LinkTable_disk_save(): fopen(%s): %s\n", path,
+        lprintf(ldebug, "LinkTable_disk_save(): fopen(%s): %s\n", path,
                 strerror(errno));
         free(path);
         return -1;
@@ -562,12 +562,12 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     int res = 0;
 
     if (ferror(fp)) {
-        lprintf(debug, "LinkTable_disk_save(): encountered ferror!\n");
+        lprintf(ldebug, "LinkTable_disk_save(): encountered ferror!\n");
         res = -1;
     }
 
     if (fclose(fp)) {
-        lprintf(debug,
+        lprintf(ldebug,
                 "LinkTable_disk_save(): cannot close the file pointer, %s\n",
                 strerror(errno));
         res = -1;
@@ -606,21 +606,21 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         fread(&linktbl->links[i]->time, sizeof(long), 1, fp);
         if (feof(fp)) {
             /* reached EOF */
-            lprintf(debug,
+            lprintf(ldebug,
                     "LinkTable_disk_open(): reached EOF!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
         if (ferror(fp)) {
-            lprintf(debug, "LinkTable_disk_open(): encountered ferror!\n");
+            lprintf(ldebug, "LinkTable_disk_open(): encountered ferror!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
     }
     if (fclose(fp)) {
-        lprintf(debug,
+        lprintf(ldebug,
                 "LinkTable_disk_open(): cannot close the file pointer, %s\n",
                 strerror(errno));
     }
@@ -633,9 +633,9 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
     Link *link = path_to_Link(path);
     LinkTable *next_table = link->next_table;
     if (!next_table) {
-        if (!CONFIG.sonic_mode) {
+        if (CONFIG.mode == NORMAL) {
             next_table = LinkTable_new(link->f_url);
-        } else {
+        } else if (CONFIG.mode == SONIC) {
             if (!CONFIG.sonic_id3) {
                 next_table = sonic_LinkTable_new_index(link->sonic_id);
             } else {
@@ -688,10 +688,10 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                 /* The next sub-directory exists */
                 LinkTable *next_table = linktbl->links[i]->next_table;
                 if (!next_table) {
-                    if (!CONFIG.sonic_mode) {
+                    if (CONFIG.mode == NORMAL) {
                         next_table = LinkTable_new(
                             linktbl->links[i]->f_url);
-                    } else {
+                    } else if (CONFIG.mode == SONIC) {
                         if (!CONFIG.sonic_id3) {
                             next_table = sonic_LinkTable_new_index(
                                     linktbl->links[i]->sonic_id);
@@ -714,7 +714,7 @@ Link *path_to_Link(const char *path)
 {
     char *new_path = strndup(path, MAX_PATH_LEN);
     if (!new_path) {
-        lprintf(debug, "path_to_Link(): cannot allocate memory\n");
+        lprintf(ldebug, "path_to_Link(): cannot allocate memory\n");
         exit_failure();
     }
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
@@ -726,7 +726,7 @@ long path_download(const char *path, char *output_buf, size_t size,
                    off_t offset)
 {
     if (!path) {
-        lprintf(debug, "\npath_download(): NULL path supplied\n");
+        lprintf(ldebug, "\npath_download(): NULL path supplied\n");
         exit_failure();
     }
     Link *link;
@@ -739,7 +739,7 @@ long path_download(const char *path, char *output_buf, size_t size,
     size_t end = start + size;
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    lprintf(debug, "path_download(%s, %s);\n", path, range_str);
+    lprintf(ldebug, "path_download(%s, %s);\n", path, range_str);
 
     DataStruct buf;
     buf.size = 0;
@@ -750,7 +750,7 @@ long path_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
     #ifdef LINK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "path_download(): thread %lu: locking and unlocking link_lock;\n",
             pthread_self());
     #endif
@@ -768,7 +768,7 @@ long path_download(const char *path, char *output_buf, size_t size,
     /* Check for range seek support */
     if (!CONFIG.no_range_check) {
         if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
-            lprintf(debug, "Error: This web server does not support HTTP \
+            lprintf(ldebug, "Error: This web server does not support HTTP \
 range requests\n");
             exit(EXIT_FAILURE);
         }
@@ -783,7 +783,7 @@ range requests\n");
         (http_resp != HTTP_PARTIAL_CONTENT) ||
         (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
     )) {
-        lprintf(debug, "path_download(): Could not download %s, HTTP %ld\n",
+        lprintf(ldebug, "path_download(): Could not download %s, HTTP %ld\n",
                 link->f_url, http_resp);
         return -ENOENT;
     }

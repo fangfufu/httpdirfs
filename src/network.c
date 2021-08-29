@@ -119,7 +119,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (HTTP_temp_failure(http_resp)) {
             if (!slept) {
-                lprintf(debug,
+                lprintf(ldebug,
                         "curl_process_msgs(): HTTP %ld, sleeping for %d sec\n",
                         http_resp, CONFIG.http_wait_sec);
                 sleep(CONFIG.http_wait_sec);
@@ -135,7 +135,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
                 Link_set_file_stat(transfer->link, curl);
             }
         } else {
-            lprintf(debug, "curl_process_msgs(): %d - %s <%s>\n",
+            lprintf(ldebug, "curl_process_msgs(): %d - %s <%s>\n",
                     curl_msg->data.result,
                     curl_easy_strerror(curl_msg->data.result),
                     url);
@@ -147,7 +147,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
             free(transfer);
         }
     } else {
-        lprintf(debug, "curl_process_msgs(): curl_msg->msg: %d\n",
+        lprintf(ldebug, "curl_process_msgs(): curl_msg->msg: %d\n",
                 curl_msg->msg);
     }
 }
@@ -159,7 +159,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
 int curl_multi_perform_once(void)
 {
     #ifdef NETWORK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "curl_multi_perform_once(): thread %lu: locking transfer_lock;\n",
             pthread_self());
     #endif
@@ -168,7 +168,7 @@ int curl_multi_perform_once(void)
     int n_running_curl;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
     if(mc > 0) {
-        lprintf(debug, "curl_multi_perform(): %s\n", curl_multi_strerror(mc));
+        lprintf(ldebug, "curl_multi_perform(): %s\n", curl_multi_strerror(mc));
     }
 
     fd_set fdread;
@@ -202,14 +202,14 @@ int curl_multi_perform_once(void)
     mc = curl_multi_fdset(curl_multi, &fdread, &fdwrite, &fdexcep, &maxfd);
 
     if (mc > 0) {
-        lprintf(debug, "curl_multi_fdset(): %s.\n", curl_multi_strerror(mc));
+        lprintf(ldebug, "curl_multi_fdset(): %s.\n", curl_multi_strerror(mc));
     }
 
     if (maxfd == -1) {
         usleep(100*1000);
     } else {
         if (select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout) < 0) {
-            lprintf(debug, "curl_multi_perform_once(): select(): %s.\n",
+            lprintf(ldebug, "curl_multi_perform_once(): select(): %s.\n",
                     strerror(errno));
         }
     }
@@ -221,7 +221,7 @@ int curl_multi_perform_once(void)
         curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
     }
     #ifdef NETWORK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "curl_multi_perform_once(): thread %lu: unlocking transfer_lock;\n",
             pthread_self());
     #endif
@@ -233,14 +233,14 @@ void NetworkSystem_init(void)
 {
     /* ------- Global related ----------*/
     if (curl_global_init(CURL_GLOBAL_ALL)) {
-        lprintf(debug, "network_init(): curl_global_init() failed!\n");
+        lprintf(ldebug, "network_init(): curl_global_init() failed!\n");
         exit_failure();
     }
 
     /* -------- Share related ----------*/
     CURL_SHARE = curl_share_init();
     if (!(CURL_SHARE)) {
-        lprintf(debug, "network_init(): curl_share_init() failed!\n");
+        lprintf(ldebug, "network_init(): curl_share_init() failed!\n");
         exit_failure();
     }
 
@@ -249,7 +249,7 @@ void NetworkSystem_init(void)
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 
     if (pthread_mutex_init(&curl_lock, NULL) != 0) {
-        lprintf(debug, "network_init(): curl_lock initialisation failed!\n");
+        lprintf(ldebug, "network_init(): curl_lock initialisation failed!\n");
         exit_failure();
     }
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
@@ -258,7 +258,7 @@ void NetworkSystem_init(void)
     /* ------------- Multi related -----------*/
     curl_multi = curl_multi_init();
     if (!curl_multi) {
-        lprintf(debug, "network_init(): curl_multi_init() failed!\n");
+        lprintf(ldebug, "network_init(): curl_multi_init() failed!\n");
         exit_failure();
     }
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
@@ -268,7 +268,7 @@ void NetworkSystem_init(void)
 
     /* ------------ Initialise locks ---------*/
     if (pthread_mutex_init(&transfer_lock, NULL)) {
-        lprintf(debug,
+        lprintf(ldebug,
                 "network_init(): transfer_lock initialisation failed!\n");
         exit_failure();
     }
@@ -291,21 +291,21 @@ void transfer_blocking(CURL *curl)
     transfer.transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
     #ifdef NETWORK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "transfer_blocking(): thread %lu: locking transfer_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_LOCK(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     #ifdef NETWORK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "transfer_blocking(): thread %lu: unlocking transfer_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
     if(res > 0) {
-        lprintf(debug, "transfer_blocking(): %d, %s\n",
+        lprintf(ldebug, "transfer_blocking(): %d, %s\n",
                 res, curl_multi_strerror(res));
         exit_failure();
     }
@@ -318,21 +318,21 @@ void transfer_blocking(CURL *curl)
 void transfer_nonblocking(CURL *curl)
 {
     #ifdef NETWORK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "transfer_nonblocking(): thread %lu: locking transfer_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_LOCK(&transfer_lock);
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     #ifdef NETWORK_LOCK_DEBUG
-    lprintf(debug,
+    lprintf(ldebug,
             "transfer_nonblocking(): thread %lu: unlocking transfer_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
     if(res > 0) {
-        lprintf(debug, "transfer_nonblocking(): %s\n",
+        lprintf(ldebug, "transfer_nonblocking(): %s\n",
                 curl_multi_strerror(res));
     }
 }
@@ -346,7 +346,7 @@ size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
     mem->data = realloc(mem->data, mem->size + realsize + 1);
     if(!mem->data) {
         /* out of memory! */
-        lprintf(debug, "write_memory_callback(): realloc failure!\n");
+        lprintf(ldebug, "write_memory_callback(): realloc failure!\n");
         exit_failure();
         return 0;
     }

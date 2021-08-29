@@ -28,6 +28,8 @@ ConfigStruct CONFIG;
  */
 void Config_init(void)
 {
+    /** \brief Operation Mode */
+    CONFIG.mode = NORMAL;
     /*---------------- Network related --------------*/
     CONFIG.http_username = NULL;
 
@@ -72,6 +74,4 @@ void Config_init(void)
 
     CONFIG.log_verbosity = log_verbosity_init();
 
-    /*-----------Single file mode related ----------*/
-    CONFIG.single_file_mode = 0;
 }

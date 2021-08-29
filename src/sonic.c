@@ -167,9 +167,9 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
 {
     /* Error checking */
     if (!strcmp(elem, "error")) {
-        lprintf(debug, "XML_parser_general() error:\n");
+        lprintf(ldebug, "XML_parser_general() error:\n");
         for (int i = 0; attr[i]; i += 2) {
-            lprintf(debug, "%s: %s\n", attr[i], attr[i+1]);
+            lprintf(ldebug, "%s: %s\n", attr[i], attr[i+1]);
         }
         exit(EXIT_FAILURE);
     }
@@ -322,7 +322,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     XML_SetStartElementHandler(parser, handler);
 
     if (XML_Parse(parser, xml.data, xml.size, 1) == XML_STATUS_ERROR) {
-        lprintf(debug,
+        lprintf(ldebug,
                 "sonic_XML_to_LinkTable(): Parse error at line %lu: %s\n",
                 XML_GetCurrentLineNumber(parser),
                 XML_ErrorString(XML_GetErrorCode(parser)));
@@ -356,9 +356,9 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
                                    const char **attr)
 {
     if (!strcmp(elem, "error")) {
-        lprintf(debug, "XML_parser_id3_root() error:\n");
+        lprintf(ldebug, "XML_parser_id3_root() error:\n");
         for (int i = 0; attr[i]; i += 2) {
-            lprintf(debug, "%s: %s\n", attr[i], attr[i+1]);
+            lprintf(ldebug, "%s: %s\n", attr[i], attr[i+1]);
         }
         exit(EXIT_FAILURE);
     }
@@ -454,7 +454,7 @@ LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
             /*
              * We shouldn't reach here.
              */
-            lprintf(debug, "sonic_LinkTable_new_id3(): case %d.\n", depth);
+            lprintf(ldebug, "sonic_LinkTable_new_id3(): case %d.\n", depth);
             exit_failure();
             break;
     }

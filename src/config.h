@@ -24,11 +24,22 @@
 #define DEFAULT_NETWORK_MAX_CONNS   10
 
 /**
+ * \brief Operation modes
+ */
+typedef enum {
+    NORMAL = 1,
+    SONIC = 2,
+    SINGLE_FILE = 3,
+} OperationMode;
+
+/**
  * \brief configuration data structure
  * \note The opening curly bracket should be at line 39, so the code belong
  * lines up with the initialisation code in util.c
  */
 typedef struct {
+    /** \brief Operation Mode */
+    OperationMode mode;
     /*---------------- Network related --------------*/
     /** \brief HTTP username */
     char *http_username;
@@ -60,8 +71,6 @@ typedef struct {
     /** \brief The maximum segment count for a single cache file */
     int max_segbc;
     /*-------------- Sonic related -------------*/
-    /** \brief Whether we are using the Sonic mode */
-    int sonic_mode;
     /** \brief The Sonic server username */
     char *sonic_username;
     /** \brief The Sonic server password */
@@ -81,9 +90,6 @@ typedef struct {
      *  - 2 : Filename and line number
      */
     int log_verbosity;
-    /*-----------Single file mode related ----------*/
-    /** \brief Single file mode */
-    int single_file_mode;
 } ConfigStruct;
 
 /**

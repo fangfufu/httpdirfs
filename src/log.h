@@ -1,24 +1,24 @@
 #ifndef LOG_H
 #define LOG_H
 /**
- * \brief Log type: Notice
+ * \brief Log type: Informational
  */
-#define notice  1 << 0
+#define linfo  1 << 0
 
 /**
  * \brief Log type: Error
  */
-#define error   1 << 1
+#define lerror   1 << 1
 
 /**
  * \brief Log type: Debug
  */
-#define debug   1 << 2
+#define ldebug   1 << 2
 
 /**
  * \brief The default log level
  */
-#define DEFAULT_LOG_LEVEL debug
+#define DEFAULT_LOG_LEVEL ldebug
 
 /**
  * \brief Display filename in log
@@ -46,13 +46,13 @@ int log_level_init();
 int log_verbosity_init();
 
 /**
- * \brief log printf
+ * \brief Log printf
  * \details This is for printing nice log messages
  */
 void log_printf(int type, const char *file, int line, const char *format, ...);
 
 /**
- * \brief log printf
+ * \brief Log type printf
  * \details This macro automatically prints out the filename and line number
  */
 #define lprintf(type, ...) \

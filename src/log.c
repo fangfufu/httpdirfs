@@ -28,13 +28,13 @@ void log_printf(int type, const char *file, int line, const char *format, ...)
 {
     if (type & CONFIG.log_level) {
         switch (type) {
-            case notice:
+            case linfo:
                 goto print_actual_message;
                 break;
-            case error:
+            case lerror:
                 fprintf(stderr, "Error: ");
                 break;
-            case debug:
+            case ldebug:
                 fprintf(stderr, "Debug: ");
                 break;
             default:
