@@ -713,6 +713,8 @@ int Cache_create(const char *path)
 					NULL);
 	} else if (CONFIG.mode == SONIC) {
 		fn = this_link->sonic_id;
+	} else {
+		lprintf(fatal, "Invalid CONFIG.mode\n");
 	}
 	lprintf(debug, "Cache_create(): Creating cache files for %s.\n", fn);
 
@@ -803,12 +805,14 @@ Cache *Cache_open(const char *fn)
 	} else if (CONFIG.mode == SONIC) {
 		if (Cache_exist(link->sonic_id)) {
 
-			lprintf(cache_lock_debug, 
+			lprintf(cache_lock_debug,
 				"Cache_open(): thread %x: unlocking cf_lock;\n",
 				pthread_self());
 			PTHREAD_MUTEX_UNLOCK(&cf_lock);
 			return NULL;
 		}
+	} else {
+		lprintf(fatal, "Invalid CONFIG.mode\n");
 	}
 
 	/*
@@ -842,8 +846,8 @@ Cache *Cache_open(const char *fn)
 			fn);
 
 		lprintf(cache_lock_debug,
-				"Cache_open(): thread %x: unlocking cf_lock;\n",
-				pthread_self());
+			"Cache_open(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
 		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
@@ -856,8 +860,8 @@ Cache *Cache_open(const char *fn)
 		lprintf(error, "Cache_open(): metadata error: %s.\n", fn);
 
 		lprintf(cache_lock_debug,
-				"Cache_open(): thread %x: unlocking cf_lock;\n",
-				pthread_self());
+			"Cache_open(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
 		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
@@ -873,8 +877,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
 		Cache_free(cf);
 
 		lprintf(cache_lock_debug,
-				"Cache_open(): thread %x: unlocking cf_lock;\n",
-				pthread_self());
+			"Cache_open(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
 		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
@@ -888,8 +892,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
 		Cache_free(cf);
 
 		lprintf(cache_lock_debug,
-				"Cache_open(): thread %x: unlocking cf_lock;\n",
-				pthread_self());
+			"Cache_open(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
 		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
@@ -899,8 +903,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
 		lprintf(error, "Cache_open(): cannot open data file %s.\n", fn);
 
 		lprintf(cache_lock_debug,
-				"Cache_open(): thread %x: unlocking cf_lock;\n",
-				pthread_self());
+			"Cache_open(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
 		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}

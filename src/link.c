@@ -22,10 +22,6 @@
 LinkTable *ROOT_LINK_TBL = NULL;
 int ROOT_LINK_OFFSET = 0;
 
-/*
- * ----------------- Static variables -----------------------
- */
-
 /**
  * \brief LinkTable generation priority lock
  * \details This allows LinkTable generation to be run exclusively. This
@@ -81,6 +77,8 @@ LinkTable *LinkSystem_init(const char *raw_url)
 		} else {
 			ROOT_LINK_TBL = sonic_LinkTable_new_id3(0, "0");
 		}
+	} else {
+		lprintf(fatal, "Invalid CONFIG.mode\n");
 	}
 	FREE(url);
 	return ROOT_LINK_TBL;
@@ -400,10 +398,12 @@ void LinkTable_print(LinkTable * linktbl)
 {
 	if (CONFIG.log_type & debug) {
 		int j = 0;
-		lprintf(debug, "--------------------------------------------\n");
+		lprintf(debug,
+			"--------------------------------------------\n");
 		lprintf(debug, " LinkTable %p for %s\n", linktbl,
 			linktbl->links[0]->f_url);
-		lprintf(debug, "--------------------------------------------\n");
+		lprintf(debug,
+			"--------------------------------------------\n");
 		for (int i = 0; i < linktbl->num; i++) {
 			Link *this_link = linktbl->links[i];
 			lprintf(debug, "%d %c %lu %s %s\n",
@@ -412,14 +412,17 @@ void LinkTable_print(LinkTable * linktbl)
 				this_link->content_length,
 				this_link->linkname, this_link->f_url);
 			if ((this_link->type != LINK_FILE)
-				&& (this_link->type != LINK_DIR)
-				&& (this_link->type != LINK_HEAD)) {
+			    && (this_link->type != LINK_DIR)
+			    && (this_link->type != LINK_HEAD)) {
 				j++;
 			}
 		}
-		lprintf(debug, "--------------------------------------------\n");
-		lprintf(debug, "LinkTable_print(): Invalid link count: %d\n", j);
-		lprintf(debug, "--------------------------------------------\n");
+		lprintf(debug,
+			"--------------------------------------------\n");
+		lprintf(debug, "LinkTable_print(): Invalid link count: %d\n",
+			j);
+		lprintf(debug,
+			"--------------------------------------------\n");
 	}
 }
 
@@ -689,6 +692,8 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
 				    sonic_LinkTable_new_id3(link->sonic_depth,
 							    link->sonic_id);
 			}
+		} else {
+			lprintf(fatal, "Invalid CONFIG.mode\n");
 		}
 	}
 	link->next_table = next_table;
@@ -754,23 +759,27 @@ static Link *path_to_Link_recursive(char *path, LinkTable * linktbl)
 				if (!next_table) {
 					if (CONFIG.mode == NORMAL) {
 						next_table =
-						    LinkTable_new(linktbl->
-								  links[i]->
-								  f_url);
+						    LinkTable_new(linktbl->links
+								  [i]->f_url);
 					} else if (CONFIG.mode == SONIC) {
 						if (!CONFIG.sonic_id3) {
 							next_table =
 							    sonic_LinkTable_new_index
-							    (linktbl->links[i]->
-							     sonic_id);
+							    (linktbl->
+							     links
+							     [i]->sonic_id);
 						} else {
 							next_table =
 							    sonic_LinkTable_new_id3
 							    (linktbl->links
 							     [i]->sonic_depth,
-							     linktbl->links[i]->
-							     sonic_id);
+							     linktbl->
+							     links
+							     [i]->sonic_id);
 						}
+					} else {
+						lprintf(fatal,
+							"Invalid CONFIG.mode\n");
 					}
 				}
 				linktbl->links[i]->next_table = next_table;
