@@ -39,7 +39,7 @@ LinkTable *LinkSystem_init(const char *raw_url)
     }
 
     if (pthread_mutex_init(&link_lock, NULL) != 0) {
-        lprintf(debug,
+        lprintf(fatal,
                 "link_system_init(): link_lock initialisation failed!\n");
         exit_failure();
     }
@@ -68,7 +68,7 @@ LinkTable *LinkSystem_init(const char *raw_url)
             ROOT_LINK_TBL = sonic_LinkTable_new_id3(0, "0");
         }
     }
-    free(url);
+    FREE(url);
     return ROOT_LINK_TBL;
 }
 
@@ -305,16 +305,20 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
         int i = 0;
         int j = 0;
         while ( (i = curl_multi_perform_once()) ) {
-            if (j) {
-                erase_string(stderr, STATUS_LEN, s);
+            if (CONFIG.log_level & debug) {
+                if (j) {
+                    erase_string(stderr, STATUS_LEN, s);
+                }
+                snprintf(s, STATUS_LEN, "%d / %d", n-i, n);
+                fprintf(stderr, "%s", s);
+                j++;
             }
-            snprintf(s, STATUS_LEN, "%d / %d", n-i, n);
-            fprintf(stderr, "%s", s);
-            j++;
         }
     } while (u);
-    erase_string(stderr, STATUS_LEN, s);
-    fprintf(stderr, "Done!\n");
+    if (CONFIG.log_level & debug) {
+        erase_string(stderr, STATUS_LEN, s);
+        fprintf(stderr, "Done!\n");
+    }
 }
 
 static void LinkTable_fill(LinkTable *linktbl)
@@ -325,7 +329,7 @@ static void LinkTable_fill(LinkTable *linktbl)
         char *url;
         url = path_append(head_link->f_url, this_link->linkname);
         strncpy(this_link->f_url, url, MAX_PATH_LEN);
-        free(url);
+        FREE(url);
         char *unescaped_linkname;
         CURL* c = curl_easy_init();
         unescaped_linkname = curl_easy_unescape(c, this_link->linkname,
@@ -356,10 +360,10 @@ static void LinkTable_invalid_reset(LinkTable *linktbl)
 void LinkTable_free(LinkTable *linktbl)
 {
     for (int i = 0; i < linktbl->num; i++) {
-        free(linktbl->links[i]);
+        FREE(linktbl->links[i]);
     }
-    free(linktbl->links);
-    free(linktbl);
+    FREE(linktbl->links);
+    FREE(linktbl);
 }
 
 void LinkTable_print(LinkTable *linktbl)
@@ -439,13 +443,6 @@ LinkTable *LinkTable_alloc(const char *url)
 
 LinkTable *LinkTable_new(const char *url)
 {
-    #ifdef LINK_LOCK_DEBUG
-    lprintf(debug,
-            "LinkTable_new(): thread %lu: locking link_lock;\n",
-            pthread_self());
-    #endif
-    PTHREAD_MUTEX_LOCK(&link_lock);
-
     LinkTable *linktbl = LinkTable_alloc(url);
 
     /* start downloading the base URL */
@@ -459,7 +456,7 @@ LinkTable *LinkTable_new(const char *url)
     GumboOutput* output = gumbo_parse(buf.data);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
-    free(buf.data);
+    FREE(buf.data);
 
     int skip_fill = 0;
     char *unescaped_path;
@@ -504,12 +501,7 @@ LinkTable *LinkTable_new(const char *url)
     curl_easy_cleanup(c);
 
     LinkTable_print(linktbl);
-#ifdef LINK_LOCK_DEBUG
-    lprintf(debug,
-            "LinkTable_new(): thread %lu: unlocking link_lock;\n",
-            pthread_self());
-#endif
-    PTHREAD_MUTEX_UNLOCK(&link_lock);
+
     return linktbl;
 }
 
@@ -526,8 +518,8 @@ static void LinkTable_disk_delete(const char *dirn)
         lprintf(debug, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
                 strerror(errno));
     }
-    free(path);
-    free(metadirn);
+    FREE(path);
+    FREE(metadirn);
 }
 
 int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
@@ -540,15 +532,15 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
         path = path_append(metadirn, "/.LinkTable");
     }
     FILE *fp = fopen(path, "w");
-    free(metadirn);
+    FREE(metadirn);
 
     if (!fp) {
         lprintf(debug, "LinkTable_disk_save(): fopen(%s): %s\n", path,
                 strerror(errno));
-        free(path);
+        FREE(path);
         return -1;
     }
-    free(path);
+    FREE(path);
 
     fwrite(&linktbl->num, sizeof(int), 1, fp);
     for (int i = 0; i < linktbl->num; i++) {
@@ -586,10 +578,10 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         path = path_append(metadirn, "/.LinkTable");
     }
     FILE *fp = fopen(path, "r");
-    free(metadirn);
+    FREE(metadirn);
 
     if (!fp) {
-        free(path);
+        FREE(path);
         return NULL;
     }
 
@@ -712,13 +704,23 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 
 Link *path_to_Link(const char *path)
 {
+    lprintf(link_lock_debug,
+        "path_to_Link(): thread %x: locking link_lock;\n",
+        pthread_self());
+
+    PTHREAD_MUTEX_LOCK(&link_lock);
     char *new_path = strndup(path, MAX_PATH_LEN);
     if (!new_path) {
         lprintf(debug, "path_to_Link(): cannot allocate memory\n");
         exit_failure();
     }
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
-    free(new_path);
+    FREE(new_path);
+
+    lprintf(link_lock_debug,
+            "path_to_Link(): thread %x: unlocking link_lock;\n",
+            pthread_self());
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
     return link;
 }
 
@@ -749,15 +751,6 @@ long path_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    #ifdef LINK_LOCK_DEBUG
-    lprintf(debug,
-            "path_download(): thread %lu: locking and unlocking link_lock;\n",
-            pthread_self());
-    #endif
-
-    PTHREAD_MUTEX_LOCK(&link_lock);
-    PTHREAD_MUTEX_UNLOCK(&link_lock);
-
     DataStruct header;
     header.size = 0;
     header.data = NULL;
@@ -774,7 +767,7 @@ range requests\n");
         }
     }
 
-    free(header.data);
+    FREE(header.data);
 
     long http_resp;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
@@ -798,7 +791,7 @@ range requests\n");
 
     memmove(output_buf, buf.data, recv);
     curl_easy_cleanup(curl);
-    free(buf.data);
+    FREE(buf.data);
 
     return recv;
 }

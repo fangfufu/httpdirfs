@@ -71,8 +71,8 @@ static char *sonic_gen_auth_str(void)
                             ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
                             SONIC_CONFIG.username, token, salt,
                             SONIC_CONFIG.api_version, SONIC_CONFIG.client);
-        free(salt);
-        free(token);
+        FREE(salt);
+        FREE(token);
         return auth_str;
     } else {
         char *pwd_hex = str_to_hex(SONIC_CONFIG.password);
@@ -81,7 +81,7 @@ static char *sonic_gen_auth_str(void)
                  ".view?u=%s&p=enc:%s&v=%s&c=%s",
                  SONIC_CONFIG.username, pwd_hex, SONIC_CONFIG.api_version,
                  SONIC_CONFIG.client);
-        free(pwd_hex);
+        FREE(pwd_hex);
         return auth_str;
     }
 }
@@ -95,7 +95,7 @@ static char *sonic_gen_url_first_part(char *method)
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(url, MAX_PATH_LEN, "%s/rest/%s%s", SONIC_CONFIG.server, method,
              auth_str);
-    free(auth_str);
+    FREE(auth_str);
     return url;
 }
 
@@ -107,7 +107,7 @@ static char *sonic_getMusicDirectory_link(const char *id)
     char *first_part = sonic_gen_url_first_part("getMusicDirectory");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
-    free(first_part);
+    FREE(first_part);
     return url;
 }
 
@@ -119,7 +119,7 @@ static char *sonic_getArtist_link(const char *id)
     char *first_part = sonic_gen_url_first_part("getArtist");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
-    free(first_part);
+    FREE(first_part);
     return url;
 }
 
@@ -131,7 +131,7 @@ static char *sonic_getAlbum_link(const char *id)
     char *first_part = sonic_gen_url_first_part("getAlbum");
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
-    free(first_part);
+    FREE(first_part);
     return url;
 }
 
@@ -144,7 +144,7 @@ static char *sonic_stream_link(const char *id)
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
     snprintf(url, MAX_PATH_LEN,
              "%s&format=raw&id=%s", first_part, id);
-    free(first_part);
+    FREE(first_part);
     return url;
 }
 
@@ -253,7 +253,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
             struct tm *tm = CALLOC(1, sizeof(struct tm));
             strptime(attr[i+1], "%Y-%m-%dT%H:%M:%S.000Z", tm);
             link->time = mktime(tm);
-            free(tm);
+            FREE(tm);
             continue;
         }
 
@@ -286,14 +286,14 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
 
     /* Clean up if linkname or id is not set */
     if (!linkname_set || !id_set) {
-        free(link);
+        FREE(link);
         return;
     }
 
     if (link->type == LINK_FILE) {
         char *url = sonic_stream_link(link->sonic_id);
         strncpy(link->f_url, url, MAX_PATH_LEN);
-        free(url);
+        FREE(url);
     }
 
     LinkTable_add(linktbl, link);
@@ -330,7 +330,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
 
     XML_ParserFree(parser);
 
-    free(xml.data);
+    FREE(xml.data);
 
     LinkTable_print(linktbl);
 
@@ -347,7 +347,7 @@ LinkTable *sonic_LinkTable_new_index(const char *id)
         url = sonic_gen_url_first_part("getIndexes");
     }
     LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_general, 0);
-    free(url);
+    FREE(url);
     return linktbl;
 }
 
@@ -390,7 +390,7 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
         if (linkname_set) {
             LinkTable_add(root_linktbl, link);
         } else {
-            free(link);
+            FREE(link);
         }
         return;
     } else if (!strcmp(elem, "artist")) {
@@ -415,7 +415,7 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
 
         /* Clean up if linkname is not set */
         if (!linkname_set || !id_set) {
-            free(link);
+            FREE(link);
             return;
         }
 
@@ -436,19 +436,19 @@ LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
         case 0:
             url = sonic_gen_url_first_part("getArtists");
             linktbl = sonic_url_to_LinkTable(url, XML_parser_id3_root, 0);
-            free(url);
+            FREE(url);
             break;
         /* Album table - get all the albums of an artist */
         case 3:
             url = sonic_getArtist_link(id);
             linktbl = sonic_url_to_LinkTable(url, XML_parser_general, depth);
-            free(url);
+            FREE(url);
             break;
         /* Song table - get all the songs of an album */
         case 4:
             url = sonic_getAlbum_link(id);
             linktbl = sonic_url_to_LinkTable(url, XML_parser_general, depth);
-            free(url);
+            FREE(url);
             break;
         default:
             /*

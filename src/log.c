@@ -1,6 +1,7 @@
 #include "log.h"
 
 #include "config.h"
+#include "util.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -15,7 +16,8 @@ int log_level_init()
     return DEFAULT_LOG_LEVEL;
 }
 
-void log_printf(LogType type, const char *file, int line, const char *format, ...)
+void log_printf(LogType type, const char *file, const char *func, int line,
+                const char *format, ...)
 {
     FILE *out = stderr;
     if (type & CONFIG.log_level) {
@@ -33,15 +35,12 @@ void log_printf(LogType type, const char *file, int line, const char *format, ..
                 out = stdout;
                 goto print_actual_message;
                 break;
-            case debug:
-                fprintf(out, "Debug: ");
-                break;
             default:
-                fprintf(out, "Unknown (%x):", type);
+                fprintf(out, "Debug (%x):", type);
                 break;
         }
 
-        fprintf(out, "(%s:%d): ", file, line);
+        fprintf(out, "(%s:%s:%d): ", file, func, line);
 
         print_actual_message:
         /* A label can only be part of a statement, this is a statement. lol*/
@@ -50,5 +49,9 @@ void log_printf(LogType type, const char *file, int line, const char *format, ..
         va_start(args, format);
         vfprintf(out, format, args);
         va_end(args);
+
+        if (type == fatal) {
+            exit_failure();
+        }
     }
 }

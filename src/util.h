@@ -62,6 +62,11 @@ char *generate_md5sum(const char *str);
 void *CALLOC(size_t nmemb, size_t size);
 
 /**
+ * \brief wrapper for free(), but the pointer is set to NULL afterwards.
+ */
+void FREE(void *ptr);
+
+/**
  * \brief Convert a string to hex
  */
 char *str_to_hex(char *s);

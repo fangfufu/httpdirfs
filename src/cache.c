@@ -11,18 +11,6 @@
 #include <string.h>
 #include <unistd.h>
 
-
-/**
- * \brief error associated with metadata
- */
-typedef enum {
-    SUCCESS     =  0,   /**< Metadata read successful */
-    EFREAD      = -1,   /**< Fread failed */
-    EINCONSIST  = -2,   /**< Inconsistency in metadata */
-    EZERO       = -3,   /**< Unexpected zeros in metadata */
-    EMEM        = -4    /**< Memory allocation failure */
-} MetaError;
-
 /* ---------------- External variables -----------------------*/
 int CACHE_SYSTEM_INIT = 0;
 char *META_DIR;
@@ -51,15 +39,15 @@ static char *CacheSystem_calc_dir(const char *url)
         char *xdg_cache_home_default = "/.cache";
         xdg_cache_home = path_append(home, xdg_cache_home_default);
     }
-    if (mkdir(xdg_cache_home, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+    if (mkdir(xdg_cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
-        lprintf(debug, "CacheSystem_calc_dir(): mkdir(): %s\n",
+        lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
                 strerror(errno));
         }
     char *cache_dir_root = path_append(xdg_cache_home, "/httpdirfs/");
-    if (mkdir(cache_dir_root, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+    if (mkdir(cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
-        lprintf(debug, "CacheSystem_calc_dir(): mkdir(): %s\n",
+        lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
                 strerror(errno));
         }
 
@@ -72,27 +60,27 @@ static char *CacheSystem_calc_dir(const char *url)
 # For information about cache directory tags, see:\n\
 #	http://www.brynosaurus.com/cachedir/\n");
     } else {
-        lprintf(debug, "CacheSystem_calc_dir(): fopen(%s): %s", fn,
+        lprintf(fatal, "CacheSystem_calc_dir(): fopen(%s): %s", fn,
                 strerror(errno));
     }
     if (ferror(fp)) {
-        lprintf(debug,
+        lprintf(fatal,
                 "CacheSystem_calc_dir(): fwrite(): encountered error!\n");
     }
     if (fclose(fp)) {
-        lprintf(debug, "CacheSystem_calc_dir(): fclose(%s): %s\n", fn,
+        lprintf(fatal, "CacheSystem_calc_dir(): fclose(%s): %s\n", fn,
                 strerror(errno));
     }
     CURL* c = curl_easy_init();
     char *escaped_url = curl_easy_escape(c, url, 0);
     char *full_path = path_append(cache_dir_root, escaped_url);
-    if (mkdir(full_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+    if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
-        lprintf(debug, "CacheSystem_calc_dir(): mkdir(): %s\n",
+        lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
                 strerror(errno));
         }
-    free(fn);
-    free(cache_dir_root);
+    FREE(fn);
+    FREE(cache_dir_root);
     curl_free(escaped_url);
     curl_easy_cleanup(c);
     return full_path;
@@ -101,9 +89,8 @@ static char *CacheSystem_calc_dir(const char *url)
 void CacheSystem_init(const char *path, int url_supplied)
 {
     if (pthread_mutex_init(&cf_lock, NULL) != 0) {
-        lprintf(debug,
+        lprintf(fatal,
                 "CacheSystem_init(): cf_lock initialisation failed!\n");
-        exit_failure();
     }
 
     if (url_supplied) {
@@ -115,49 +102,44 @@ void CacheSystem_init(const char *path, int url_supplied)
 
     dir = opendir(path);
     if (!dir) {
-        lprintf(debug,
+        lprintf(fatal,
                 "CacheSystem_init(): opendir(): %s\n", strerror(errno));
-        exit_failure();
     }
     closedir(dir);
     META_DIR = path_append(path, "meta/");
     DATA_DIR = path_append(path, "data/");
     /* Check if directories exist, if not, create them */
-    if (mkdir(META_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+    if (mkdir(META_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
-        lprintf(debug, "CacheSystem_init(): mkdir(): %s\n",
+        lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
-        exit_failure();
     }
 
-    if (mkdir(DATA_DIR, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+    if (mkdir(DATA_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
-        lprintf(debug, "CacheSystem_init(): mkdir(): %s\n",
+        lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
                 strerror(errno));
-        exit_failure();
     }
 
     if (CONFIG.mode == SONIC) {
         char *sonic_path;
         /* Create "rest" sub-directory for META_DIR */
         sonic_path = path_append(META_DIR, "rest/");
-        if (mkdir(sonic_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        if (mkdir(sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
             && (errno != EEXIST)) {
-            lprintf(debug, "CacheSystem_init(): mkdir(): %s\n",
+            lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
-            exit_failure();
         }
-        free(sonic_path);
+        FREE(sonic_path);
 
         /* Create "rest" sub-directory for DATA_DIR */
         sonic_path = path_append(DATA_DIR, "rest/");
-        if (mkdir(sonic_path, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH)
+        if (mkdir(sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
             && (errno != EEXIST)) {
-            lprintf(debug, "CacheSystem_init(): mkdir(): %s\n",
+            lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
                     strerror(errno));
-            exit_failure();
         }
-        free(sonic_path);
+        FREE(sonic_path);
     }
 
     CACHE_SYSTEM_INIT = 1;
@@ -165,10 +147,7 @@ void CacheSystem_init(const char *path, int url_supplied)
 
 /**
  * \brief read a metadata file
- * \return
- *  - -1 on fread error,
- *  - -2 on metadata internal inconsistency
- *  - 0 on success
+ * \return 0 on success, errno on error.
  */
 static int Meta_read(Cache *cf)
 {
@@ -179,8 +158,8 @@ static int Meta_read(Cache *cf)
 
     if (!fp) {
         /* The metadata file does not exist */
-        lprintf(debug, "Meta_read(): fopen(): %s\n", strerror(errno));
-        return EFREAD;
+        lprintf(error, "Meta_read(): fopen(): %s\n", strerror(errno));
+        return EIO;
     }
 
     fread(&cf->time, sizeof(long), 1, fp);
@@ -190,52 +169,57 @@ static int Meta_read(Cache *cf)
 
     /* Error checking for fread */
     if (ferror(fp)) {
-        lprintf(debug,
+        lprintf(error,
                 "Meta_read(): error reading core metadata!\n");
+        return EIO;
     }
 
-    /* These things really should not be zero!!! */
-    if (!cf->content_length || !cf->blksz || !cf->segbc) {
-        lprintf(debug,
-                "Meta_read(): corrupt metadata: %s, content_length: %ld, \
-blksz: %d, segbc: %ld\n", cf->path, cf->content_length, cf->blksz, cf->segbc);
-        return EZERO;
+    if (!cf->blksz) {
+        lprintf(error,
+                "Meta_read(): corrupt metadata: %s, blksz: %d", cf->path,
+                cf->blksz);
+        return EBADMSG;
     }
 
     if (cf->blksz != CONFIG.data_blksz) {
-        lprintf(debug, "Meta_read(): Warning: cf->blksz != CONFIG.data_blksz\n");
+        lprintf(warning,
+            "Meta_read(): Warning: cf->blksz != CONFIG.data_blksz\n");
     }
 
-    /* Allocate some memory for the segment */
     if (cf->segbc > CONFIG.max_segbc) {
-        lprintf(debug, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
-        return EMEM;
-    }
-    cf->seg = CALLOC(cf->segbc, sizeof(Seg));
-
-    /* Read all the segment */
-    nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
-
-    /* We shouldn't have gone past the end of the file */
-    if (feof(fp)) {
-        /* reached EOF */
-        lprintf(debug,
-                "Meta_read(): attempted to read past the end of the file!\n");
-        return EINCONSIST;
+        lprintf(error, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
+        return EFBIG;
     }
 
-    /* Error checking for fread */
-    if (ferror(fp)) {
-        lprintf(debug,
-                "Meta_read(): error reading bitmap!\n");
-        return EFREAD;
-    }
+    if (cf->segbc > 0) {
+        /* Allocate memory for all segments, and read them in */
+        cf->seg = CALLOC(cf->segbc, sizeof(Seg));
+        nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
-    /* Check for inconsistent metadata file */
-    if (nmemb != cf-> segbc) {
-        lprintf(debug,
-                "Meta_read(): corrupted metadata!\n");
-        return EINCONSIST;
+        /* We shouldn't have gone past the end of the file */
+        if (feof(fp)) {
+            /* reached EOF */
+            lprintf(error,
+                    "Meta_read(): attempted to read past the end of the file!\n");
+            return EBADMSG;
+        }
+
+        /* Error checking for fread */
+        if (ferror(fp)) {
+            lprintf(error,
+                    "Meta_read(): error reading bitmap!\n");
+            return EIO;
+        }
+
+        /* Check for inconsistent metadata file */
+        if (nmemb != cf-> segbc) {
+            lprintf(error,
+                    "Meta_read(): corrupted metadata!\n");
+            return EBADMSG;
+        }
+    } else {
+        /* Allocate one single segment for empty file  to prevent segfault */
+        cf->seg = CALLOC(1, sizeof(Seg));
     }
 
     return 0;
@@ -254,13 +238,13 @@ static int Meta_write(Cache *cf)
 
     if (!fp) {
         /* Cannot create the metadata file */
-        lprintf(debug, "Meta_write(): fopen(): %s\n", strerror(errno));
+        lprintf(error, "Meta_write(): fopen(): %s\n", strerror(errno));
         return -1;
     }
 
     /* These things really should not be zero!!! */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
-        lprintf(debug,
+        lprintf(error,
                 "Meta_write(): Warning: content_length: %ld, blksz: %d, segbc: \
 %ld\n", cf->content_length, cf->blksz, cf->segbc);
     }
@@ -269,13 +253,13 @@ static int Meta_write(Cache *cf)
     fwrite(&cf->content_length, sizeof(off_t), 1, fp);
     fwrite(&cf->blksz, sizeof(int), 1, fp);
     fwrite(&cf->segbc, sizeof(long), 1, fp);
-    if (cf->content_length){
+    if (cf->segbc > 0){
         fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
     }
 
     /* Error checking for fwrite */
     if (ferror(fp)) {
-        lprintf(debug,
+        lprintf(error,
                 "Meta_write(): fwrite(): encountered error!\n");
         return -1;
     }
@@ -299,33 +283,35 @@ static int Data_create(Cache *cf)
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     char *datafn = path_append(DATA_DIR, cf->path);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
-    free(datafn);
+    FREE(datafn);
     if (fd == -1) {
-        lprintf(debug, "Data_create(): open(): %s\n", strerror(errno));
+        lprintf(error, "Data_create(): open(): %s\n", strerror(errno));
         return -1;
     }
     if (ftruncate(fd, cf->content_length)) {
-        lprintf(debug, "Data_create(): ftruncate(): %s\n", strerror(errno));
+        lprintf(warning, "Data_create(): ftruncate(): %s\n", strerror(errno));
     }
     if (close(fd)) {
-        lprintf(debug, "Data_create(): close:(): %s\n", strerror(errno));
+        lprintf(error, "Data_create(): close:(): %s\n", strerror(errno));
+        return -1;
     }
     return 0;
 }
 
 /**
  * \brief obtain the data file size
+ * \return file size on success, -1 on error
  */
 static long Data_size(const char *fn)
 {
     char *datafn = path_append(DATA_DIR, fn);
     struct stat st;
     int s = stat(datafn, &st);
-    free(datafn);
+    FREE(datafn);
     if (!s) {
         return st.st_size;
     }
-    lprintf(debug, "Data_size(): stat(): %s\n", strerror(errno));
+    lprintf(error, "Data_size(): stat(): %s\n", strerror(errno));
     return -1;
 }
 
@@ -342,25 +328,25 @@ static long Data_size(const char *fn)
 static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 {
     if (len == 0) {
-        lprintf(debug, "Data_read(): requested to read 0 byte!\n");
+        lprintf(error, "Data_read(): requested to read 0 byte!\n");
         return -EINVAL;
     }
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Data_read(): thread %lu: locking seek_lock;\n",
+    lprintf(cache_lock_debug, "Data_read(): thread %x: locking seek_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
     long byte_read = 0;
 
+    /* Seek to the right location */
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
-        lprintf(debug, "Data_read(): fseeko(): %s\n", strerror(errno));
+        lprintf(error, "Data_read(): fseeko(): %s\n", strerror(errno));
         byte_read = -EIO;
         goto end;
     }
 
+    /* Calculate how much to read */
     if (offset + len > cf->content_length) {
         len -= offset + len - cf->content_length;
         if (len < 0) {
@@ -375,21 +361,19 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
                 len, byte_read);
         if (feof(cf->dfp)) {
             /* reached EOF */
-            lprintf(debug,
+            lprintf(error,
                     "Data_read(): fread(): reached the end of the file!\n");
         }
         if (ferror(cf->dfp)) {
             /* filesystem error */
-            lprintf(debug,
+            lprintf(error,
                 "Data_read(): fread(): encountered error!\n");
         }
     }
 
     end:
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Data_read(): thread %lu: unlocking seek_lock;\n",
+    lprintf(cache_lock_debug, "Data_read(): thread %x: unlocking seek_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
 
     return byte_read;
@@ -405,49 +389,44 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
  *  - -1 when the data file does not exist
  *  - otherwise, the number of bytes written.
  */
-
 static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
                        off_t offset)
 {
     if (len == 0) {
-        lprintf(debug, "Data_write(): requested to write 0 byte!\n");
-        return -EINVAL;
+        /* We should permit empty files */
+        return 0;
     }
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Data_write(): thread %lu: locking seek_lock;\n",
+    lprintf(cache_lock_debug, "Data_write(): thread %x: locking seek_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
     long byte_written = 0;
 
     if (fseeko(cf->dfp, offset, SEEK_SET)) {
         /* fseeko failed */
-        lprintf(debug, "Data_write(): fseeko(): %s\n", strerror(errno));
+        lprintf(error, "Data_write(): fseeko(): %s\n", strerror(errno));
         byte_written = -EIO;
         goto end;
     }
 
     byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
+
     if (byte_written != len) {
-        lprintf(debug,
-                "Data_write(): fwrite(): requested %ld, returned %ld!\n",
+        lprintf(error, "Data_write(): fwrite(): requested %ld, returned %ld!\n",
                 len, byte_written);
-                exit_failure();
-        if (ferror(cf->dfp)) {
-            /* filesystem error */
-            lprintf(debug,
-                "Data_write(): fwrite(): encountered error!\n");
-        }
+    }
+
+    if (ferror(cf->dfp)) {
+        /* filesystem error */
+        lprintf(error, "Data_write(): fwrite(): encountered error!\n");
     }
 
     end:
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Data_write(): thread %lu: unlocking seek_lock;\n",
-            pthread_self());
-    #endif
+    lprintf(cache_lock_debug,
+            "Data_write(): thread %x: unlocking seek_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
+
     return byte_written;
 }
 
@@ -457,17 +436,17 @@ int CacheDir_create(const char *dirn)
     char *datadirn = path_append(DATA_DIR, dirn);
     int i;
 
-    i = -mkdir(metadirn, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+    i = -mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
     if (i && (errno != EEXIST)) {
-        lprintf(debug, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
+        lprintf(error, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
     }
 
-    i |= -mkdir(datadirn, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) << 1;
+    i |= -mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) << 1;
     if (i && (errno != EEXIST)) {
-        lprintf(debug, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
+        lprintf(error, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
     }
-    free(datadirn);
-    free(metadirn);
+    FREE(datadirn);
+    FREE(metadirn);
     return -i;
 }
 
@@ -479,25 +458,25 @@ static Cache *Cache_alloc()
     Cache *cf = CALLOC(1, sizeof(Cache));
 
     if (pthread_mutex_init(&cf->seek_lock, NULL)) {
-        lprintf(debug, "Cache_alloc(): seek_lock initialisation failed!\n");
+        lprintf(error, "Cache_alloc(): seek_lock initialisation failed!\n");
     }
 
     if (pthread_mutex_init(&cf->w_lock, NULL)) {
-        lprintf(debug, "Cache_alloc(): w_lock initialisation failed!\n");
+        lprintf(error, "Cache_alloc(): w_lock initialisation failed!\n");
     }
 
     if (pthread_mutexattr_init(&cf->bgt_lock_attr)) {
-        lprintf(debug,
+        lprintf(error,
                 "Cache_alloc(): bgt_lock_attr initialisation failed!\n");
     }
 
     if (pthread_mutexattr_setpshared(&cf->bgt_lock_attr,
         PTHREAD_PROCESS_SHARED)) {
-        lprintf(debug, "Cache_alloc(): could not set bgt_lock_attr!\n");
+        lprintf(error, "Cache_alloc(): could not set bgt_lock_attr!\n");
     }
 
     if (pthread_mutex_init(&cf->bgt_lock, &cf->bgt_lock_attr)) {
-        lprintf(debug, "Cache_alloc(): bgt_lock initialisation failed!\n");
+        lprintf(error, "Cache_alloc(): bgt_lock initialisation failed!\n");
     }
 
     return cf;
@@ -509,34 +488,34 @@ static Cache *Cache_alloc()
 static void Cache_free(Cache *cf)
 {
     if (pthread_mutex_destroy(&cf->seek_lock)) {
-        lprintf(debug, "Cache_free(): could not destroy seek_lock!\n");
+        lprintf(error, "Cache_free(): could not destroy seek_lock!\n");
     }
 
     if (pthread_mutex_destroy(&cf->w_lock)) {
-        lprintf(debug, "Cache_free(): could not destroy w_lock!\n");
+        lprintf(error, "Cache_free(): could not destroy w_lock!\n");
     }
 
     if (pthread_mutex_destroy(&cf->bgt_lock)) {
-        lprintf(debug, "Cache_free(): could not destroy bgt_lock!\n");
+        lprintf(error, "Cache_free(): could not destroy bgt_lock!\n");
     }
 
     if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
-        lprintf(debug, "Cache_alloc(): could not destroy bgt_lock_attr!\n");
+        lprintf(error, "Cache_alloc(): could not destroy bgt_lock_attr!\n");
     }
 
     if (cf->path) {
-        free(cf->path);
+        FREE(cf->path);
     }
 
     if (cf->seg) {
-        free(cf->seg);
+        FREE(cf->seg);
     }
 
     if (cf->fs_path) {
-        free(cf->fs_path);
+        FREE(cf->fs_path);
     }
 
-    free(cf);
+    FREE(cf);
 }
 
 /**
@@ -553,26 +532,28 @@ static int Cache_exist(const char *fn)
 {
     char *metafn = path_append(META_DIR, fn);
     char *datafn = path_append(DATA_DIR, fn);
+    /* access() returns 0 on success */
     int no_meta = access(metafn, F_OK);
     int no_data = access(datafn, F_OK);
 
     if (no_meta ^ no_data) {
         if (no_meta) {
+            lprintf(warning, "Cache_exist(): Cache file partially missing.\n");
             if(unlink(datafn)) {
-                lprintf(debug, "Cache_exist(): unlink(): %s\n",
+                lprintf(error, "Cache_exist(): unlink(): %s\n",
                         strerror(errno));
             }
         }
         if (no_data) {
             if(unlink(metafn)) {
-                lprintf(debug, "Cache_exist(): unlink(): %s\n",
+                lprintf(error, "Cache_exist(): unlink(): %s\n",
                         strerror(errno));
             }
         }
     }
 
-    free(metafn);
-    free(datafn);
+    FREE(metafn);
+    FREE(datafn);
 
     return no_meta | no_data;
 }
@@ -591,19 +572,19 @@ void Cache_delete(const char *fn)
     char *datafn = path_append(DATA_DIR, fn);
     if (!access(metafn, F_OK)) {
         if(unlink(metafn)) {
-            lprintf(debug, "Cache_delete(): unlink(): %s\n",
+            lprintf(error, "Cache_delete(): unlink(): %s\n",
                     strerror(errno));
         }
     }
 
     if (!access(datafn, F_OK)) {
         if(unlink(datafn)) {
-            lprintf(debug, "Cache_delete(): unlink(): %s\n",
+            lprintf(error, "Cache_delete(): unlink(): %s\n",
                     strerror(errno));
         }
     }
-    free(metafn);
-    free(datafn);
+    FREE(metafn);
+    FREE(datafn);
 }
 
 /**
@@ -616,10 +597,10 @@ static int Data_open(Cache *cf)
 {
     char *datafn = path_append(DATA_DIR, cf->path);
     cf->dfp = fopen(datafn, "r+");
-    free(datafn);
+    FREE(datafn);
     if (!cf->dfp) {
         /* Failed to open the data file */
-        lprintf(debug, "Data_open(): fopen(%s): %s\n", datafn,
+        lprintf(error, "Data_open(): fopen(%s): %s\n", datafn,
                 strerror(errno));
         return -1;
     }
@@ -638,12 +619,12 @@ static int Meta_open(Cache *cf)
     cf->mfp = fopen(metafn, "r+");
     if (!cf->mfp) {
         /* Failed to open the data file */
-        lprintf(debug, "Meta_open(): fopen(%s): %s\n", metafn,
+        lprintf(error, "Meta_open(): fopen(%s): %s\n", metafn,
                 strerror(errno));
-        free(metafn);
+        FREE(metafn);
         return -1;
     }
-    free(metafn);
+    FREE(metafn);
     return 0;
 }
 
@@ -659,12 +640,12 @@ static int Meta_create(Cache *cf)
     cf->mfp = fopen(metafn, "w");
     if (!cf->mfp) {
         /* Failed to open the data file */
-        lprintf(debug, "Meta_create(): fopen(%s): %s\n", metafn,
+        lprintf(error, "Meta_create(): fopen(%s): %s\n", metafn,
                 strerror(errno));
-        free(metafn);
+        FREE(metafn);
         return -1;
     }
-    free(metafn);
+    FREE(metafn);
     return 0;
 }
 
@@ -690,33 +671,32 @@ int Cache_create(const char *path)
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
     if (Meta_create(cf)) {
-        lprintf(debug, "Cache_create(): cannot create metadata.\n");
-        exit_failure();
+        lprintf(error, "Cache_create(): cannot create metadata.\n");
     }
 
     if (fclose(cf->mfp)) {
-        lprintf(debug,
+        lprintf(error,
                 "Cache_create(): cannot close metadata after creation: %s.\n",
                 strerror(errno));
     }
 
     if (Meta_open(cf)) {
         Cache_free(cf);
-        lprintf(debug, "Cache_create(): cannot open metadata file, %s.\n", fn);
+        lprintf(error, "Cache_create(): cannot open metadata file, %s.\n", fn);
     }
 
     if (Meta_write(cf)) {
-        lprintf(debug, "Cache_create(): Meta_write() failed!\n");
+        lprintf(error, "Cache_create(): Meta_write() failed!\n");
     }
 
     if (fclose(cf->mfp)) {
-        lprintf(debug,
+        lprintf(error,
                 "Cache_create(): cannot close metadata after write, %s.\n",
                 strerror(errno));
     }
 
     if (Data_create(cf)) {
-        lprintf(debug, "Cache_create(): Data_create() failed!\n");
+        lprintf(error, "Cache_create(): Data_create() failed!\n");
     }
 
     Cache_free(cf);
@@ -741,26 +721,20 @@ Cache *Cache_open(const char *fn)
 
     /*---------------- Cache_open() critical section -----------------*/
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_open(): thread %lu: locking cf_lock;\n",
+    lprintf(cache_lock_debug, "Cache_open(): thread %x: locking cf_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
     if (link->cache_opened) {
         link->cache_opened++;
-        #ifdef CACHE_LOCK_DEBUG
-        lprintf(debug, "Cache_open(): thread %lu: unlocking cf_lock;\n",
-                pthread_self());
-        #endif
+        lprintf(cache_lock_debug,
+            "Cache_open(): thread %x: unlocking cf_lock;\n", pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return link->cache_ptr;
     }
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_open(): thread %lu: unlocking cf_lock;\n",
+    lprintf(cache_lock_debug, "Cache_open(): thread %x: unlocking cf_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
     /*----------------------------------------------------------------*/
 
@@ -794,18 +768,14 @@ Cache *Cache_open(const char *fn)
 
     if (Meta_open(cf)) {
         Cache_free(cf);
-        lprintf(debug, "Cache_open(): cannot open metadata file %s.\n", fn);
+        lprintf(error, "Cache_open(): cannot open metadata file %s.\n", fn);
         return NULL;
     }
 
-    int rtn = Meta_read(cf);
-
-    /*
-     * Internally inconsistent or corrupt metadata
-     */
-    if ((rtn == EINCONSIST) || (rtn == EMEM)) {
+    /* Corrupt metadata */
+    if (Meta_read(cf)) {
         Cache_free(cf);
-        lprintf(debug, "Cache_open(): metadata error: %s, %d.\n", fn, rtn);
+        lprintf(error, "Cache_open(): metadata error: %s.\n", fn);
         return NULL;
     }
 
@@ -815,7 +785,7 @@ Cache *Cache_open(const char *fn)
      * allocation policy.
      */
     if (cf->content_length > Data_size(fn)) {
-        lprintf(debug, "Cache_open(): metadata inconsistency %s, \
+        lprintf(error, "Cache_open(): metadata inconsistency %s, \
 cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
                 Data_size(fn));
         Cache_free(cf);
@@ -824,14 +794,14 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
 
     /* Check if the cache files are not outdated */
     if (cf->time != cf->link->time) {
-        lprintf(debug, "Cache_open(): outdated cache file: %s.\n", fn);
+        lprintf(warning, "Cache_open(): outdated cache file: %s.\n", fn);
         Cache_free(cf);
         return NULL;
     }
 
     if (Data_open(cf)) {
         Cache_free(cf);
-        lprintf(debug, "Cache_open(): cannot open data file %s.\n", fn);
+        lprintf(error, "Cache_open(): cannot open data file %s.\n", fn);
         return NULL;
     }
 
@@ -846,36 +816,21 @@ void Cache_close(Cache *cf)
 {
     /*--------------- Cache_close() critical section -----------------*/
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_close(): thread %lu: locking cf_lock;\n",
+    lprintf(cache_lock_debug, "Cache_close(): thread %x: locking cf_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
     cf->link->cache_opened--;
 
     if (cf->link->cache_opened > 0) {
-        #ifdef CACHE_LOCK_DEBUG
-        lprintf(debug, "Cache_close(): thread %lu: unlocking cf_lock;\n",
-                pthread_self());
-        #endif
+        lprintf(cache_lock_debug,
+            "Cache_close(): thread %x: unlocking cf_lock;\n", pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return;
     }
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug,
-            "Cache_close(): thread %lu: locking and unlocking bgt_lock;\n",
+    lprintf(cache_lock_debug, "Cache_close(): thread %x: unlocking cf_lock;\n",
             pthread_self());
-    #endif
-    PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
-    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
-
-
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_close(): thread %lu: unlocking cf_lock;\n",
-            pthread_self());
-    #endif
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
 
     /*----------------------------------------------------------------*/
@@ -930,12 +885,12 @@ static void *Cache_bgdl(void *arg)
 {
     Cache *cf = (Cache *) arg;
     #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_bgdl(): thread %lu: locking w_lock;\n",
+    lprintf(debug, "Cache_bgdl(): thread %x: locking w_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "Cache_bgdl(): thread %lu: ", pthread_self());
+    lprintf(debug, "Cache_bgdl(): thread %x: ", pthread_self());
     long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                               cf->next_dl_offset);
     if (recv < 0) {
@@ -953,14 +908,14 @@ which does't make sense\n", recv);
         lprintf(debug,
                 "Cache_bgdl(): received %ld, possible network error.\n", recv);
     }
-    free(recv_buf);
+    FREE(recv_buf);
     #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_bgdl(): thread %lu: unlocking bgt_lock;\n",
+    lprintf(debug, "Cache_bgdl(): thread %x: unlocking bgt_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
     #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_bgdl(): thread %lu: unlocking w_lock;\n",
+    lprintf(debug, "Cache_bgdl(): thread %x: unlocking w_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -992,7 +947,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
              * download thread. Send it off and unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
             #ifdef CACHE_LOCK_DEBUG
-            lprintf(debug, "Cache_read(): thread %lu: unlocking w_lock;\n",
+            lprintf(debug, "Cache_read(): thread %x: unlocking w_lock;\n",
                     pthread_self());
             #endif
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1003,7 +958,7 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     /* ------------------------Download the segment -------------------------*/
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "Cache_read(): thread %lu: ", pthread_self());
+    lprintf(debug, "Cache_read(): thread %x: ", pthread_self());
     long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                                 dl_offset);
     if (recv < 0) {
@@ -1026,11 +981,11 @@ which does't make sense\n", recv);
         lprintf(debug,
                 "Cache_read(): received %ld, possible network error.\n", recv);
     }
-    free(recv_buf);
+    FREE(recv_buf);
     send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
 
     #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_read(): thread %lu: unlocking w_lock;\n",
+    lprintf(debug, "Cache_read(): thread %x: unlocking w_lock;\n",
             pthread_self());
     #endif
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1045,7 +1000,7 @@ which does't make sense\n", recv);
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
             #ifdef CACHE_LOCK_DEBUG
-            lprintf(debug, "Cache_read(): thread %lu: trylocked bgt_lock;\n",
+            lprintf(debug, "Cache_read(): thread %x: trylocked bgt_lock;\n",
                     pthread_self());
             #endif
             cf->next_dl_offset = next_dl_offset;
