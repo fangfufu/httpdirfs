@@ -11,11 +11,15 @@
 #include <string.h>
 #include <unistd.h>
 
-/* ---------------- External variables -----------------------*/
+/*
+ * ---------------- External variables -----------------------
+ */
 int CACHE_SYSTEM_INIT = 0;
 char *META_DIR;
 
-/* ----------------- Static variables ----------------------- */
+/*
+ * ----------------- Static variables -----------------------
+ */
 
 /**
  * \brief Cache file locking
@@ -33,189 +37,214 @@ static char *DATA_DIR;
  */
 static char *CacheSystem_calc_dir(const char *url)
 {
-    char *xdg_cache_home = getenv("XDG_CACHE_HOME");
-    if (!xdg_cache_home) {
-        char *home = getenv("HOME");
-        char *xdg_cache_home_default = "/.cache";
-        xdg_cache_home = path_append(home, xdg_cache_home_default);
-    }
-    if (mkdir(xdg_cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
-                strerror(errno));
-        }
-    char *cache_dir_root = path_append(xdg_cache_home, "/httpdirfs/");
-    if (mkdir(cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
-                strerror(errno));
-        }
+	char *xdg_cache_home = getenv("XDG_CACHE_HOME");
+	if (!xdg_cache_home) {
+		char *home = getenv("HOME");
+		char *xdg_cache_home_default = "/.cache";
+		xdg_cache_home = path_append(home, xdg_cache_home_default);
+	}
+	if (mkdir
+	    (xdg_cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+	    && (errno != EEXIST)) {
+		lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
+			strerror(errno));
+	}
+	char *cache_dir_root = path_append(xdg_cache_home, "/httpdirfs/");
+	if (mkdir
+	    (cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+	    && (errno != EEXIST)) {
+		lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
+			strerror(errno));
+	}
 
-    char *fn = path_append(cache_dir_root, "/CACHEDIR.TAG");
-    FILE *fp = fopen(fn, "w");
-    if (fp) {
-        fprintf(fp,
-"Signature: 8a477f597d28d172789f06886806bc55\n\
+	char *fn = path_append(cache_dir_root, "/CACHEDIR.TAG");
+	FILE *fp = fopen(fn, "w");
+	if (fp) {
+		fprintf(fp, "Signature: 8a477f597d28d172789f06886806bc55\n\
 # This file is a cache directory tag created by httpdirfs.\n\
 # For information about cache directory tags, see:\n\
 #	http://www.brynosaurus.com/cachedir/\n");
-    } else {
-        lprintf(fatal, "CacheSystem_calc_dir(): fopen(%s): %s", fn,
-                strerror(errno));
-    }
-    if (ferror(fp)) {
-        lprintf(fatal,
-                "CacheSystem_calc_dir(): fwrite(): encountered error!\n");
-    }
-    if (fclose(fp)) {
-        lprintf(fatal, "CacheSystem_calc_dir(): fclose(%s): %s\n", fn,
-                strerror(errno));
-    }
-    CURL* c = curl_easy_init();
-    char *escaped_url = curl_easy_escape(c, url, 0);
-    char *full_path = path_append(cache_dir_root, escaped_url);
-    if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
-                strerror(errno));
-        }
-    FREE(fn);
-    FREE(cache_dir_root);
-    curl_free(escaped_url);
-    curl_easy_cleanup(c);
-    return full_path;
+	} else {
+		lprintf(fatal, "CacheSystem_calc_dir(): fopen(%s): %s", fn,
+			strerror(errno));
+	}
+	if (ferror(fp)) {
+		lprintf(fatal,
+			"CacheSystem_calc_dir(): fwrite(): encountered error!\n");
+	}
+	if (fclose(fp)) {
+		lprintf(fatal, "CacheSystem_calc_dir(): fclose(%s): %s\n", fn,
+			strerror(errno));
+	}
+	CURL *c = curl_easy_init();
+	char *escaped_url = curl_easy_escape(c, url, 0);
+	char *full_path = path_append(cache_dir_root, escaped_url);
+	if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+	    && (errno != EEXIST)) {
+		lprintf(fatal, "CacheSystem_calc_dir(): mkdir(): %s\n",
+			strerror(errno));
+	}
+	FREE(fn);
+	FREE(cache_dir_root);
+	curl_free(escaped_url);
+	curl_easy_cleanup(c);
+	return full_path;
 }
 
 void CacheSystem_init(const char *path, int url_supplied)
 {
-    if (pthread_mutex_init(&cf_lock, NULL) != 0) {
-        lprintf(fatal,
-                "CacheSystem_init(): cf_lock initialisation failed!\n");
-    }
+	if (pthread_mutex_init(&cf_lock, NULL)) {
+		lprintf(fatal,
+			"CacheSystem_init(): cf_lock initialisation failed!\n");
+	}
 
-    if (url_supplied) {
-        path = CacheSystem_calc_dir(path);
-    }
+	if (url_supplied) {
+		path = CacheSystem_calc_dir(path);
+	}
 
-    lprintf(debug, "CacheSystem_init(): directory: %s\n", path);
+	lprintf(debug, "CacheSystem_init(): directory: %s\n", path);
 
-    META_DIR = path_append(path, "meta/");
-    DATA_DIR = path_append(path, "data/");
-    /* Check if directories exist, if not, create them */
-    if (mkdir(META_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
-                    strerror(errno));
-    }
+	META_DIR = path_append(path, "meta/");
+	DATA_DIR = path_append(path, "data/");
+	/*
+	 * Check if directories exist, if not, create them
+	 */
+	if (mkdir(META_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+	    && (errno != EEXIST)) {
+		lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
+			strerror(errno));
+	}
 
-    if (mkdir(DATA_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
-                strerror(errno));
-    }
+	if (mkdir(DATA_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+	    && (errno != EEXIST)) {
+		lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
+			strerror(errno));
+	}
 
-    if (CONFIG.mode == SONIC) {
-        char *sonic_path;
-        /* Create "rest" sub-directory for META_DIR */
-        sonic_path = path_append(META_DIR, "rest/");
-        if (mkdir(sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
-            lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
-                    strerror(errno));
-        }
-        FREE(sonic_path);
+	if (CONFIG.mode == SONIC) {
+		char *sonic_path;
+		/*
+		 * Create "rest" sub-directory for META_DIR
+		 */
+		sonic_path = path_append(META_DIR, "rest/");
+		if (mkdir
+		    (sonic_path,
+		     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+		    && (errno != EEXIST)) {
+			lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
+				strerror(errno));
+		}
+		FREE(sonic_path);
 
-        /* Create "rest" sub-directory for DATA_DIR */
-        sonic_path = path_append(DATA_DIR, "rest/");
-        if (mkdir(sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
-            lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
-                    strerror(errno));
-        }
-        FREE(sonic_path);
-    }
+		/*
+		 * Create "rest" sub-directory for DATA_DIR
+		 */
+		sonic_path = path_append(DATA_DIR, "rest/");
+		if (mkdir
+		    (sonic_path,
+		     S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+		    && (errno != EEXIST)) {
+			lprintf(fatal, "CacheSystem_init(): mkdir(): %s\n",
+				strerror(errno));
+		}
+		FREE(sonic_path);
+	}
 
-    CACHE_SYSTEM_INIT = 1;
+	CACHE_SYSTEM_INIT = 1;
 }
 
 /**
  * \brief read a metadata file
  * \return 0 on success, errno on error.
  */
-static int Meta_read(Cache *cf)
+static int Meta_read(Cache * cf)
 {
-    FILE *fp = cf->mfp;
-    rewind(fp);
+	FILE *fp = cf->mfp;
+	rewind(fp);
 
-    int nmemb = 0;
+	int nmemb = 0;
 
-    if (!fp) {
-        /* The metadata file does not exist */
-        lprintf(error, "Meta_read(): fopen(): %s\n", strerror(errno));
-        return EIO;
-    }
+	if (!fp) {
+		/*
+		 * The metadata file does not exist
+		 */
+		lprintf(error, "Meta_read(): fopen(): %s\n", strerror(errno));
+		return EIO;
+	}
 
-    fread(&cf->time, sizeof(long), 1, fp);
-    fread(&cf->content_length, sizeof(off_t), 1, fp);
-    fread(&cf->blksz, sizeof(int), 1, fp);
-    fread(&cf->segbc, sizeof(long), 1, fp);
+	fread(&cf->time, sizeof(long), 1, fp);
+	fread(&cf->content_length, sizeof(off_t), 1, fp);
+	fread(&cf->blksz, sizeof(int), 1, fp);
+	fread(&cf->segbc, sizeof(long), 1, fp);
 
-    /* Error checking for fread */
-    if (ferror(fp)) {
-        lprintf(error,
-                "Meta_read(): error reading core metadata!\n");
-        return EIO;
-    }
+	/*
+	 * Error checking for fread
+	 */
+	if (ferror(fp)) {
+		lprintf(error, "Meta_read(): error reading core metadata!\n");
+		return EIO;
+	}
 
-    if (!cf->blksz) {
-        lprintf(error,
-                "Meta_read(): corrupt metadata: %s, blksz: %d", cf->path,
-                cf->blksz);
-        return EBADMSG;
-    }
+	if (!cf->blksz) {
+		lprintf(error,
+			"Meta_read(): corrupt metadata: %s, blksz: %d",
+			cf->path, cf->blksz);
+		return EBADMSG;
+	}
 
-    if (cf->blksz != CONFIG.data_blksz) {
-        lprintf(warning,
-            "Meta_read(): Warning: cf->blksz != CONFIG.data_blksz\n");
-    }
+	if (cf->blksz != CONFIG.data_blksz) {
+		lprintf(warning,
+			"Meta_read(): Warning: cf->blksz != CONFIG.data_blksz\n");
+	}
 
-    if (cf->segbc > CONFIG.max_segbc) {
-        lprintf(error, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
-        return EFBIG;
-    }
+	if (cf->segbc > CONFIG.max_segbc) {
+		lprintf(error, "Meta_read(): Error: segbc: %ld\n", cf->segbc);
+		return EFBIG;
+	}
 
-    if (cf->segbc > 0) {
-        /* Allocate memory for all segments, and read them in */
-        cf->seg = CALLOC(cf->segbc, sizeof(Seg));
-        nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
+	if (cf->segbc > 0) {
+		/*
+		 * Allocate memory for all segments, and read them in
+		 */
+		cf->seg = CALLOC(cf->segbc, sizeof(Seg));
+		nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
-        /* We shouldn't have gone past the end of the file */
-        if (feof(fp)) {
-            /* reached EOF */
-            lprintf(error,
-                    "Meta_read(): attempted to read past the end of the file!\n");
-            return EBADMSG;
-        }
+		/*
+		 * We shouldn't have gone past the end of the file
+		 */
+		if (feof(fp)) {
+			/*
+			 * reached EOF
+			 */
+			lprintf(error,
+				"Meta_read(): attempted to read past the end of the \
+file!\n");
+			return EBADMSG;
+		}
 
-        /* Error checking for fread */
-        if (ferror(fp)) {
-            lprintf(error,
-                    "Meta_read(): error reading bitmap!\n");
-            return EIO;
-        }
+		/*
+		 * Error checking for fread
+		 */
+		if (ferror(fp)) {
+			lprintf(error, "Meta_read(): error reading bitmap!\n");
+			return EIO;
+		}
 
-        /* Check for inconsistent metadata file */
-        if (nmemb != cf-> segbc) {
-            lprintf(error,
-                    "Meta_read(): corrupted metadata!\n");
-            return EBADMSG;
-        }
-    } else {
-        /* Allocate one single segment for empty file  to prevent segfault */
-        cf->seg = CALLOC(1, sizeof(Seg));
-    }
+		/*
+		 * Check for inconsistent metadata file
+		 */
+		if (nmemb != cf->segbc) {
+			lprintf(error, "Meta_read(): corrupted metadata!\n");
+			return EBADMSG;
+		}
+	} else {
+		/*
+		 * Allocate one single segment for empty file to prevent segfault
+		 */
+		cf->seg = CALLOC(1, sizeof(Seg));
+	}
 
-    return 0;
+	return 0;
 }
 
 /**
@@ -224,40 +253,46 @@ static int Meta_read(Cache *cf)
  *  - -1 on error,
  *  - 0 on success
  */
-static int Meta_write(Cache *cf)
+static int Meta_write(Cache * cf)
 {
-    FILE *fp = cf->mfp;
-    rewind(fp);
+	FILE *fp = cf->mfp;
+	rewind(fp);
 
-    if (!fp) {
-        /* Cannot create the metadata file */
-        lprintf(error, "Meta_write(): fopen(): %s\n", strerror(errno));
-        return -1;
-    }
+	if (!fp) {
+		/*
+		 * Cannot create the metadata file
+		 */
+		lprintf(error, "Meta_write(): fopen(): %s\n", strerror(errno));
+		return -1;
+	}
 
-    /* These things really should not be zero!!! */
-    if (!cf->content_length || !cf->blksz || !cf->segbc) {
-        lprintf(error,
-                "Meta_write(): Warning: content_length: %ld, blksz: %d, segbc: \
-%ld\n", cf->content_length, cf->blksz, cf->segbc);
-    }
+	/*
+	 * These things really should not be zero!!!
+	 */
+	if (!cf->content_length || !cf->blksz || !cf->segbc) {
+		lprintf(error,
+			"Meta_write(): Warning: content_length: %ld, blksz: %d, segbc: \
+%ld\n", cf->content_length, cf->blksz,
+			cf->segbc);
+	}
 
-    fwrite(&cf->time, sizeof(long), 1, fp);
-    fwrite(&cf->content_length, sizeof(off_t), 1, fp);
-    fwrite(&cf->blksz, sizeof(int), 1, fp);
-    fwrite(&cf->segbc, sizeof(long), 1, fp);
-    if (cf->segbc > 0){
-        fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
-    }
+	fwrite(&cf->time, sizeof(long), 1, fp);
+	fwrite(&cf->content_length, sizeof(off_t), 1, fp);
+	fwrite(&cf->blksz, sizeof(int), 1, fp);
+	fwrite(&cf->segbc, sizeof(long), 1, fp);
+	if (cf->segbc > 0) {
+		fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
+	}
 
-    /* Error checking for fwrite */
-    if (ferror(fp)) {
-        lprintf(error,
-                "Meta_write(): fwrite(): encountered error!\n");
-        return -1;
-    }
+	/*
+	 * Error checking for fwrite
+	 */
+	if (ferror(fp)) {
+		lprintf(error, "Meta_write(): fwrite(): encountered error!\n");
+		return -1;
+	}
 
-    return 0;
+	return 0;
 }
 
 /**
@@ -265,24 +300,26 @@ static int Meta_write(Cache *cf)
  * \details We use sparse creation here
  * \return exit on failure
  */
-static void Data_create(Cache *cf)
+static void Data_create(Cache * cf)
 {
-    int fd;
-    int mode;
+	int fd;
+	int mode;
 
-    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    char *datafn = path_append(DATA_DIR, cf->path);
-    fd = open(datafn, O_WRONLY | O_CREAT, mode);
-    FREE(datafn);
-    if (fd == -1) {
-        lprintf(fatal, "Data_create(): open(): %s\n", strerror(errno));
-    }
-    if (ftruncate(fd, cf->content_length)) {
-        lprintf(warning, "Data_create(): ftruncate(): %s\n", strerror(errno));
-    }
-    if (close(fd)) {
-        lprintf(fatal, "Data_create(): close:(): %s\n", strerror(errno));
-    }
+	mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
+	char *datafn = path_append(DATA_DIR, cf->path);
+	fd = open(datafn, O_WRONLY | O_CREAT, mode);
+	FREE(datafn);
+	if (fd == -1) {
+		lprintf(fatal, "Data_create(): open(): %s\n", strerror(errno));
+	}
+	if (ftruncate(fd, cf->content_length)) {
+		lprintf(warning, "Data_create(): ftruncate(): %s\n",
+			strerror(errno));
+	}
+	if (close(fd)) {
+		lprintf(fatal, "Data_create(): close:(): %s\n",
+			strerror(errno));
+	}
 }
 
 /**
@@ -291,15 +328,15 @@ static void Data_create(Cache *cf)
  */
 static long Data_size(const char *fn)
 {
-    char *datafn = path_append(DATA_DIR, fn);
-    struct stat st;
-    int s = stat(datafn, &st);
-    FREE(datafn);
-    if (!s) {
-        return st.st_size;
-    }
-    lprintf(error, "Data_size(): stat(): %s\n", strerror(errno));
-    return -1;
+	char *datafn = path_append(DATA_DIR, fn);
+	struct stat st;
+	int s = stat(datafn, &st);
+	FREE(datafn);
+	if (!s) {
+		return st.st_size;
+	}
+	lprintf(error, "Data_size(): stat(): %s\n", strerror(errno));
+	return -1;
 }
 
 /**
@@ -312,58 +349,69 @@ static long Data_size(const char *fn)
  *  - negative values on error,
  *  - otherwise, the number of bytes read.
  */
-static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
+static long Data_read(Cache * cf, uint8_t * buf, off_t len, off_t offset)
 {
-    if (len == 0) {
-        lprintf(error, "Data_read(): requested to read 0 byte!\n");
-        return -EINVAL;
-    }
+	if (len == 0) {
+		lprintf(error, "Data_read(): requested to read 0 byte!\n");
+		return -EINVAL;
+	}
 
-    lprintf(cache_lock_debug, "Data_read(): thread %x: locking seek_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf->seek_lock);
+	lprintf(cache_lock_debug,
+		"Data_read(): thread %x: locking seek_lock;\n", pthread_self());
+	PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
-    long byte_read = 0;
+	long byte_read = 0;
 
-    /* Seek to the right location */
-    if (fseeko(cf->dfp, offset, SEEK_SET)) {
-        /* fseeko failed */
-        lprintf(error, "Data_read(): fseeko(): %s\n", strerror(errno));
-        byte_read = -EIO;
-        goto end;
-    }
+	/*
+	 * Seek to the right location
+	 */
+	if (fseeko(cf->dfp, offset, SEEK_SET)) {
+		/*
+		 * fseeko failed
+		 */
+		lprintf(error, "Data_read(): fseeko(): %s\n", strerror(errno));
+		byte_read = -EIO;
+		goto end;
+	}
 
-    /* Calculate how much to read */
-    if (offset + len > cf->content_length) {
-        len -= offset + len - cf->content_length;
-        if (len < 0) {
-            goto end;
-        }
-    }
+	/*
+	 * Calculate how much to read
+	 */
+	if (offset + len > cf->content_length) {
+		len -= offset + len - cf->content_length;
+		if (len < 0) {
+			goto end;
+		}
+	}
 
-    byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
-    if (byte_read != len) {
-        lprintf(debug,
-                "Data_read(): fread(): requested %ld, returned %ld!\n",
-                len, byte_read);
-        if (feof(cf->dfp)) {
-            /* reached EOF */
-            lprintf(error,
-                    "Data_read(): fread(): reached the end of the file!\n");
-        }
-        if (ferror(cf->dfp)) {
-            /* filesystem error */
-            lprintf(error,
-                "Data_read(): fread(): encountered error!\n");
-        }
-    }
+	byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
+	if (byte_read != len) {
+		lprintf(debug,
+			"Data_read(): fread(): requested %ld, returned %ld!\n",
+			len, byte_read);
+		if (feof(cf->dfp)) {
+			/*
+			 * reached EOF
+			 */
+			lprintf(error,
+				"Data_read(): fread(): reached the end of the file!\n");
+		}
+		if (ferror(cf->dfp)) {
+			/*
+			 * filesystem error
+			 */
+			lprintf(error,
+				"Data_read(): fread(): encountered error!\n");
+		}
+	}
 
-    end:
-    lprintf(cache_lock_debug, "Data_read(): thread %x: unlocking seek_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
+ end:
+	lprintf(cache_lock_debug,
+		"Data_read(): thread %x: unlocking seek_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
 
-    return byte_read;
+	return byte_read;
 }
 
 /**
@@ -376,65 +424,76 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
  *  - -1 when the data file does not exist
  *  - otherwise, the number of bytes written.
  */
-static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
-                       off_t offset)
+static long Data_write(Cache * cf, const uint8_t * buf, off_t len, off_t offset)
 {
-    if (len == 0) {
-        /* We should permit empty files */
-        return 0;
-    }
+	if (len == 0) {
+		/*
+		 * We should permit empty files
+		 */
+		return 0;
+	}
 
-    lprintf(cache_lock_debug, "Data_write(): thread %x: locking seek_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf->seek_lock);
+	lprintf(cache_lock_debug,
+		"Data_write(): thread %x: locking seek_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
-    long byte_written = 0;
+	long byte_written = 0;
 
-    if (fseeko(cf->dfp, offset, SEEK_SET)) {
-        /* fseeko failed */
-        lprintf(error, "Data_write(): fseeko(): %s\n", strerror(errno));
-        byte_written = -EIO;
-        goto end;
-    }
+	if (fseeko(cf->dfp, offset, SEEK_SET)) {
+		/*
+		 * fseeko failed
+		 */
+		lprintf(error, "Data_write(): fseeko(): %s\n", strerror(errno));
+		byte_written = -EIO;
+		goto end;
+	}
 
-    byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
+	byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
 
-    if (byte_written != len) {
-        lprintf(error, "Data_write(): fwrite(): requested %ld, returned %ld!\n",
-                len, byte_written);
-    }
+	if (byte_written != len) {
+		lprintf(error,
+			"Data_write(): fwrite(): requested %ld, returned %ld!\n",
+			len, byte_written);
+	}
 
-    if (ferror(cf->dfp)) {
-        /* filesystem error */
-        lprintf(error, "Data_write(): fwrite(): encountered error!\n");
-    }
+	if (ferror(cf->dfp)) {
+		/*
+		 * filesystem error
+		 */
+		lprintf(error, "Data_write(): fwrite(): encountered error!\n");
+	}
 
-    end:
-    lprintf(cache_lock_debug,
-            "Data_write(): thread %x: unlocking seek_lock;\n", pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
+ end:
+	lprintf(cache_lock_debug,
+		"Data_write(): thread %x: unlocking seek_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
 
-    return byte_written;
+	return byte_written;
 }
 
 int CacheDir_create(const char *dirn)
 {
-    char *metadirn = path_append(META_DIR, dirn);
-    char *datadirn = path_append(DATA_DIR, dirn);
-    int i;
+	char *metadirn = path_append(META_DIR, dirn);
+	char *datadirn = path_append(DATA_DIR, dirn);
+	int i;
 
-    i = -mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    if (i && (errno != EEXIST)) {
-        lprintf(fatal, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
-    }
+	i = -mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+	if (i && (errno != EEXIST)) {
+		lprintf(fatal, "CacheDir_create(): mkdir(): %s\n",
+			strerror(errno));
+	}
 
-    i |= -mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) << 1;
-    if (i && (errno != EEXIST)) {
-        lprintf(fatal, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
-    }
-    FREE(datadirn);
-    FREE(metadirn);
-    return -i;
+	i |= -mkdir(datadirn,
+		    S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) << 1;
+	if (i && (errno != EEXIST)) {
+		lprintf(fatal, "CacheDir_create(): mkdir(): %s\n",
+			strerror(errno));
+	}
+	FREE(datadirn);
+	FREE(metadirn);
+	return -i;
 }
 
 /**
@@ -442,67 +501,71 @@ int CacheDir_create(const char *dirn)
  */
 static Cache *Cache_alloc()
 {
-    Cache *cf = CALLOC(1, sizeof(Cache));
+	Cache *cf = CALLOC(1, sizeof(Cache));
 
-    if (pthread_mutex_init(&cf->seek_lock, NULL)) {
-        lprintf(fatal, "Cache_alloc(): seek_lock initialisation failed!\n");
-    }
+	if (pthread_mutex_init(&cf->seek_lock, NULL)) {
+		lprintf(fatal,
+			"Cache_alloc(): seek_lock initialisation failed!\n");
+	}
 
-    if (pthread_mutex_init(&cf->w_lock, NULL)) {
-        lprintf(fatal, "Cache_alloc(): w_lock initialisation failed!\n");
-    }
+	if (pthread_mutex_init(&cf->w_lock, NULL)) {
+		lprintf(fatal,
+			"Cache_alloc(): w_lock initialisation failed!\n");
+	}
 
-    if (pthread_mutexattr_init(&cf->bgt_lock_attr)) {
-        lprintf(fatal,
-                "Cache_alloc(): bgt_lock_attr initialisation failed!\n");
-    }
+	if (pthread_mutexattr_init(&cf->bgt_lock_attr)) {
+		lprintf(fatal,
+			"Cache_alloc(): bgt_lock_attr initialisation failed!\n");
+	}
 
-    if (pthread_mutexattr_setpshared(&cf->bgt_lock_attr,
-        PTHREAD_PROCESS_SHARED)) {
-        lprintf(fatal, "Cache_alloc(): could not set bgt_lock_attr!\n");
-    }
+	if (pthread_mutexattr_setpshared(&cf->bgt_lock_attr,
+					 PTHREAD_PROCESS_SHARED)) {
+		lprintf(fatal, "Cache_alloc(): could not set bgt_lock_attr!\n");
+	}
 
-    if (pthread_mutex_init(&cf->bgt_lock, &cf->bgt_lock_attr)) {
-        lprintf(fatal, "Cache_alloc(): bgt_lock initialisation failed!\n");
-    }
+	if (pthread_mutex_init(&cf->bgt_lock, &cf->bgt_lock_attr)) {
+		lprintf(fatal,
+			"Cache_alloc(): bgt_lock initialisation failed!\n");
+	}
 
-    return cf;
+	return cf;
 }
 
 /**
  * \brief free a cache data structure
  */
-static void Cache_free(Cache *cf)
+static void Cache_free(Cache * cf)
 {
-    if (pthread_mutex_destroy(&cf->seek_lock)) {
-        lprintf(fatal, "Cache_free(): could not destroy seek_lock!\n");
-    }
+	if (pthread_mutex_destroy(&cf->seek_lock)) {
+		lprintf(fatal, "Cache_free(): could not destroy seek_lock!\n");
+	}
 
-    if (pthread_mutex_destroy(&cf->w_lock)) {
-        lprintf(fatal, "Cache_free(): could not destroy w_lock!\n");
-    }
+	if (pthread_mutex_destroy(&cf->w_lock)) {
+		lprintf(fatal, "Cache_free(): could not destroy w_lock!\n");
+	}
 
-    if (pthread_mutex_destroy(&cf->bgt_lock)) {
-        lprintf(fatal, "Cache_free(): could not destroy bgt_lock!\n");
-    }
+	if (pthread_mutex_destroy(&cf->bgt_lock)) {
+		lprintf(fatal, "Cache_free(): could not destroy bgt_lock!\n");
+	}
 
-    if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
-        lprintf(fatal, "Cache_alloc(): could not destroy bgt_lock_attr!\n");
-    }
+	if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
+		lprintf(fatal,
+			"Cache_alloc(): could not destroy bgt_lock_attr!\n");
+	}
 
-    if (cf->path) {
-        FREE(cf->path);
-    }
+	if (cf->path) {
+		FREE(cf->path);
+	}
 
-    if (cf->seg) {
-        FREE(cf->seg);
-    }
+	if (cf->seg) {
+		FREE(cf->seg);
+	}
 
-    if (cf->fs_path) {
-        FREE(cf->fs_path);
-    }
+	if (cf->fs_path) {
+		FREE(cf->fs_path);
+	}
 
-    FREE(cf);
+	FREE(cf);
 }
 
 /**
@@ -517,32 +580,35 @@ static void Cache_free(Cache *cf)
  */
 static int Cache_exist(const char *fn)
 {
-    char *metafn = path_append(META_DIR, fn);
-    char *datafn = path_append(DATA_DIR, fn);
-    /* access() returns 0 on success */
-    int no_meta = access(metafn, F_OK);
-    int no_data = access(datafn, F_OK);
+	char *metafn = path_append(META_DIR, fn);
+	char *datafn = path_append(DATA_DIR, fn);
+	/*
+	 * access() returns 0 on success
+	 */
+	int no_meta = access(metafn, F_OK);
+	int no_data = access(datafn, F_OK);
 
-    if (no_meta ^ no_data) {
-        if (no_meta) {
-            lprintf(warning, "Cache_exist(): Cache file partially missing.\n");
-            if(unlink(datafn)) {
-                lprintf(error, "Cache_exist(): unlink(): %s\n",
-                        strerror(errno));
-            }
-        }
-        if (no_data) {
-            if(unlink(metafn)) {
-                lprintf(error, "Cache_exist(): unlink(): %s\n",
-                        strerror(errno));
-            }
-        }
-    }
+	if (no_meta ^ no_data) {
+		if (no_meta) {
+			lprintf(warning,
+				"Cache_exist(): Cache file partially missing.\n");
+			if (unlink(datafn)) {
+				lprintf(error, "Cache_exist(): unlink(): %s\n",
+					strerror(errno));
+			}
+		}
+		if (no_data) {
+			if (unlink(metafn)) {
+				lprintf(error, "Cache_exist(): unlink(): %s\n",
+					strerror(errno));
+			}
+		}
+	}
 
-    FREE(metafn);
-    FREE(datafn);
+	FREE(metafn);
+	FREE(datafn);
 
-    return no_meta | no_data;
+	return no_meta | no_data;
 }
 
 /**
@@ -550,28 +616,28 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
-    if (CONFIG.mode == SONIC) {
-        Link *link = path_to_Link(fn);
-        fn = link->sonic_id;
-    }
+	if (CONFIG.mode == SONIC) {
+		Link *link = path_to_Link(fn);
+		fn = link->sonic_id;
+	}
 
-    char *metafn = path_append(META_DIR, fn);
-    char *datafn = path_append(DATA_DIR, fn);
-    if (!access(metafn, F_OK)) {
-        if(unlink(metafn)) {
-            lprintf(error, "Cache_delete(): unlink(): %s\n",
-                    strerror(errno));
-        }
-    }
+	char *metafn = path_append(META_DIR, fn);
+	char *datafn = path_append(DATA_DIR, fn);
+	if (!access(metafn, F_OK)) {
+		if (unlink(metafn)) {
+			lprintf(error, "Cache_delete(): unlink(): %s\n",
+				strerror(errno));
+		}
+	}
 
-    if (!access(datafn, F_OK)) {
-        if(unlink(datafn)) {
-            lprintf(error, "Cache_delete(): unlink(): %s\n",
-                    strerror(errno));
-        }
-    }
-    FREE(metafn);
-    FREE(datafn);
+	if (!access(datafn, F_OK)) {
+		if (unlink(datafn)) {
+			lprintf(error, "Cache_delete(): unlink(): %s\n",
+				strerror(errno));
+		}
+	}
+	FREE(metafn);
+	FREE(datafn);
 }
 
 /**
@@ -580,18 +646,20 @@ void Cache_delete(const char *fn)
  *  -   0 on success
  *  -   -1 on failure, with appropriate errno set.
  */
-static int Data_open(Cache *cf)
+static int Data_open(Cache * cf)
 {
-    char *datafn = path_append(DATA_DIR, cf->path);
-    cf->dfp = fopen(datafn, "r+");
-    FREE(datafn);
-    if (!cf->dfp) {
-        /* Failed to open the data file */
-        lprintf(error, "Data_open(): fopen(%s): %s\n", datafn,
-                strerror(errno));
-        return -1;
-    }
-    return 0;
+	char *datafn = path_append(DATA_DIR, cf->path);
+	cf->dfp = fopen(datafn, "r+");
+	FREE(datafn);
+	if (!cf->dfp) {
+		/*
+		 * Failed to open the data file
+		 */
+		lprintf(error, "Data_open(): fopen(%s): %s\n", datafn,
+			strerror(errno));
+		return -1;
+	}
+	return 0;
 }
 
 /**
@@ -600,237 +668,268 @@ static int Data_open(Cache *cf)
  *  -   0 on success
  *  -   -1 on failure, with appropriate errno set.
  */
-static int Meta_open(Cache *cf)
+static int Meta_open(Cache * cf)
 {
-    char *metafn = path_append(META_DIR, cf->path);
-    cf->mfp = fopen(metafn, "r+");
-    if (!cf->mfp) {
-        /* Failed to open the data file */
-        lprintf(error, "Meta_open(): fopen(%s): %s\n", metafn,
-                strerror(errno));
-        FREE(metafn);
-        return -1;
-    }
-    FREE(metafn);
-    return 0;
+	char *metafn = path_append(META_DIR, cf->path);
+	cf->mfp = fopen(metafn, "r+");
+	if (!cf->mfp) {
+		/*
+		 * Failed to open the data file
+		 */
+		lprintf(error, "Meta_open(): fopen(%s): %s\n", metafn,
+			strerror(errno));
+		FREE(metafn);
+		return -1;
+	}
+	FREE(metafn);
+	return 0;
 }
 
 /**
  * \brief Create a metafile
  * \return exit on error
  */
-static void Meta_create(Cache *cf)
+static void Meta_create(Cache * cf)
 {
-    char *metafn = path_append(META_DIR, cf->path);
-    cf->mfp = fopen(metafn, "w");
-    if (!cf->mfp) {
-        /* Failed to open the data file */
-        lprintf(fatal, "Meta_create(): fopen(%s): %s\n", metafn,
-                strerror(errno));
-    }
-    FREE(metafn);
+	char *metafn = path_append(META_DIR, cf->path);
+	cf->mfp = fopen(metafn, "w");
+	if (!cf->mfp) {
+		/*
+		 * Failed to open the data file
+		 */
+		lprintf(fatal, "Meta_create(): fopen(%s): %s\n", metafn,
+			strerror(errno));
+	}
+	FREE(metafn);
 }
 
 int Cache_create(const char *path)
 {
-    Link *this_link = path_to_Link(path);
+	Link *this_link = path_to_Link(path);
 
-    char *fn = "";
-    if (CONFIG.mode == NORMAL) {
-        fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0,
-                                NULL);
-    } else if (CONFIG.mode == SONIC) {
-        fn = this_link->sonic_id;
-    }
-    lprintf(debug, "Cache_create(): Creating cache files for %s.\n", fn);
+	char *fn = "";
+	if (CONFIG.mode == NORMAL) {
+		fn = curl_easy_unescape(NULL,
+					this_link->f_url + ROOT_LINK_OFFSET, 0,
+					NULL);
+	} else if (CONFIG.mode == SONIC) {
+		fn = this_link->sonic_id;
+	}
+	lprintf(debug, "Cache_create(): Creating cache files for %s.\n", fn);
 
-    Cache *cf = Cache_alloc();
-    cf->path = strndup(fn, MAX_PATH_LEN);
-    cf->time = this_link->time;
-    cf->content_length = this_link->content_length;
-    cf->blksz = CONFIG.data_blksz;
-    cf->segbc = (cf->content_length / cf->blksz) + 1;
-    cf->seg = CALLOC(cf->segbc, sizeof(Seg));
+	Cache *cf = Cache_alloc();
+	cf->path = strndup(fn, MAX_PATH_LEN);
+	cf->time = this_link->time;
+	cf->content_length = this_link->content_length;
+	cf->blksz = CONFIG.data_blksz;
+	cf->segbc = (cf->content_length / cf->blksz) + 1;
+	cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
-    Meta_create(cf);
+	Meta_create(cf);
 
-    if (fclose(cf->mfp)) {
-        lprintf(error,
-                "Cache_create(): cannot close metadata after creation: %s.\n",
-                strerror(errno));
-    }
+	if (fclose(cf->mfp)) {
+		lprintf(error,
+			"Cache_create(): cannot close metadata after creation: %s.\n",
+			strerror(errno));
+	}
 
-    if (Meta_open(cf)) {
-        Cache_free(cf);
-        lprintf(error, "Cache_create(): cannot open metadata file, %s.\n", fn);
-    }
+	if (Meta_open(cf)) {
+		Cache_free(cf);
+		lprintf(error,
+			"Cache_create(): cannot open metadata file, %s.\n", fn);
+	}
 
-    if (Meta_write(cf)) {
-        lprintf(error, "Cache_create(): Meta_write() failed!\n");
-    }
+	if (Meta_write(cf)) {
+		lprintf(error, "Cache_create(): Meta_write() failed!\n");
+	}
 
-    if (fclose(cf->mfp)) {
-        lprintf(error,
-                "Cache_create(): cannot close metadata after write, %s.\n",
-                strerror(errno));
-    }
+	if (fclose(cf->mfp)) {
+		lprintf(error,
+			"Cache_create(): cannot close metadata after write, %s.\n",
+			strerror(errno));
+	}
 
-    Data_create(cf);
+	Data_create(cf);
 
-    Cache_free(cf);
+	Cache_free(cf);
 
-    int res = Cache_exist(fn);
+	int res = Cache_exist(fn);
 
-    if (CONFIG.mode == NORMAL) {
-        curl_free(fn);
-    }
+	if (CONFIG.mode == NORMAL) {
+		curl_free(fn);
+	}
 
-    return res;
+	return res;
 }
 
 Cache *Cache_open(const char *fn)
 {
-    /* Obtain the link structure memory pointer */
-    Link *link = path_to_Link(fn);
-    if (!link) {
-        /* There is no associated link to the path */
-        return NULL;
-    }
+	/*
+	 * Obtain the link structure memory pointer
+	 */
+	Link *link = path_to_Link(fn);
+	if (!link) {
+		/*
+		 * There is no associated link to the path
+		 */
+		return NULL;
+	}
 
-    lprintf(cache_lock_debug, "Cache_open(): thread %x: locking cf_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf_lock);
+	lprintf(cache_lock_debug,
+		"Cache_open(): thread %x: locking cf_lock;\n", pthread_self());
+	PTHREAD_MUTEX_LOCK(&cf_lock);
 
-    if (link->cache_opened) {
-        link->cache_opened++;
-        lprintf(cache_lock_debug,
-            "Cache_open(): thread %x: unlocking cf_lock;\n", pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return link->cache_ptr;
-    }
+	if (link->cache_opened) {
+		link->cache_opened++;
+		lprintf(cache_lock_debug,
+			"Cache_open(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
+		return link->cache_ptr;
+	}
 
-    /* Check if both metadata and data file exist */
-    if (CONFIG.mode == NORMAL) {
-        if (Cache_exist(fn)) {
-            return NULL;
-        }
-    } else if (CONFIG.mode == SONIC) {
-        if (Cache_exist(link->sonic_id)) {
-            return NULL;
-        }
-    }
+	/*
+	 * Check if both metadata and data file exist
+	 */
+	if (CONFIG.mode == NORMAL) {
+		if (Cache_exist(fn)) {
+			return NULL;
+		}
+	} else if (CONFIG.mode == SONIC) {
+		if (Cache_exist(link->sonic_id)) {
+			return NULL;
+		}
+	}
 
-    /* Create the cache in-memory data structure */
-    Cache *cf = Cache_alloc();
+	/*
+	 * Create the cache in-memory data structure
+	 */
+	Cache *cf = Cache_alloc();
 
-    /* Fill in the fs_path */
-    cf->fs_path = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    strncpy(cf->fs_path, fn, MAX_PATH_LEN);
+	/*
+	 * Fill in the fs_path
+	 */
+	cf->fs_path = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
+	strncpy(cf->fs_path, fn, MAX_PATH_LEN);
 
-    /* Set the path for the local cache file, if we are in sonic mode */
-    if (CONFIG.mode == SONIC) {
-        fn = link->sonic_id;
-    }
+	/*
+	 * Set the path for the local cache file, if we are in sonic mode
+	 */
+	if (CONFIG.mode == SONIC) {
+		fn = link->sonic_id;
+	}
 
-    cf->path = strndup(fn, MAX_PATH_LEN);
+	cf->path = strndup(fn, MAX_PATH_LEN);
 
-    /* Associate the cache structure with a link */
-    cf->link = link;
+	/*
+	 * Associate the cache structure with a link
+	 */
+	cf->link = link;
 
-    if (Meta_open(cf)) {
-        Cache_free(cf);
-        lprintf(error, "Cache_open(): cannot open metadata file %s.\n", fn);
-        return NULL;
-    }
+	if (Meta_open(cf)) {
+		Cache_free(cf);
+		lprintf(error, "Cache_open(): cannot open metadata file %s.\n",
+			fn);
+		return NULL;
+	}
 
-    /* Corrupt metadata */
-    if (Meta_read(cf)) {
-        Cache_free(cf);
-        lprintf(error, "Cache_open(): metadata error: %s.\n", fn);
-        return NULL;
-    }
+	/*
+	 * Corrupt metadata
+	 */
+	if (Meta_read(cf)) {
+		Cache_free(cf);
+		lprintf(error, "Cache_open(): metadata error: %s.\n", fn);
+		return NULL;
+	}
 
-    /*
-     * Inconsistency between metadata and data file, note that on disk file
-     * size might be bigger than content_length, due to on-disk filesystem
-     * allocation policy.
-     */
-    if (cf->content_length > Data_size(fn)) {
-        lprintf(error, "Cache_open(): metadata inconsistency %s, \
-cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
-                Data_size(fn));
-        Cache_free(cf);
-        return NULL;
-    }
+	/*
+	 * Inconsistency between metadata and data file, note that on disk file
+	 * size might be bigger than content_length, due to on-disk filesystem
+	 * allocation policy.
+	 */
+	if (cf->content_length > Data_size(fn)) {
+		lprintf(error, "Cache_open(): metadata inconsistency %s, \
+cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_size(fn));
+		Cache_free(cf);
+		return NULL;
+	}
 
-    /* Check if the cache files are not outdated */
-    if (cf->time != cf->link->time) {
-        lprintf(warning, "Cache_open(): outdated cache file: %s.\n", fn);
-        Cache_free(cf);
-        return NULL;
-    }
+	/*
+	 * Check if the cache files are not outdated
+	 */
+	if (cf->time != cf->link->time) {
+		lprintf(warning, "Cache_open(): outdated cache file: %s.\n",
+			fn);
+		Cache_free(cf);
+		return NULL;
+	}
 
-    if (Data_open(cf)) {
-        Cache_free(cf);
-        lprintf(error, "Cache_open(): cannot open data file %s.\n", fn);
-        return NULL;
-    }
+	if (Data_open(cf)) {
+		Cache_free(cf);
+		lprintf(error, "Cache_open(): cannot open data file %s.\n", fn);
+		return NULL;
+	}
 
-    cf->link->cache_opened = 1;
-    /* Yup, we just created a circular loop. ;) */
-    cf->link->cache_ptr = cf;
+	cf->link->cache_opened = 1;
+	/*
+	 * Yup, we just created a circular loop. ;)
+	 */
+	cf->link->cache_ptr = cf;
 
-    lprintf(cache_lock_debug, "Cache_open(): thread %x: unlocking cf_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf_lock);
+	lprintf(cache_lock_debug,
+		"Cache_open(): thread %x: unlocking cf_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf_lock);
 
-    return cf;
+	return cf;
 }
 
-void Cache_close(Cache *cf)
+void Cache_close(Cache * cf)
 {
-    lprintf(cache_lock_debug, "Cache_close(): thread %x: locking cf_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf_lock);
+	lprintf(cache_lock_debug,
+		"Cache_close(): thread %x: locking cf_lock;\n", pthread_self());
+	PTHREAD_MUTEX_LOCK(&cf_lock);
 
-    cf->link->cache_opened--;
+	cf->link->cache_opened--;
 
-    if (cf->link->cache_opened > 0) {
-        lprintf(cache_lock_debug,
-            "Cache_close(): thread %x: unlocking cf_lock;\n", pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return;
-    }
+	if (cf->link->cache_opened > 0) {
+		lprintf(cache_lock_debug,
+			"Cache_close(): thread %x: unlocking cf_lock;\n",
+			pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
+		return;
+	}
 
-    if (Meta_write(cf)) {
-        lprintf(error, "Cache_close(): Meta_write() error.");
-    }
+	if (Meta_write(cf)) {
+		lprintf(error, "Cache_close(): Meta_write() error.");
+	}
 
-    if (fclose(cf->mfp)) {
-        lprintf(error, "Cache_close(): cannot close metadata: %s.\n",
-                strerror(errno));
-    }
+	if (fclose(cf->mfp)) {
+		lprintf(error, "Cache_close(): cannot close metadata: %s.\n",
+			strerror(errno));
+	}
 
-    if (fclose(cf->dfp)) {
-        lprintf(error, "Cache_close(): cannot close data file %s.\n",
-                strerror(errno));
-    }
+	if (fclose(cf->dfp)) {
+		lprintf(error, "Cache_close(): cannot close data file %s.\n",
+			strerror(errno));
+	}
 
-    lprintf(cache_lock_debug, "Cache_close(): thread %x: unlocking cf_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf_lock);
+	lprintf(cache_lock_debug,
+		"Cache_close(): thread %x: unlocking cf_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf_lock);
 
-    return Cache_free(cf);
+	return Cache_free(cf);
 }
 
 /**
  * \brief Check if a segment exists.
  * \return 1 if the segment exists
  */
-static int Seg_exist(Cache *cf, off_t offset)
+static int Seg_exist(Cache * cf, off_t offset)
 {
-    off_t byte = offset / cf->blksz;
-    return cf->seg[byte];
+	off_t byte = offset / cf->blksz;
+	return cf->seg[byte];
 }
 
 /**
@@ -840,10 +939,10 @@ static int Seg_exist(Cache *cf, off_t offset)
  * \param[in] i 1 for exist, 0 for doesn't exist
  * \note Call this after downloading a segment.
  */
-static void Seg_set(Cache *cf, off_t offset, int i)
+static void Seg_set(Cache * cf, off_t offset, int i)
 {
-    off_t byte = offset / cf->blksz;
-    cf->seg[byte] = i;
+	off_t byte = offset / cf->blksz;
+	cf->seg[byte] = i;
 }
 
 /**
@@ -854,132 +953,152 @@ static void Seg_set(Cache *cf, off_t offset, int i)
  */
 static void *Cache_bgdl(void *arg)
 {
-    Cache *cf = (Cache *) arg;
+	Cache *cf = (Cache *) arg;
 
-    lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: locking w_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf->w_lock);
+	lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: locking w_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_LOCK(&cf->w_lock);
 
-    uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "Cache_bgdl(): thread %x spawned.\n ", pthread_self());
-    long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
-                              cf->next_dl_offset);
-    if (recv < 0) {
-        lprintf(error, "Cache_bgdl(): thread %x received %ld bytes, \
+	uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
+	lprintf(debug, "Cache_bgdl(): thread %x spawned.\n ", pthread_self());
+	long recv = path_download(cf->fs_path, (char *)recv_buf, cf->blksz,
+				  cf->next_dl_offset);
+	if (recv < 0) {
+		lprintf(error, "Cache_bgdl(): thread %x received %ld bytes, \
 which does't make sense\n", pthread_self(), recv);
-    }
+	}
 
-    if ( (recv == cf->blksz) ||
-        (cf->next_dl_offset == (cf->content_length / cf->blksz * cf->blksz)) )
-    {
-        Data_write(cf, recv_buf, recv, cf->next_dl_offset);
-        Seg_set(cf, cf->next_dl_offset, 1);
-    }  else {
-        lprintf(error,
-                "Cache_bgdl(): received %ld rather than %ld, possible network \
+	if ((recv == cf->blksz) ||
+	    (cf->next_dl_offset ==
+	     (cf->content_length / cf->blksz * cf->blksz))) {
+		Data_write(cf, recv_buf, recv, cf->next_dl_offset);
+		Seg_set(cf, cf->next_dl_offset, 1);
+	} else {
+		lprintf(error,
+			"Cache_bgdl(): received %ld rather than %ld, possible network \
 error.\n", recv, cf->blksz);
-    }
+	}
 
-    FREE(recv_buf);
+	FREE(recv_buf);
 
-    lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: unlocking bgt_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
+	lprintf(cache_lock_debug,
+		"Cache_bgdl(): thread %x: unlocking bgt_lock;\n",
+		pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
 
-    lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: unlocking w_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+	lprintf(cache_lock_debug,
+		"Cache_bgdl(): thread %x: unlocking w_lock;\n", pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-    pthread_detach(pthread_self());
-    pthread_exit(NULL);
+	pthread_detach(pthread_self());
+	pthread_exit(NULL);
 }
 
-long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
-                const off_t offset_start)
+long
+Cache_read(Cache * cf, char *const output_buf, const off_t len,
+	   const off_t offset_start)
 {
-    long send;
+	long send;
 
-    /* The offset of the segment to be downloaded */
-    off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
+	/*
+	 * The offset of the segment to be downloaded
+	 */
+	off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
 
-    /* ------------------ Check if the segment already exists ---------------*/
-    if (Seg_exist(cf, dl_offset)) {
-        send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
-        goto bgdl;
-    } else {
-        /* Wait for any other download thread to finish*/
+	/*
+	 * ------------------ Check if the segment already exists
+	 * ---------------
+	 */
+	if (Seg_exist(cf, dl_offset)) {
+		send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
+		goto bgdl;
+	} else {
+		/*
+		 * Wait for any other download thread to finish
+		 */
 
-        lprintf(cache_lock_debug, "Cache_read(): thread %ld: locking w_lock;\n",
-                pthread_self());
-        PTHREAD_MUTEX_LOCK(&cf->w_lock);
+		lprintf(cache_lock_debug,
+			"Cache_read(): thread %ld: locking w_lock;\n",
+			pthread_self());
+		PTHREAD_MUTEX_LOCK(&cf->w_lock);
 
-        if (Seg_exist(cf, dl_offset)) {
-            /* The segment now exists - it was downloaded by another
-             * download thread. Send it off and unlock the I/O */
-            send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
+		if (Seg_exist(cf, dl_offset)) {
+			/*
+			 * The segment now exists - it was downloaded by another
+			 * download thread. Send it off and unlock the I/O
+			 */
+			send =
+			    Data_read(cf, (uint8_t *) output_buf, len,
+				      offset_start);
 
-            lprintf(cache_lock_debug,
-                    "Cache_read(): thread %x: unlocking w_lock;\n",
-                    pthread_self());
-            PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+			lprintf(cache_lock_debug,
+				"Cache_read(): thread %x: unlocking w_lock;\n",
+				pthread_self());
+			PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-            goto bgdl;
-        }
-    }
+			goto bgdl;
+		}
+	}
 
-    /* ------------------------Download the segment -------------------------*/
+	/*
+	 * ------------------------Download the segment
+	 * -------------------------
+	 */
 
-    uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "Cache_read(): thread %x: spawned.\n ", pthread_self());
-    long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
-                                dl_offset);
-    if (recv < 0) {
-        lprintf(error, "Cache_read(): thread %x received %ld bytes, \
+	uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
+	lprintf(debug, "Cache_read(): thread %x: spawned.\n ", pthread_self());
+	long recv = path_download(cf->fs_path, (char *)recv_buf, cf->blksz,
+				  dl_offset);
+	if (recv < 0) {
+		lprintf(error, "Cache_read(): thread %x received %ld bytes, \
 which does't make sense\n", pthread_self(), recv);
-    }
-    /*
-     * check if we have received enough data, write it to the disk
-     *
-     * Condition 1: received the exact amount as the segment size.
-     * Condition 2: offset is the last segment
-     */
-    if ( (recv == cf->blksz) ||
-        (dl_offset == (cf->content_length / cf->blksz * cf->blksz)) )
-    {
-        Data_write(cf, recv_buf, recv, dl_offset);
-        Seg_set(cf, dl_offset, 1);
-    }  else {
-        lprintf(error,
-                "Cache_read(): received %ld rather than %ld, possible network \
+	}
+	/*
+	 * check if we have received enough data, write it to the disk
+	 *
+	 * Condition 1: received the exact amount as the segment size.
+	 * Condition 2: offset is the last segment
+	 */
+	if ((recv == cf->blksz) ||
+	    (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
+		Data_write(cf, recv_buf, recv, dl_offset);
+		Seg_set(cf, dl_offset, 1);
+	} else {
+		lprintf(error,
+			"Cache_read(): received %ld rather than %ld, possible network \
 error.\n", recv, cf->blksz);
-    }
-    FREE(recv_buf);
-    send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
+	}
+	FREE(recv_buf);
+	send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
 
-    lprintf(cache_lock_debug, "Cache_read(): thread %x: unlocking w_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+	lprintf(cache_lock_debug,
+		"Cache_read(): thread %x: unlocking w_lock;\n", pthread_self());
+	PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-    /* -----------Download the next segment in background -------------------*/
-    bgdl:
-    {}
-    off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
-    if ( (next_dl_offset > dl_offset) &&
-        !Seg_exist(cf, next_dl_offset) &&
-        next_dl_offset < cf->content_length ){
-        /* Stop the spawning of multiple background pthreads */
-        if(!pthread_mutex_trylock(&cf->bgt_lock)) {
-            lprintf(cache_lock_debug,
-                    "Cache_read(): thread %x: trylocked bgt_lock;\n",
-                    pthread_self());
-            cf->next_dl_offset = next_dl_offset;
-            if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
-                lprintf(error,
-                    "Cache_read(): Error creating background download thread\n"
-                );
-            }
-        }
-    }
+	/*
+	 * -----------Download the next segment in background
+	 * -------------------
+	 */
+ bgdl:
+	{
+	}
+	off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
+	if ((next_dl_offset > dl_offset) && !Seg_exist(cf, next_dl_offset)
+	    && next_dl_offset < cf->content_length) {
+		/*
+		 * Stop the spawning of multiple background pthreads
+		 */
+		if (!pthread_mutex_trylock(&cf->bgt_lock)) {
+			lprintf(cache_lock_debug,
+				"Cache_read(): thread %x: trylocked bgt_lock;\n",
+				pthread_self());
+			cf->next_dl_offset = next_dl_offset;
+			if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
+				lprintf(error,
+					"Cache_read(): Error creating background download thread\n");
+			}
+		}
+	}
 
-    return send;
+	return send;
 }

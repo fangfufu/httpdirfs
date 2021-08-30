@@ -41,7 +41,7 @@ typedef struct {
     /** \brief Operation Mode */
     OperationMode mode;
     /** \brief Current log level */
-    int log_level;
+    int log_type;
     /*---------------- Network related --------------*/
     /** \brief HTTP username */
     char *http_username;
