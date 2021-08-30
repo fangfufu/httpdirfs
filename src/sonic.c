@@ -171,7 +171,6 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
         for (int i = 0; attr[i]; i += 2) {
             lprintf(error, "%s: %s\n", attr[i], attr[i+1]);
         }
-        exit_failure();
     }
 
     LinkTable *linktbl = (LinkTable *) data;
@@ -360,7 +359,6 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
         for (int i = 0; attr[i]; i += 2) {
             lprintf(error, "%s: %s\n", attr[i], attr[i+1]);
         }
-        exit_failure();
     }
 
     LinkTable *root_linktbl = (LinkTable *) data;

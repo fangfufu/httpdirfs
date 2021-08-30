@@ -84,7 +84,8 @@ activate Sonic mode.\n");
             exit(EXIT_FAILURE);
         }
         if(!LinkSystem_init(base_url)) {
-            lprintf(fatal, "Network initialisation failed.\n");
+            fprintf(stderr, "Network initialisation failed.\n");
+            exit(EXIT_FAILURE);
         }
     }
 

@@ -98,14 +98,7 @@ void CacheSystem_init(const char *path, int url_supplied)
     }
 
     lprintf(debug, "CacheSystem_init(): directory: %s\n", path);
-    DIR* dir;
 
-    dir = opendir(path);
-    if (!dir) {
-        lprintf(fatal,
-                "CacheSystem_init(): opendir(): %s\n", strerror(errno));
-    }
-    closedir(dir);
     META_DIR = path_append(path, "meta/");
     DATA_DIR = path_append(path, "data/");
     /* Check if directories exist, if not, create them */
@@ -270,12 +263,9 @@ static int Meta_write(Cache *cf)
 /**
  * \brief create a data file
  * \details We use sparse creation here
- * \return
- *  - 0 on successful creation of the data file, note that the result of
- * the ftruncate() is ignored.
- *  - -1 on failure to create the data file.
+ * \return exit on failure
  */
-static int Data_create(Cache *cf)
+static void Data_create(Cache *cf)
 {
     int fd;
     int mode;
@@ -285,17 +275,14 @@ static int Data_create(Cache *cf)
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     FREE(datafn);
     if (fd == -1) {
-        lprintf(error, "Data_create(): open(): %s\n", strerror(errno));
-        return -1;
+        lprintf(fatal, "Data_create(): open(): %s\n", strerror(errno));
     }
     if (ftruncate(fd, cf->content_length)) {
         lprintf(warning, "Data_create(): ftruncate(): %s\n", strerror(errno));
     }
     if (close(fd)) {
-        lprintf(error, "Data_create(): close:(): %s\n", strerror(errno));
-        return -1;
+        lprintf(fatal, "Data_create(): close:(): %s\n", strerror(errno));
     }
-    return 0;
 }
 
 /**
@@ -438,12 +425,12 @@ int CacheDir_create(const char *dirn)
 
     i = -mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
     if (i && (errno != EEXIST)) {
-        lprintf(error, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
+        lprintf(fatal, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
     }
 
     i |= -mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) << 1;
     if (i && (errno != EEXIST)) {
-        lprintf(error, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
+        lprintf(fatal, "CacheDir_create(): mkdir(): %s\n", strerror(errno));
     }
     FREE(datadirn);
     FREE(metadirn);
@@ -458,25 +445,25 @@ static Cache *Cache_alloc()
     Cache *cf = CALLOC(1, sizeof(Cache));
 
     if (pthread_mutex_init(&cf->seek_lock, NULL)) {
-        lprintf(error, "Cache_alloc(): seek_lock initialisation failed!\n");
+        lprintf(fatal, "Cache_alloc(): seek_lock initialisation failed!\n");
     }
 
     if (pthread_mutex_init(&cf->w_lock, NULL)) {
-        lprintf(error, "Cache_alloc(): w_lock initialisation failed!\n");
+        lprintf(fatal, "Cache_alloc(): w_lock initialisation failed!\n");
     }
 
     if (pthread_mutexattr_init(&cf->bgt_lock_attr)) {
-        lprintf(error,
+        lprintf(fatal,
                 "Cache_alloc(): bgt_lock_attr initialisation failed!\n");
     }
 
     if (pthread_mutexattr_setpshared(&cf->bgt_lock_attr,
         PTHREAD_PROCESS_SHARED)) {
-        lprintf(error, "Cache_alloc(): could not set bgt_lock_attr!\n");
+        lprintf(fatal, "Cache_alloc(): could not set bgt_lock_attr!\n");
     }
 
     if (pthread_mutex_init(&cf->bgt_lock, &cf->bgt_lock_attr)) {
-        lprintf(error, "Cache_alloc(): bgt_lock initialisation failed!\n");
+        lprintf(fatal, "Cache_alloc(): bgt_lock initialisation failed!\n");
     }
 
     return cf;
@@ -488,19 +475,19 @@ static Cache *Cache_alloc()
 static void Cache_free(Cache *cf)
 {
     if (pthread_mutex_destroy(&cf->seek_lock)) {
-        lprintf(error, "Cache_free(): could not destroy seek_lock!\n");
+        lprintf(fatal, "Cache_free(): could not destroy seek_lock!\n");
     }
 
     if (pthread_mutex_destroy(&cf->w_lock)) {
-        lprintf(error, "Cache_free(): could not destroy w_lock!\n");
+        lprintf(fatal, "Cache_free(): could not destroy w_lock!\n");
     }
 
     if (pthread_mutex_destroy(&cf->bgt_lock)) {
-        lprintf(error, "Cache_free(): could not destroy bgt_lock!\n");
+        lprintf(fatal, "Cache_free(): could not destroy bgt_lock!\n");
     }
 
     if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
-        lprintf(error, "Cache_alloc(): could not destroy bgt_lock_attr!\n");
+        lprintf(fatal, "Cache_alloc(): could not destroy bgt_lock_attr!\n");
     }
 
     if (cf->path) {
@@ -630,23 +617,18 @@ static int Meta_open(Cache *cf)
 
 /**
  * \brief Create a metafile
- * \return
- *  -   0 on success
- *  -   -1 on failure, with appropriate errno set.
+ * \return exit on error
  */
-static int Meta_create(Cache *cf)
+static void Meta_create(Cache *cf)
 {
     char *metafn = path_append(META_DIR, cf->path);
     cf->mfp = fopen(metafn, "w");
     if (!cf->mfp) {
         /* Failed to open the data file */
-        lprintf(error, "Meta_create(): fopen(%s): %s\n", metafn,
+        lprintf(fatal, "Meta_create(): fopen(%s): %s\n", metafn,
                 strerror(errno));
-        FREE(metafn);
-        return -1;
     }
     FREE(metafn);
-    return 0;
 }
 
 int Cache_create(const char *path)
@@ -670,9 +652,7 @@ int Cache_create(const char *path)
     cf->segbc = (cf->content_length / cf->blksz) + 1;
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
-    if (Meta_create(cf)) {
-        lprintf(error, "Cache_create(): cannot create metadata.\n");
-    }
+    Meta_create(cf);
 
     if (fclose(cf->mfp)) {
         lprintf(error,
@@ -695,9 +675,7 @@ int Cache_create(const char *path)
                 strerror(errno));
     }
 
-    if (Data_create(cf)) {
-        lprintf(error, "Cache_create(): Data_create() failed!\n");
-    }
+    Data_create(cf);
 
     Cache_free(cf);
 

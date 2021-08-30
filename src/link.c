@@ -39,9 +39,8 @@ LinkTable *LinkSystem_init(const char *raw_url)
     }
 
     if (pthread_mutex_init(&link_lock, NULL) != 0) {
-        lprintf(fatal,
+        lprintf(error,
                 "link_system_init(): link_lock initialisation failed!\n");
-        exit_failure();
     }
 
     /* --------- Set the length of the root link ----------- */
@@ -77,8 +76,7 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->num++;
     linktbl->links = realloc(linktbl->links, linktbl->num * sizeof(Link *));
     if (!linktbl->links) {
-        lprintf(debug, "LinkTable_add(): realloc failure!\n");
-        exit_failure();
+        lprintf(fatal, "LinkTable_add(): realloc() failure!\n");
     }
     linktbl->links[linktbl->num - 1] = link;
 }
@@ -186,7 +184,7 @@ static CURL *Link_to_curl(Link *link)
 {
     CURL *curl = curl_easy_init();
     if (!curl) {
-        lprintf(debug, "Link_to_curl(): curl_easy_init() failed!\n");
+        lprintf(fatal, "Link_to_curl(): curl_easy_init() failed!\n");
     }
     /* set up some basic curl stuff */
     curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
@@ -229,14 +227,8 @@ static CURL *Link_to_curl(Link *link)
     return curl;
 }
 
-void Link_req_file_stat(Link *this_link)
+static void Link_req_file_stat(Link *this_link)
 {
-    if (this_link->type != LINK_UNINITIALISED_FILE) {
-        lprintf(debug, "Link_req_file_stat(), invalid request, LinkType: %c",
-                this_link->type);
-        exit_failure();
-    }
-
     CURL *curl = Link_to_curl(this_link);
     curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
     curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
@@ -271,12 +263,12 @@ void Link_set_file_stat(Link* this_link, CURL *curl)
             this_link->content_length = cl;
         }
     } else {
-        lprintf(debug, "Link_set_file_stat(): HTTP %ld", http_resp);
+        lprintf(warning, "Link_set_file_stat(): HTTP %ld", http_resp);
         if (HTTP_temp_failure(http_resp)) {
-            lprintf(debug, ", retrying later.\n");
+            lprintf(warning, ", retrying later.\n");
         } else {
             this_link->type = LINK_INVALID;
-            lprintf(debug, ".\n");
+            lprintf(warning, ".\n");
         }
     }
 }
@@ -410,13 +402,13 @@ DataStruct Link_to_DataStruct(Link *head_link)
         transfer_blocking(curl);
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (HTTP_temp_failure(http_resp)) {
-            lprintf(debug,
-                    "LinkTable_new(): URL: %s, HTTP %ld, retrying later.\n",
-                    url, http_resp);
+            lprintf(warning,
+                    "Link_to_DataStruct(): URL: %s, HTTP %ld, retrying later.\n"
+                    , url, http_resp);
             sleep(CONFIG.http_wait_sec);
         } else if (http_resp != HTTP_OK) {
-            lprintf(debug,
-                    "LinkTable_new(): cannot retrieve URL: %s, HTTP %ld\n",
+            lprintf(warning,
+                    "Link_to_DataStruct(): cannot retrieve URL: %s, HTTP %ld\n",
                     url, http_resp);
             buf.size = 0;
             curl_easy_cleanup(curl);
@@ -515,7 +507,7 @@ static void LinkTable_disk_delete(const char *dirn)
         path = path_append(metadirn, "/.LinkTable");
     }
     if(unlink(path)) {
-        lprintf(debug, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
+        lprintf(error, "LinkTable_disk_delete(): unlink(%s): %s\n", path,
                 strerror(errno));
     }
     FREE(path);
@@ -535,7 +527,7 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     FREE(metadirn);
 
     if (!fp) {
-        lprintf(debug, "LinkTable_disk_save(): fopen(%s): %s\n", path,
+        lprintf(error, "LinkTable_disk_save(): fopen(%s): %s\n", path,
                 strerror(errno));
         FREE(path);
         return -1;
@@ -554,12 +546,12 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     int res = 0;
 
     if (ferror(fp)) {
-        lprintf(debug, "LinkTable_disk_save(): encountered ferror!\n");
+        lprintf(error, "LinkTable_disk_save(): encountered ferror!\n");
         res = -1;
     }
 
     if (fclose(fp)) {
-        lprintf(debug,
+        lprintf(error,
                 "LinkTable_disk_save(): cannot close the file pointer, %s\n",
                 strerror(errno));
         res = -1;
@@ -598,21 +590,21 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         fread(&linktbl->links[i]->time, sizeof(long), 1, fp);
         if (feof(fp)) {
             /* reached EOF */
-            lprintf(debug,
+            lprintf(error,
                     "LinkTable_disk_open(): reached EOF!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
         if (ferror(fp)) {
-            lprintf(debug, "LinkTable_disk_open(): encountered ferror!\n");
+            lprintf(error, "LinkTable_disk_open(): encountered ferror!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
     }
     if (fclose(fp)) {
-        lprintf(debug,
+        lprintf(error,
                 "LinkTable_disk_open(): cannot close the file pointer, %s\n",
                 strerror(errno));
     }
@@ -711,8 +703,7 @@ Link *path_to_Link(const char *path)
     PTHREAD_MUTEX_LOCK(&link_lock);
     char *new_path = strndup(path, MAX_PATH_LEN);
     if (!new_path) {
-        lprintf(debug, "path_to_Link(): cannot allocate memory\n");
-        exit_failure();
+        lprintf(fatal, "path_to_Link(): cannot allocate memory\n");
     }
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
     FREE(new_path);
@@ -728,8 +719,7 @@ long path_download(const char *path, char *output_buf, size_t size,
                    off_t offset)
 {
     if (!path) {
-        lprintf(debug, "\npath_download(): NULL path supplied\n");
-        exit_failure();
+        lprintf(fatal, "\npath_download(): NULL path supplied\n");
     }
     Link *link;
     link = path_to_Link(path);
@@ -761,8 +751,9 @@ long path_download(const char *path, char *output_buf, size_t size,
     /* Check for range seek support */
     if (!CONFIG.no_range_check) {
         if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
-            lprintf(fatal, "This web server does not support HTTP \
+            fprintf(stderr, "This web server does not support HTTP \
 range requests\n");
+            exit(EXIT_FAILURE);
         }
     }
 
@@ -775,7 +766,7 @@ range requests\n");
         (http_resp != HTTP_PARTIAL_CONTENT) ||
         (http_resp != HTTP_RANGE_NOT_SATISFIABLE)
     )) {
-        lprintf(debug, "path_download(): Could not download %s, HTTP %ld\n",
+        lprintf(warning, "path_download(): Could not download %s, HTTP %ld\n",
                 link->f_url, http_resp);
         return -ENOENT;
     }

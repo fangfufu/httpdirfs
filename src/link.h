@@ -107,11 +107,6 @@ extern int ROOT_LINK_OFFSET;
 LinkTable *LinkSystem_init(const char *raw_url);
 
 /**
- * \brief Add a link to the curl multi bundle for querying stats
- */
-void Link_req_file_stat(Link *this_link);
-
-/**
  * \brief Set the stats of a link, after curl multi handle finished querying
  */
 void Link_set_file_stat(Link* this_link, CURL *curl);
