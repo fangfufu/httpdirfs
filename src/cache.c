@@ -781,6 +781,7 @@ Cache *Cache_open(const char *fn)
 
 	if (link->cache_opened) {
 		link->cache_opened++;
+
 		lprintf(cache_lock_debug,
 			"Cache_open(): thread %x: unlocking cf_lock;\n",
 			pthread_self());
@@ -793,10 +794,20 @@ Cache *Cache_open(const char *fn)
 	 */
 	if (CONFIG.mode == NORMAL) {
 		if (Cache_exist(fn)) {
+
+			lprintf(cache_lock_debug,
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+			PTHREAD_MUTEX_UNLOCK(&cf_lock);
 			return NULL;
 		}
 	} else if (CONFIG.mode == SONIC) {
 		if (Cache_exist(link->sonic_id)) {
+
+			lprintf(cache_lock_debug, 
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+			PTHREAD_MUTEX_UNLOCK(&cf_lock);
 			return NULL;
 		}
 	}
@@ -830,6 +841,11 @@ Cache *Cache_open(const char *fn)
 		Cache_free(cf);
 		lprintf(error, "Cache_open(): cannot open metadata file %s.\n",
 			fn);
+
+		lprintf(cache_lock_debug,
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
 
@@ -839,6 +855,11 @@ Cache *Cache_open(const char *fn)
 	if (Meta_read(cf)) {
 		Cache_free(cf);
 		lprintf(error, "Cache_open(): metadata error: %s.\n", fn);
+
+		lprintf(cache_lock_debug,
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
 
@@ -851,6 +872,11 @@ Cache *Cache_open(const char *fn)
 		lprintf(error, "Cache_open(): metadata inconsistency %s, \
 cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_size(fn));
 		Cache_free(cf);
+
+		lprintf(cache_lock_debug,
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
 
@@ -861,12 +887,22 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
 		lprintf(warning, "Cache_open(): outdated cache file: %s.\n",
 			fn);
 		Cache_free(cf);
+
+		lprintf(cache_lock_debug,
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
 
 	if (Data_open(cf)) {
 		Cache_free(cf);
 		lprintf(error, "Cache_open(): cannot open data file %s.\n", fn);
+
+		lprintf(cache_lock_debug,
+				"Cache_open(): thread %x: unlocking cf_lock;\n",
+				pthread_self());
+		PTHREAD_MUTEX_UNLOCK(&cf_lock);
 		return NULL;
 	}
 
