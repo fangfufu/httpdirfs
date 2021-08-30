@@ -406,11 +406,11 @@ static long Data_read(Cache * cf, uint8_t * buf, off_t len, off_t offset)
 	}
 
  end:
+
 	lprintf(cache_lock_debug,
 		"Data_read(): thread %x: unlocking seek_lock;\n",
 		pthread_self());
 	PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
-
 	return byte_read;
 }
 
@@ -469,7 +469,6 @@ static long Data_write(Cache * cf, const uint8_t * buf, off_t len, off_t offset)
 		"Data_write(): thread %x: unlocking seek_lock;\n",
 		pthread_self());
 	PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
-
 	return byte_written;
 }
 
@@ -916,7 +915,6 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
 		"Cache_open(): thread %x: unlocking cf_lock;\n",
 		pthread_self());
 	PTHREAD_MUTEX_UNLOCK(&cf_lock);
-
 	return cf;
 }
 
@@ -929,6 +927,7 @@ void Cache_close(Cache * cf)
 	cf->link->cache_opened--;
 
 	if (cf->link->cache_opened > 0) {
+
 		lprintf(cache_lock_debug,
 			"Cache_close(): thread %x: unlocking cf_lock;\n",
 			pthread_self());
@@ -954,7 +953,6 @@ void Cache_close(Cache * cf)
 		"Cache_close(): thread %x: unlocking cf_lock;\n",
 		pthread_self());
 	PTHREAD_MUTEX_UNLOCK(&cf_lock);
-
 	return Cache_free(cf);
 }
 
@@ -1112,8 +1110,7 @@ error.\n", recv, cf->blksz);
 	PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
 	/*
-	 * -----------Download the next segment in background
-	 * -------------------
+	 * ----------- Download the next segment in background -----------------
 	 */
  bgdl:
 	{
