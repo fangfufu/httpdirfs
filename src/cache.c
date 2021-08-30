@@ -719,8 +719,6 @@ Cache *Cache_open(const char *fn)
         return NULL;
     }
 
-    /*---------------- Cache_open() critical section -----------------*/
-
     lprintf(cache_lock_debug, "Cache_open(): thread %x: locking cf_lock;\n",
             pthread_self());
     PTHREAD_MUTEX_LOCK(&cf_lock);
@@ -732,11 +730,6 @@ Cache *Cache_open(const char *fn)
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return link->cache_ptr;
     }
-
-    lprintf(cache_lock_debug, "Cache_open(): thread %x: unlocking cf_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf_lock);
-    /*----------------------------------------------------------------*/
 
     /* Check if both metadata and data file exist */
     if (CONFIG.mode == NORMAL) {
@@ -809,13 +802,15 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
     /* Yup, we just created a circular loop. ;) */
     cf->link->cache_ptr = cf;
 
+    lprintf(cache_lock_debug, "Cache_open(): thread %x: unlocking cf_lock;\n",
+            pthread_self());
+    PTHREAD_MUTEX_UNLOCK(&cf_lock);
+
     return cf;
 }
 
 void Cache_close(Cache *cf)
 {
-    /*--------------- Cache_close() critical section -----------------*/
-
     lprintf(cache_lock_debug, "Cache_close(): thread %x: locking cf_lock;\n",
             pthread_self());
     PTHREAD_MUTEX_LOCK(&cf_lock);
@@ -829,25 +824,23 @@ void Cache_close(Cache *cf)
         return;
     }
 
-    lprintf(cache_lock_debug, "Cache_close(): thread %x: unlocking cf_lock;\n",
-            pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf_lock);
-
-    /*----------------------------------------------------------------*/
-
     if (Meta_write(cf)) {
-        lprintf(debug, "Cache_close(): Meta_write() error.");
+        lprintf(error, "Cache_close(): Meta_write() error.");
     }
 
     if (fclose(cf->mfp)) {
-        lprintf(debug, "Cache_close(): cannot close metadata: %s.\n",
+        lprintf(error, "Cache_close(): cannot close metadata: %s.\n",
                 strerror(errno));
     }
 
     if (fclose(cf->dfp)) {
-        lprintf(debug, "Cache_close(): cannot close data file %s.\n",
+        lprintf(error, "Cache_close(): cannot close data file %s.\n",
                 strerror(errno));
     }
+
+    lprintf(cache_lock_debug, "Cache_close(): thread %x: unlocking cf_lock;\n",
+            pthread_self());
+    PTHREAD_MUTEX_UNLOCK(&cf_lock);
 
     return Cache_free(cf);
 }
@@ -884,19 +877,18 @@ static void Seg_set(Cache *cf, off_t offset, int i)
 static void *Cache_bgdl(void *arg)
 {
     Cache *cf = (Cache *) arg;
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_bgdl(): thread %x: locking w_lock;\n",
+
+    lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: locking w_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
+
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "Cache_bgdl(): thread %x: ", pthread_self());
+    lprintf(debug, "Cache_bgdl(): thread %x spawned.\n ", pthread_self());
     long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                               cf->next_dl_offset);
     if (recv < 0) {
-        lprintf(debug, "\nCache_bgdl(): received %lu bytes, \
-which does't make sense\n", recv);
-        exit_failure();
+        lprintf(error, "Cache_bgdl(): thread %x received %ld bytes, \
+which does't make sense\n", pthread_self(), recv);
     }
 
     if ( (recv == cf->blksz) ||
@@ -905,20 +897,21 @@ which does't make sense\n", recv);
         Data_write(cf, recv_buf, recv, cf->next_dl_offset);
         Seg_set(cf, cf->next_dl_offset, 1);
     }  else {
-        lprintf(debug,
-                "Cache_bgdl(): received %ld, possible network error.\n", recv);
+        lprintf(error,
+                "Cache_bgdl(): received %ld rather than %ld, possible network \
+error.\n", recv, cf->blksz);
     }
+
     FREE(recv_buf);
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_bgdl(): thread %x: unlocking bgt_lock;\n",
+
+    lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: unlocking bgt_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_bgdl(): thread %x: unlocking w_lock;\n",
+
+    lprintf(cache_lock_debug, "Cache_bgdl(): thread %x: unlocking w_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+
     pthread_detach(pthread_self());
     pthread_exit(NULL);
 }
@@ -937,20 +930,21 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
         goto bgdl;
     } else {
         /* Wait for any other download thread to finish*/
-        #ifdef CACHE_LOCK_DEBUG
-        lprintf(debug, "Cache_read(): thread %ld: locking w_lock;\n",
+
+        lprintf(cache_lock_debug, "Cache_read(): thread %ld: locking w_lock;\n",
                 pthread_self());
-        #endif
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
+
         if (Seg_exist(cf, dl_offset)) {
             /* The segment now exists - it was downloaded by another
              * download thread. Send it off and unlock the I/O */
             send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
-            #ifdef CACHE_LOCK_DEBUG
-            lprintf(debug, "Cache_read(): thread %x: unlocking w_lock;\n",
+
+            lprintf(cache_lock_debug,
+                    "Cache_read(): thread %x: unlocking w_lock;\n",
                     pthread_self());
-            #endif
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+
             goto bgdl;
         }
     }
@@ -958,13 +952,12 @@ long Cache_read(Cache *cf,  char * const output_buf, const off_t len,
     /* ------------------------Download the segment -------------------------*/
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "Cache_read(): thread %x: ", pthread_self());
+    lprintf(debug, "Cache_read(): thread %x: spawned.\n ", pthread_self());
     long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
                                 dl_offset);
     if (recv < 0) {
-        lprintf(debug, "\nCache_read(): received %ld bytes, \
-which does't make sense\n", recv);
-        exit_failure();
+        lprintf(error, "Cache_read(): thread %x received %ld bytes, \
+which does't make sense\n", pthread_self(), recv);
     }
     /*
      * check if we have received enough data, write it to the disk
@@ -978,34 +971,32 @@ which does't make sense\n", recv);
         Data_write(cf, recv_buf, recv, dl_offset);
         Seg_set(cf, dl_offset, 1);
     }  else {
-        lprintf(debug,
-                "Cache_read(): received %ld, possible network error.\n", recv);
+        lprintf(error,
+                "Cache_read(): received %ld rather than %ld, possible network \
+error.\n", recv, cf->blksz);
     }
     FREE(recv_buf);
     send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
 
-    #ifdef CACHE_LOCK_DEBUG
-    lprintf(debug, "Cache_read(): thread %x: unlocking w_lock;\n",
+    lprintf(cache_lock_debug, "Cache_read(): thread %x: unlocking w_lock;\n",
             pthread_self());
-    #endif
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
     /* -----------Download the next segment in background -------------------*/
     bgdl:
-    ;
+    {}
     off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
     if ( (next_dl_offset > dl_offset) &&
         !Seg_exist(cf, next_dl_offset) &&
         next_dl_offset < cf->content_length ){
         /* Stop the spawning of multiple background pthreads */
         if(!pthread_mutex_trylock(&cf->bgt_lock)) {
-            #ifdef CACHE_LOCK_DEBUG
-            lprintf(debug, "Cache_read(): thread %x: trylocked bgt_lock;\n",
+            lprintf(cache_lock_debug,
+                    "Cache_read(): thread %x: trylocked bgt_lock;\n",
                     pthread_self());
-            #endif
             cf->next_dl_offset = next_dl_offset;
             if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
-                lprintf(debug,
+                lprintf(error,
                     "Cache_read(): Error creating background download thread\n"
                 );
             }

@@ -43,7 +43,6 @@ void log_printf(LogType type, const char *file, const char *func, int line,
         fprintf(out, "(%s:%s:%d): ", file, func, line);
 
         print_actual_message:
-        /* A label can only be part of a statement, this is a statement. lol*/
         {}
         va_list args;
         va_start(args, format);

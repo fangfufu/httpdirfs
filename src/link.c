@@ -761,9 +761,8 @@ long path_download(const char *path, char *output_buf, size_t size,
     /* Check for range seek support */
     if (!CONFIG.no_range_check) {
         if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
-            lprintf(debug, "Error: This web server does not support HTTP \
+            lprintf(fatal, "This web server does not support HTTP \
 range requests\n");
-            exit(EXIT_FAILURE);
         }
     }
 
