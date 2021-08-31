@@ -101,8 +101,8 @@ Build and install:
     make
     sudo make install
 
-Apple's command-line build tools are usually installed as part of setting up Homebrew.
-HTTPDirFS will be installed in ``/usr/local``.
+Apple's command-line build tools are usually installed as part of setting up 
+Homebrew. HTTPDirFS will be installed in ``/usr/local``.
 
 ## Usage
 
@@ -252,7 +252,8 @@ please refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Configuration file support
-This program has basic support for using a configuration file. By default, the configuration file which the program reads is
+This program has basic support for using a configuration file. By default, the
+configuration file which the program reads is
 ``${XDG_CONFIG_HOME}/httpdirfs/config``, which by
 default is at ``${HOME}/.config/httpdirfs/config``. You will have to create the
 sub-directory and the configuration file yourself. In the configuration file,
@@ -265,10 +266,17 @@ please supply one option per line. For example:
 Alternatively, you can specify your own configuration file by using the
 ``--config`` option.
 
+### Log levels
+You can control how much log HTTPDirFS outputs by setting the
+``HTTPDIRFS_LOG_LEVEL`` enviromental variable. For details of the different
+types of log that are supported, please refer to
+[log.h](https://github.com/fangfufu/httpdirfs/blob/master/src/log.h) and
+[log.c](https://github.com/fangfufu/httpdirfs/blob/master/src/log.c).
+
 ## The Technical Details
 For the normal HTTP directories, this program downloads the HTML web pages/files
-using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using
-[Gumbo](https://github.com/google/gumbo-parser), and presents them using
+using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages
+using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 [libfuse](https://github.com/libfuse/libfuse).
 
 For *sonic servers, rather than using the Gumbo parser, this program parse
