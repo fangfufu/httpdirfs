@@ -4,35 +4,32 @@ Have you ever wanted to mount those HTTP directory listings as if it was a
 partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
 Text Transfer Protocol Directory Filesystem.
 
-The performance of the program is excellent. HTTP connections are reused due to
-the use of curl-multi interface. The FUSE component runs in multithreaded mode.
+The performance of the program is excellent. HTTP connections are reused through
+curl-multi interface. The FUSE component runs in the multithreaded mode.
 
 There is a permanent cache system which can cache all the file segments you have
 downloaded, so you don't need to these segments again if you access them later.
-This feature is triggered by the ``--cache`` flag. This makes this filesystem
-much faster than ``rclone mount``.
+This feature is triggered by the ``--cache`` flag. This is similar to the
+``--vfs-cache-mode full`` feature of
+[rclone mount](https://rclone.org/commands/rclone_mount/#vfs-cache-mode-full)
 
-The support for Airsonic / Subsonic server has also been added. This allows you
-to mount a remote music collection locally. 
-
-## News
-HTTPDirFS now supports mounting Airsonic / Subsonic servers! This features is 
-dedicated the my Debian package maintainer Jerome Charaoui. 
-
+There is support for Airsonic / Subsonic server. This allows you to mount a
+remote music collection locally.
 ## Installation
+Please note if you install HTTDirFS from a repository, it can be outdated.
 ### Debian 11 "Bullseye"
-HTTPDirFS is available as a package in Debian 11 "Bullseye", which is the current
-Testing version. If you are on Debian Bullseye, you can simply run the following
-command as ``root``: 
+HTTPDirFS is available as a package in Debian 11 "Bullseye", If you are on
+Debian Bullseye, you can simply run the following
+command as ``root``:
 
 	apt install httpdirfs
 
-For more information on the status of HTTDirFS in Debian, please refer to 
+For more information on the status of HTTDirFS in Debian, please refer to
 [Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
 
 ### Arch Linux
 HTTPDirFS is available in the
-[Arch User Repository](https://aur.archlinux.org/packages/httpdirfs). 
+[Arch User Repository](https://aur.archlinux.org/packages/httpdirfs).
 
 ### FreeBSD
 HTTPDirFS is available in the
@@ -78,7 +75,8 @@ Ports:
 
     devel/gmake sysutils/fusefs-libs devel/gumbo misc/e2fsprogs-libuuid ftp/curl textproc/expat2
 
-**Note:** If you want brotli compression support, you will need to install curl from ports and enable the option.
+**Note:** If you want brotli compression support, you will need to install curl
+from ports and enable the option.
 
 You can then build + install with:
 
@@ -114,7 +112,6 @@ the filesystem is visiting.
 
 HTTPDirFS options:
 
-        --config            Specify a configuration file 
     -u  --username          HTTP authentication username
     -p  --password          HTTP authentication password
     -P  --proxy             Proxy for libcurl, for more details refer to
@@ -141,6 +138,9 @@ HTTPDirFS options:
                             for HTTP range requests
         --insecure_tls      Disable licurl TLS certificate verification by
                             setting CURLOPT_SSL_VERIFYHOST to 0
+        --single-file-mode  Single file mode - rather than mounting a whole
+                            directory, present a single file inside a virtual
+                            directory.
 
 For mounting a Airsonic / Subsonic server:
 
@@ -152,15 +152,18 @@ For mounting a Airsonic / Subsonic server:
                             using the insecure username / hex encoded password
                             scheme
 
-FUSE options:
+Useful FUSE options:
 
     -d   -o debug          enable debug output (implies -f)
     -f                     foreground operation
     -s                     disable multi-threaded operation
 
 ## Airsonic / Subsonic server support
-This is a new feature to 1.2.0. Now you can mount the music collection on your
-Airsonic / Subsonic server (*sonic), and browse them using your favourite file browser.
+The Airsonic / Subsonic server support is dedicated the my Debian package
+maintainer Jerome Charaoui.You can mount the music collection on your
+Airsonic / Subsonic server (*sonic), and browse them using your favourite file
+browser.
+
 You simply have to supply both ``--sonic-username`` and ``--sonic-password`` to
 trigger the *sonic server mode. For example:
 
@@ -205,7 +208,7 @@ some or all of Subsonic API:
 [issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
 
 ## Permanent cache system
-You can cache all the files you have looked at permanently on your hard drive by
+You can cache the files you have accessed permanently on your hard drive by
 using the ``--cache`` flag. The file it caches persist across sessions.
 
 By default, the cache files are stored under ``${XDG_CACHE_HOME}/httpdirfs``,
@@ -226,8 +229,20 @@ pull request.
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
 cache file creation. For a list of filesystem that supports sparse allocation,
-please refer to 
+please refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
+
+## Single file mode
+If you just want to access a single file, you can specify
+``--single-file-mode``. This effectively creates a virtual directory that
+contains one single file. This operating mode is similar to the unmaintained
+[httpfs](http://httpfs.sourceforge.net/techinfo.htm). This feature was
+implemented due to Github issue
+[#86](https://github.com/fangfufu/httpdirfs/issues/86)
+
+e.g.
+
+    ./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
 
 ## Configuration file support
 This program has basic support for using a configuration file. By default, the configuration file which the program reads is
@@ -276,7 +291,7 @@ for the technical and moral support. Your wisdom is much appreciated!
 - I would like to thank [Edenist](https://github.com/edenist) for providing FreeBSD
 compatibility patches.
 - I would like to thank [hiliev](https://github.com/hiliev) for providing macOS
-compatibility patches. 
+compatibility patches.
 - I would like to thank [-Archivist](https://www.reddit.com/user/-Archivist/)
 for not providing FTP or WebDAV access to his server. This piece of software was
 written in direct response to his appalling behaviour.
