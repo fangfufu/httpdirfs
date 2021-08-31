@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Single File Mode, which allows the mounting of a single file in a virtual
 directory
-- Mannual page generation in Makefile.
+- Manual page generation in Makefile.
 
 ###  Changed
 - Improve log / debug output.
