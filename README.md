@@ -243,13 +243,6 @@ please supply one option per line. For example:
 Alternatively, you can specify your own configuration file by using the
 ``--config`` option.
 
-### Debugging Mutexes
-By default the debugging output associated with mutexes are not compiled. To
-enable them, compile the program with the ``-DCACHE_LOCK_DEBUG``, the
-``-DNETWORK_LOCK_DEBUG`` and/or the ``-DLINK_LOCK_DEBUG`` CPPFLAGS, e.g.
-
-    make CPPFLAGS=-DCACHE_LOCK_DEBUG
-
 ## The Technical Details
 For the normal HTTP directories, this program downloads the HTML web pages/files
 using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages using
