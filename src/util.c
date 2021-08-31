@@ -140,12 +140,12 @@ void *CALLOC(size_t nmemb, size_t size)
 
 void FREE(void *ptr)
 {
-	if (ptr) {
-		free(ptr);
-    	ptr = NULL;
-	} else {
-		lprintf(fatal, "attempted to double free a pointer!\n");
-	}
+    if (ptr) {
+        free(ptr);
+        ptr = NULL;
+    } else {
+        lprintf(fatal, "attempted to double free a pointer!\n");
+    }
 }
 
 char *str_to_hex(char *s)

@@ -45,7 +45,7 @@ log_printf(LogType type, const char *file, const char *func, int line,
       print_actual_message:
         {
         }
-		fprintf(stderr, "%s: ", func);
+        fprintf(stderr, "%s: ", func);
         va_list args;
         va_start(args, format);
         vfprintf(stderr, format, args);

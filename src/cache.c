@@ -172,9 +172,11 @@ static int Meta_read(Cache * cf)
         return EIO;
     }
 
-    if (!cf->blksz) {
+    /* These things really should not be zero!!! */
+    if (!cf->content_length || !cf->blksz || !cf->segbc) {
         lprintf(error,
-                "corrupt metadata: %s, blksz: %d", cf->path, cf->blksz);
+                "corruption: content_length: %ld, blksz: %d, segbc: %ld\n",
+                cf->content_length, cf->blksz, cf->segbc);
         return EBADMSG;
     }
 
@@ -254,8 +256,8 @@ static int Meta_write(Cache * cf)
      * These things really should not be zero!!!
      */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
-        lprintf(error, "Warning: content_length: %ld, blksz: %d, segbc: \
-%ld\n", cf->content_length, cf->blksz, cf->segbc);
+        lprintf(error, "content_length: %ld, blksz: %d, segbc: %ld\n",
+                cf->content_length, cf->blksz, cf->segbc);
     }
 
     fwrite(&cf->time, sizeof(long), 1, fp);
@@ -264,6 +266,8 @@ static int Meta_write(Cache * cf)
     fwrite(&cf->segbc, sizeof(long), 1, fp);
     if (cf->segbc > 0) {
         fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
+    } else {
+        lprintf(error, "cg->seg <= 0!\n");
     }
 
     /*
@@ -672,9 +676,7 @@ int Cache_create(const char *path)
                                 this_link->f_url + ROOT_LINK_OFFSET, 0,
                                 NULL);
     } else if (CONFIG.mode == SINGLE) {
-        fn = curl_easy_unescape(NULL,
-                                this_link->linkname, 0,
-                                NULL);
+        fn = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
     } else if (CONFIG.mode == SONIC) {
         fn = this_link->sonic_id;
     } else {
@@ -990,8 +992,7 @@ Cache_read(Cache * cf, char *const output_buf, const off_t len,
     off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
 
     /*
-     * ------------------ Check if the segment already exists
-     * ---------------
+     * ------------- Check if the segment already exists --------------
      */
     if (Seg_exist(cf, dl_offset)) {
         send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
@@ -1022,8 +1023,7 @@ Cache_read(Cache * cf, char *const output_buf, const off_t len,
     }
 
     /*
-     * ------------------------Download the segment
-     * -------------------------
+     * ------------------ Download the segment ---------------------
      */
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));

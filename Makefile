@@ -24,7 +24,7 @@ endif
 
 prefix ?= /usr/local
 
-all: man
+all: httpdirfs
 
 %.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
@@ -61,13 +61,17 @@ man: httpdirfs
 doc:
 	doxygen Doxyfile
 
+format:
+	indent -kr -nut src/*.c src/*.h
+
 clean:
+	-rm -f src/*.h~ src/*.c~
 	-rm -f *.o
 	-rm -f httpdirfs
-	-rm -rf doc/man/httpdirfs.1
 
 distclean: clean
 	-rm -rf doc/html
+	-rm -rf doc/man/httpdirfs.1
 
 uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
@@ -87,4 +91,4 @@ depend: .depend
 	$(CC) $(CFLAGS) -MM $^ -MF ./.depend;
 include .depend
 
-.PHONY: all man doc install clean distclean uninstall depend
+.PHONY: all man doc install clean distclean uninstall depend format

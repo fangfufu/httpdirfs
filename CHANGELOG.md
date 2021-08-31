@@ -6,6 +6,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.3] - 2021-08-31
+
+### Added
+- Single File Mode, which allows the mounting of a single file in a virtual
+directory
+- man page generation in Makefile.
+
+###  Changed
+- Improve log / debug output.
+- Removed unnecessary mutex lock/unlocks.
+
+### Fixed
+- Handling empty files
+
 ## [1.2.2] - 2021-08-08
 ### Fixed
 - macOS uninstallation in Makefile.
@@ -186,7 +200,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.2...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.3...master
+[1.2.2]: https://github.com/fangfufu/httpdirfs/compare/1.2.2...1.2.3
 [1.2.2]: https://github.com/fangfufu/httpdirfs/compare/1.2.1...1.2.2
 [1.2.1]: https://github.com/fangfufu/httpdirfs/compare/1.2.0...1.2.1
 [1.2.0]: https://github.com/fangfufu/httpdirfs/compare/1.1.10...1.2.0
