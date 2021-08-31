@@ -32,10 +32,10 @@ static pthread_mutex_t link_lock;
 /**
  * \brief Create the root linktable for single file mode
  */
-static LinkTable *single_LinkTable_new(const char *fn)
+static LinkTable *single_LinkTable_new(const char *url)
 {
-    char *ptr = strrchr(fn, '/');
-    int dir_len = ptr - fn;
+    char *ptr = strrchr(url, '/');
+    int dir_len = ptr - url;
     char *dir_name = CALLOC(dir_len + 1, sizeof(char));
     free(dir_name);
     return NULL;
@@ -546,7 +546,7 @@ LinkTable *LinkTable_new(const char *url)
      */
     if (CACHE_SYSTEM_INIT) {
         if (LinkTable_disk_save(linktbl, unescaped_path)) {
-            exit_failure();
+            lprintf(error, "Failed to save the LinkTable!\n");
         }
     }
 
