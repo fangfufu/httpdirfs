@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 directory
 - Manual page generation in Makefile.
 
-###  Changed
+### Changed
 - Improve log / debug output.
 - Removed unnecessary mutex lock/unlocks.
 
