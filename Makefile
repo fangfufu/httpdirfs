@@ -65,7 +65,8 @@ format:
 	indent -kr -nut src/*.c src/*.h
 
 clean:
-	-rm -f src/*.h~ src/*.c~
+	-rm -f src/*.h~
+	-rm -f src/*.c~
 	-rm -f *.o
 	-rm -f httpdirfs
 
