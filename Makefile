@@ -55,15 +55,19 @@ ifeq ($(OS),Darwin)
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 endif
 
+man: all
+	help2man --no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
+
 doc:
 	doxygen Doxyfile
 
 clean:
 	-rm -f *.o
 	-rm -f httpdirfs
-	-rm -rf doc/html
 
 distclean: clean
+	-rm -rf doc/html
+	-rm -rf doc/man/httpdirfs.1
 
 uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs
