@@ -296,6 +296,9 @@ disable this check by using the ``--no-range-check`` flag.
 - [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
 has a Python wrapper for mounting HTTPDirFS.
 
+## Press Coverage
+- Linux Format - Issue [264](https://www.linuxformat.com/archives?issue=264), July 2020
+
 ## Acknowledgement
 - First of all, I would like to thank
 [Jerome Charaoui](https://github.com/jcharaoui) for being the Debian Maintainer
