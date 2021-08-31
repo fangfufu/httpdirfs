@@ -370,7 +370,7 @@ write_memory_callback(void *contents, size_t size, size_t nmemb,
     memmove(&mem->data[mem->size], contents, realsize);
     mem->size += realsize;
     mem->data[mem->size] = 0;
-
+    lprintf(debug, "realsize %d bytes\n", realsize);
     return realsize;
 }
 

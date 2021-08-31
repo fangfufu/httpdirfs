@@ -861,5 +861,6 @@ range requests\n");
     curl_easy_cleanup(curl);
     FREE(buf.data);
 
+    lprintf(debug, "recv: %lu bytes\n", recv);
     return recv;
 }
