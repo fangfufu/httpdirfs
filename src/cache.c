@@ -95,7 +95,7 @@ void CacheSystem_init(const char *path, int url_supplied)
         path = CacheSystem_calc_dir(path);
     }
 
-    lprintf(debug, "directory: %s\n", path);
+    lprintf(debug, "%s\n", path);
 
     META_DIR = path_append(path, "meta/");
     DATA_DIR = path_append(path, "data/");

@@ -1,6 +1,7 @@
 #include "fuse_local.h"
 
 #include "cache.h"
+#include "log.h"
 
 /*
  * must be included before including <fuse.h>
@@ -21,6 +22,7 @@ static void *fs_init(struct fuse_conn_info *conn)
 /** \brief release an opened file */
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {
+	lprintf(info, "%s\n", path);
     (void) path;
     if (CACHE_SYSTEM_INIT) {
         Cache_close((Cache *) fi->fh);
@@ -88,6 +90,7 @@ fs_read(const char *path, char *buf, size_t size, off_t offset,
 /** \brief open a file indicated by the path */
 static int fs_open(const char *path, struct fuse_file_info *fi)
 {
+	lprintf(info, "%s\n", path);
     Link *link = path_to_Link(path);
     if (!link) {
         return -ENOENT;
@@ -133,7 +136,6 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
 {
     (void) offset;
     (void) fi;
-
     LinkTable *linktbl;
 
     if (!strcmp(path, "/")) {

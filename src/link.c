@@ -353,7 +353,7 @@ static void LinkTable_uninitialised_fill(LinkTable * linktbl)
     while (u);
     if (CONFIG.log_type & debug) {
         erase_string(stderr, STATUS_LEN, s);
-        fprintf(stderr, "Done!\n");
+        fprintf(stderr, "... Done!\n");
     }
 }
 
@@ -424,7 +424,7 @@ void LinkTable_print(LinkTable * linktbl)
             }
         }
         lprintf(info, "--------------------------------------------\n");
-        lprintf(info, "LinkTable_print(): Invalid link count: %d\n", j);
+        lprintf(info, " Invalid link count: %d\n", j);
         lprintf(info, "--------------------------------------------\n");
     }
 }

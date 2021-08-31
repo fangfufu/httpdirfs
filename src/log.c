@@ -24,28 +24,27 @@ log_printf(LogType type, const char *file, const char *func, int line,
     if (type & CONFIG.log_type) {
         switch (type) {
         case fatal:
-            fprintf(out, "Fatal: ");
+            fprintf(out, "Fatal:");
             break;
         case error:
-            fprintf(out, "Error: ");
+            fprintf(out, "Error:");
             break;
         case warning:
-            fprintf(out, "Warning: ");
+            fprintf(out, "Warning:");
             break;
         case info:
-            out = stderr;
             goto print_actual_message;
-            break;
         default:
-            fprintf(out, "Debug (%x):", type);
+            fprintf(out, "Debug(%x):", type);
             break;
         }
 
-        fprintf(out, "(%s:%s:%d): ", file, func, line);
+        fprintf(out, "%s:%d:", file, line);
 
       print_actual_message:
         {
         }
+		fprintf(out, "%s: ", func);
         va_list args;
         va_start(args, format);
         vfprintf(out, format, args);
