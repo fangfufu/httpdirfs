@@ -29,6 +29,17 @@ int ROOT_LINK_OFFSET = 0;
  */
 static pthread_mutex_t link_lock;
 
+/**
+ * \brief Create the root linktable for single file mode
+ */
+static LinkTable *single_LinkTable_new(const char *fn)
+{
+	char *ptr = strrchr(fn, '/');
+	int dir_len = ptr - fn;
+	char *dir_name = CALLOC(dir_len + 1, sizeof(char));
+	free(dir_name);
+}
+
 LinkTable *LinkSystem_init(const char *raw_url)
 {
 	/*
@@ -51,7 +62,7 @@ LinkTable *LinkSystem_init(const char *raw_url)
 	/*
 	 * This is where the '/' should be
 	 */
-	ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) + 1;
+	ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN);
 
 	/*
 	 * --------------------- Enable cache system --------------------
