@@ -15,6 +15,11 @@ This feature is triggered by the ``--cache`` flag. This is similar to the
 
 There is support for Airsonic / Subsonic server. This allows you to mount a
 remote music collection locally.
+
+If you only want to access a single file, there is also a simplified
+Single File Mode. This can be especially useful if the web server does not
+present a HTTP directory listing.
+
 ## Installation
 Please note if you install HTTDirFS from a repository, it can be outdated.
 ### Debian 11 "Bullseye"
@@ -197,15 +202,29 @@ HTTPDirFS is also known to work with the following applications, which implement
 some or all of Subsonic API:
 
 - [Funkwhale](https://funkwhale.audio/) (requires ``--sonic-id3`` and
-``--no-range-check``, more information in 
+``--no-range-check``, more information in
 [issue #45](https://github.com/fangfufu/httpdirfs/issues/45))
 - [LMS](https://github.com/epoupon/lms) (requires ``--sonic-insecure`` and
-``--no-range-check``, more information in 
-[issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the 
-[demo instance](https://lms.demo.poupon.io/), you might also need 
+``--no-range-check``, more information in
+[issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the
+[demo instance](https://lms.demo.poupon.io/), you might also need
 ``--insecure-tls``)
 - [Navidrome](https://github.com/navidrome/navidrome), more information in
 [issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
+
+## Single file mode
+If you just want to access a single file, you can specify
+``--single-file-mode``. This effectively creates a virtual directory that
+contains one single file. This operating mode is similar to the unmaintained
+[httpfs](http://httpfs.sourceforge.net/).
+
+e.g.
+
+    ./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
+
+This can be useful if the web server does not present a HTTP directory listing.
+This feature was implemented due to Github
+[issue #86](https://github.com/fangfufu/httpdirfs/issues/86)
 
 ## Permanent cache system
 You can cache the files you have accessed permanently on your hard drive by
@@ -231,18 +250,6 @@ filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
 cache file creation. For a list of filesystem that supports sparse allocation,
 please refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
-
-## Single file mode
-If you just want to access a single file, you can specify
-``--single-file-mode``. This effectively creates a virtual directory that
-contains one single file. This operating mode is similar to the unmaintained
-[httpfs](http://httpfs.sourceforge.net/techinfo.htm). This feature was
-implemented due to Github issue
-[#86](https://github.com/fangfufu/httpdirfs/issues/86)
-
-e.g.
-
-    ./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
 
 ## Configuration file support
 This program has basic support for using a configuration file. By default, the configuration file which the program reads is
