@@ -189,45 +189,38 @@ static int Meta_read(Cache * cf)
         return EFBIG;
     }
 
-    if (cf->segbc > 0) {
-        /*
-         * Allocate memory for all segments, and read them in
-         */
-        cf->seg = CALLOC(cf->segbc, sizeof(Seg));
-        nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
+    /*
+     * Allocate memory for all segments, and read them in
+     */
+    cf->seg = CALLOC(cf->segbc, sizeof(Seg));
+    nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
+    /*
+     * We shouldn't have gone past the end of the file
+     */
+    if (feof(fp)) {
         /*
-         * We shouldn't have gone past the end of the file
+         * reached EOF
          */
-        if (feof(fp)) {
-            /*
-             * reached EOF
-             */
-            lprintf(error, "attempted to read past the end of the \
+        lprintf(error, "attempted to read past the end of the \
 file!\n");
-            return EBADMSG;
-        }
+        return EBADMSG;
+    }
 
-        /*
-         * Error checking for fread
-         */
-        if (ferror(fp)) {
-            lprintf(error, "error reading bitmap!\n");
-            return EIO;
-        }
+    /*
+     * Error checking for fread
+     */
+    if (ferror(fp)) {
+        lprintf(error, "error reading bitmap!\n");
+        return EIO;
+    }
 
-        /*
-         * Check for inconsistent metadata file
-         */
-        if (nmemb != cf->segbc) {
-            lprintf(error, "corrupted metadata!\n");
-            return EBADMSG;
-        }
-    } else {
-        /*
-         * Allocate one single segment for empty file to prevent segfault
-         */
-        cf->seg = CALLOC(1, sizeof(Seg));
+    /*
+     * Check for inconsistent metadata file
+     */
+    if (nmemb != cf->segbc) {
+        lprintf(error, "corrupted metadata!\n");
+        return EBADMSG;
     }
 
     return 0;
@@ -264,11 +257,7 @@ static int Meta_write(Cache * cf)
     fwrite(&cf->content_length, sizeof(off_t), 1, fp);
     fwrite(&cf->blksz, sizeof(int), 1, fp);
     fwrite(&cf->segbc, sizeof(long), 1, fp);
-    if (cf->segbc > 0) {
-        fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
-    } else {
-        lprintf(error, "cg->seg <= 0!\n");
-    }
+    fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
 
     /*
      * Error checking for fwrite

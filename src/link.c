@@ -345,7 +345,7 @@ void Link_set_file_stat(Link * this_link, CURL * curl)
         double cl = 0;
         curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
         curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-        if (cl < 0) {
+        if (cl <= 0) {
             this_link->type = LINK_INVALID;
         } else {
             this_link->type = LINK_FILE;
