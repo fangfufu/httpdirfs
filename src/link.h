@@ -16,30 +16,30 @@ typedef struct Link Link;
 
 /** \brief the link type */
 typedef enum {
-    LINK_HEAD = 'H',
-    LINK_DIR = 'D',
-    LINK_FILE = 'F',
-    LINK_INVALID = 'I',
-    LINK_UNINITIALISED_FILE = 'U'
+        LINK_HEAD = 'H',
+        LINK_DIR = 'D',
+        LINK_FILE = 'F',
+        LINK_INVALID = 'I',
+        LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
 
 /** \brief for storing downloaded data in memory */
 typedef struct {
-    char *data;
-    size_t size;
+        char *data;
+        size_t size;
 } DataStruct;
 
 /** \brief specify the type of data transfer */
 typedef enum {
-    FILESTAT = 's',
-    DATA = 'd'
+        FILESTAT = 's',
+        DATA = 'd'
 } TransferType;
 
 /** \brief for storing the link being transferred, and metadata */
 typedef struct {
-    TransferType type;
-    int transferring;
-    Link *link;
+        TransferType type;
+        int transferring;
+        Link *link;
 } TransferStruct;
 
 /**
@@ -53,21 +53,21 @@ typedef struct LinkTable LinkTable;
  */
 struct Link {
     /** \brief The link name in the last level of the URL */
-    char linkname[MAX_FILENAME_LEN+1];
+        char linkname[MAX_FILENAME_LEN + 1];
     /** \brief The full URL of the file */
-    char f_url[MAX_PATH_LEN+1];
+        char f_url[MAX_PATH_LEN + 1];
     /** \brief The type of the link */
-    LinkType type;
+        LinkType type;
     /** \brief CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
-    size_t content_length;
+        size_t content_length;
     /** \brief The next LinkTable level, if it is a LINK_DIR */
-    LinkTable *next_table;
+        LinkTable *next_table;
     /** \brief CURLINFO_FILETIME obtained from the server */
-    long time;
+        long time;
     /** \brief How many times associated cache has been opened */
-    int cache_opened;
+        int cache_opened;
     /** \brief The pointer associated with the cache file */
-    Cache *cache_ptr;
+        Cache *cache_ptr;
     /**
      * \brief Sonic id field
      * \details This is used to store the followings:
@@ -77,18 +77,18 @@ struct Link {
      *  - Sub-directory ID (in the XML response, this is the ID on the "child"
      *    element)
      */
-    char *sonic_id;
+        char *sonic_id;
     /**
      * \brief Sonic directory depth
      * \details This is used exclusively in ID3 mode to store the depth of the
      * current directory.
      */
-    int sonic_depth;
+        int sonic_depth;
 };
 
 struct LinkTable {
-    int num;
-    Link **links;
+        int num;
+        Link **links;
 };
 
 /**
@@ -109,7 +109,7 @@ LinkTable *LinkSystem_init(const char *raw_url);
 /**
  * \brief Set the stats of a link, after curl multi handle finished querying
  */
-void Link_set_file_stat(Link* this_link, CURL *curl);
+void Link_set_file_stat(Link * this_link, CURL * curl);
 
 /**
  * \brief create a new LinkTable
@@ -136,7 +136,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path);
 /**
  * \brief dump a link table to the disk.
  */
-int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
+int LinkTable_disk_save(LinkTable * linktbl, const char *dirn);
 
 /**
  * \brief load a link table from the disk.
@@ -147,7 +147,7 @@ LinkTable *LinkTable_disk_open(const char *dirn);
  * \brief Download a link's content to the memory
  * \warning You MUST free the memory field in DataStruct after use!
  */
-DataStruct Link_to_DataStruct(Link *head_link);
+DataStruct Link_to_DataStruct(Link * head_link);
 
 /**
  * \brief Allocate a LinkTable
@@ -158,15 +158,15 @@ LinkTable *LinkTable_alloc(const char *url);
 /**
  * \brief free a LinkTable
  */
-void LinkTable_free(LinkTable *linktbl);
+void LinkTable_free(LinkTable * linktbl);
 
 /**
  * \brief print a LinkTable
  */
-void LinkTable_print(LinkTable *linktbl);
+void LinkTable_print(LinkTable * linktbl);
 
 /**
  * \brief add a Link to a LinkTable
  */
-void LinkTable_add(LinkTable *linktbl, Link *link);
+void LinkTable_add(LinkTable * linktbl, Link * link);
 #endif

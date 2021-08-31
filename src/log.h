@@ -5,14 +5,14 @@
  * \brief Log types
  */
 typedef enum {
-    fatal               = 1 << 0,
-    error               = 1 << 1,
-    warning             = 1 << 2,
-    info                = 1 << 3,
-    debug               = 1 << 4,
-    link_lock_debug     = 1 << 5,
-    network_lock_debug  = 1 << 6,
-    cache_lock_debug    = 1 << 7,
+        fatal = 1 << 0,
+        error = 1 << 1,
+        warning = 1 << 2,
+        info = 1 << 3,
+        debug = 1 << 4,
+        link_lock_debug = 1 << 5,
+        network_lock_debug = 1 << 6,
+        cache_lock_debug = 1 << 7,
 } LogType;
 
 /**

@@ -25,12 +25,12 @@ int64_t round_div(int64_t a, int64_t b);
 /**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
-void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x);
+void PTHREAD_MUTEX_LOCK(pthread_mutex_t * x);
 
 /**
  * \brief wrapper for pthread_mutex_unlock(), with error handling
  */
-void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
+void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t * x);
 
 /**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling
@@ -40,7 +40,7 @@ void exit_failure(void);
 /**
  * \brief erase a string from the terminal
  */
-void erase_string(FILE *file, size_t max_len, char *s);
+void erase_string(FILE * file, size_t max_len, char *s);
 
 /**
  * \brief generate the salt for authentication string

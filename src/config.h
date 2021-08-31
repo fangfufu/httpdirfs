@@ -27,9 +27,9 @@
  * \brief Operation modes
  */
 typedef enum {
-    NORMAL = 1,
-    SONIC = 2,
-    SINGLE_FILE = 3,
+        NORMAL = 1,
+        SONIC = 2,
+        SINGLE_FILE = 3,
 } OperationMode;
 
 /**
@@ -39,48 +39,48 @@ typedef enum {
  */
 typedef struct {
     /** \brief Operation Mode */
-    OperationMode mode;
+        OperationMode mode;
     /** \brief Current log level */
-    int log_type;
+        int log_type;
     /*---------------- Network related --------------*/
     /** \brief HTTP username */
-    char *http_username;
+        char *http_username;
     /** \brief HTTP password */
-    char *http_password;
+        char *http_password;
     /** \brief HTTP proxy URL */
-    char *proxy;
+        char *proxy;
     /** \brief HTTP proxy username */
-    char *proxy_username;
+        char *proxy_username;
     /** \brief HTTP proxy password */
-    char *proxy_password;
+        char *proxy_password;
     /** \brief HTTP maximum connection count */
-    long max_conns;
+        long max_conns;
     /** \brief HTTP user agent*/
-    char *user_agent;
+        char *user_agent;
     /** \brief The waiting time after getting HTTP 429 (too many requests) */
-    int http_wait_sec;
+        int http_wait_sec;
     /** \brief Disable check for the server's support of HTTP range request */
-    int no_range_check;
+        int no_range_check;
     /** \brief Disable TLS certificate verification */
-    int insecure_tls;
+        int insecure_tls;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
-    int cache_enabled;
+        int cache_enabled;
     /** \brief The cache location*/
-    char *cache_dir;
+        char *cache_dir;
     /** \brief The size of each download segment for cache mode */
-    int data_blksz;
+        int data_blksz;
     /** \brief The maximum segment count for a single cache file */
-    int max_segbc;
+        int max_segbc;
     /*-------------- Sonic related -------------*/
     /** \brief The Sonic server username */
-    char *sonic_username;
+        char *sonic_username;
     /** \brief The Sonic server password */
-    char *sonic_password;
+        char *sonic_password;
     /** \brief Whether we are using sonic mode ID3 extension */
-    int sonic_id3;
+        int sonic_id3;
     /** \brief Whether we use the legacy sonic authentication mode */
-    int sonic_insecure;
+        int sonic_insecure;
 } ConfigStruct;
 
 /**
