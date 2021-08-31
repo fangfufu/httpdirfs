@@ -70,4 +70,7 @@ void Config_init(void)
     CONFIG.sonic_id3 = 0;
 
     CONFIG.sonic_insecure = 0;
+
+    /*---------- Print version number -----------*/
+    print_version();
 }

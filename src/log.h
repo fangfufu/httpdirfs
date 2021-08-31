@@ -39,3 +39,8 @@ void log_printf(LogType type, const char *file, const char *func, int line,
 #define lprintf(type, ...) \
     log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__);
 #endif
+
+/**
+ * \brief Print the version information for HTTPDirFS
+ */
+void print_version();

@@ -10,7 +10,6 @@
 
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);
-static void print_version();
 static void print_long_help();
 static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
@@ -329,17 +328,6 @@ static void print_help(char *program_name, int long_help)
     if (long_help) {
         print_long_help();
     }
-}
-
-static void print_version()
-{
-    /* FUSE prints its help to stderr */
-    fprintf(stderr, "HTTPDirFS version " VERSION "\n");
-    /*
-     * --------- Print off SSL engine version ---------
-     */
-    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
-    fprintf(stderr, "libcurl SSL engine: %s\n", data->ssl_version);
 }
 
 static void print_long_help()

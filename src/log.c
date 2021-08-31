@@ -3,6 +3,8 @@
 #include "config.h"
 #include "util.h"
 
+#include <curl/curl.h>
+
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,4 +55,15 @@ log_printf(LogType type, const char *file, const char *func, int line,
             exit_failure();
         }
     }
+}
+
+void print_version()
+{
+    /* FUSE prints its help to stderr */
+    lprintf(info, "HTTPDirFS version " VERSION "\n");
+    /*
+     * --------- Print off SSL engine version ---------
+     */
+    curl_version_info_data *data = curl_version_info(CURLVERSION_NOW);
+    lprintf(info, "libcurl SSL engine: %s\n", data->ssl_version);
 }
