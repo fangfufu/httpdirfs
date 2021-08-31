@@ -24,7 +24,7 @@ endif
 
 prefix ?= /usr/local
 
-all: httpdirfs
+all: man
 
 %.o: src/%.c
 	$(CC) $(CPPFLAGS) $(CFLAGS) $(LDFLAGS) -c -o $@ $<
@@ -55,7 +55,7 @@ ifeq ($(OS),Darwin)
 		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1
 endif
 
-man: all
+man: httpdirfs
 	help2man --no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
 
 doc:
@@ -64,10 +64,10 @@ doc:
 clean:
 	-rm -f *.o
 	-rm -f httpdirfs
+	-rm -rf doc/man/httpdirfs.1
 
 distclean: clean
 	-rm -rf doc/html
-	-rm -rf doc/man/httpdirfs.1
 
 uninstall:
 	-rm -f $(DESTDIR)$(prefix)/bin/httpdirfs

@@ -7,7 +7,7 @@ sonicfs
 .depend
 
 # Documentation
-doc
+doc/html
 
 # Editor related
 *.kate-swp
