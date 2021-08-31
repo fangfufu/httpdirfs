@@ -295,7 +295,8 @@ XML_parser_general(void *data, const char *elem, const char **attr)
         }
     }
 
-    if (!linkname_set && strlen(title) > 0 && strlen(suffix) > 0) {
+    if (!linkname_set && strnlen(title, MAX_PATH_LEN) > 0 &&
+        strnlen(suffix, MAX_PATH_LEN) > 0) {
         snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s",
                  track, title, suffix);
         linkname_set = 1;

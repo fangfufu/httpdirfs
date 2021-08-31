@@ -150,7 +150,7 @@ void FREE(void *ptr)
 
 char *str_to_hex(char *s)
 {
-    char *hex = CALLOC(strlen(s) * 2 + 1, sizeof(char));
+    char *hex = CALLOC(strnlen(s, MAX_PATH_LEN) * 2 + 1, sizeof(char));
     for (char *c = s, *h = hex; *c; c++, h += 2) {
         sprintf(h, "%x", *c);
     }

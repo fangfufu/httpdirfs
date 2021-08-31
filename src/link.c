@@ -37,6 +37,7 @@ static LinkTable *single_LinkTable_new(const char *url)
     char *ptr = strrchr(url, '/');
     int dir_len = ptr - url;
     char *dir_name = CALLOC(dir_len + 1, sizeof(char));
+    
     free(dir_name);
     return NULL;
 }
