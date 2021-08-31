@@ -16,30 +16,30 @@ typedef struct Link Link;
 
 /** \brief the link type */
 typedef enum {
-        LINK_HEAD = 'H',
-        LINK_DIR = 'D',
-        LINK_FILE = 'F',
-        LINK_INVALID = 'I',
-        LINK_UNINITIALISED_FILE = 'U'
+    LINK_HEAD = 'H',
+    LINK_DIR = 'D',
+    LINK_FILE = 'F',
+    LINK_INVALID = 'I',
+    LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
 
 /** \brief for storing downloaded data in memory */
 typedef struct {
-        char *data;
-        size_t size;
+    char *data;
+    size_t size;
 } DataStruct;
 
 /** \brief specify the type of data transfer */
 typedef enum {
-        FILESTAT = 's',
-        DATA = 'd'
+    FILESTAT = 's',
+    DATA = 'd'
 } TransferType;
 
 /** \brief for storing the link being transferred, and metadata */
 typedef struct {
-        TransferType type;
-        int transferring;
-        Link *link;
+    TransferType type;
+    int transferring;
+    Link *link;
 } TransferStruct;
 
 /**
@@ -53,21 +53,21 @@ typedef struct LinkTable LinkTable;
  */
 struct Link {
     /** \brief The link name in the last level of the URL */
-        char linkname[MAX_FILENAME_LEN + 1];
+    char linkname[MAX_FILENAME_LEN + 1];
     /** \brief The full URL of the file */
-        char f_url[MAX_PATH_LEN + 1];
+    char f_url[MAX_PATH_LEN + 1];
     /** \brief The type of the link */
-        LinkType type;
+    LinkType type;
     /** \brief CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
-        size_t content_length;
+    size_t content_length;
     /** \brief The next LinkTable level, if it is a LINK_DIR */
-        LinkTable *next_table;
+    LinkTable *next_table;
     /** \brief CURLINFO_FILETIME obtained from the server */
-        long time;
+    long time;
     /** \brief How many times associated cache has been opened */
-        int cache_opened;
+    int cache_opened;
     /** \brief The pointer associated with the cache file */
-        Cache *cache_ptr;
+    Cache *cache_ptr;
     /**
      * \brief Sonic id field
      * \details This is used to store the followings:
@@ -77,18 +77,18 @@ struct Link {
      *  - Sub-directory ID (in the XML response, this is the ID on the "child"
      *    element)
      */
-        char *sonic_id;
+    char *sonic_id;
     /**
      * \brief Sonic directory depth
      * \details This is used exclusively in ID3 mode to store the depth of the
      * current directory.
      */
-        int sonic_depth;
+    int sonic_depth;
 };
 
 struct LinkTable {
-        int num;
-        Link **links;
+    int num;
+    Link **links;
 };
 
 /**

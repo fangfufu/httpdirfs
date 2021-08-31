@@ -12,3 +12,5 @@ doc
 # Editor related
 *.kate-swp
 .vscode
+*.c~
+*.h~
