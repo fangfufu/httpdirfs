@@ -133,15 +133,19 @@ void *CALLOC(size_t nmemb, size_t size)
 {
     void *ptr = calloc(nmemb, size);
     if (!ptr) {
-        lprintf(fatal, "calloc() failed, %s!\n", strerror(errno));
+        lprintf(fatal, "%s!\n", strerror(errno));
     }
     return ptr;
 }
 
 void FREE(void *ptr)
 {
-    free(ptr);
-    ptr = NULL;
+	if (ptr) {
+		free(ptr);
+    	ptr = NULL;
+	} else {
+		lprintf(fatal, "attempted to double free a pointer!\n");
+	}
 }
 
 char *str_to_hex(char *s)
