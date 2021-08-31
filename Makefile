@@ -87,4 +87,4 @@ depend: .depend
 	$(CC) $(CFLAGS) -MM $^ -MF ./.depend;
 include .depend
 
-.PHONY: all doc install clean distclean uninstall depend
+.PHONY: all man doc install clean distclean uninstall depend
