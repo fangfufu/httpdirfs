@@ -11,14 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Single File Mode, which allows the mounting of a single file in a virtual
 directory
-- man page generation in Makefile.
+- Mannual page generation in Makefile.
 
 ###  Changed
 - Improve log / debug output.
 - Removed unnecessary mutex lock/unlocks.
 
 ### Fixed
-- Handling empty files
+- Handling empty files from HTTP server
 
 ## [1.2.2] - 2021-08-08
 ### Fixed
