@@ -30,16 +30,154 @@ int ROOT_LINK_OFFSET = 0;
 static pthread_mutex_t link_lock;
 
 /**
+ * \brief create a new Link
+ */
+static Link *Link_new(const char *linkname, LinkType type)
+{
+    Link *link = CALLOC(1, sizeof(Link));
+
+    strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
+    link->type = type;
+
+    /*
+     * remove the '/' from linkname if it exists
+     */
+    char *c =
+        &(link->linkname[strnlen(link->linkname, MAX_FILENAME_LEN) - 1]);
+    if (*c == '/') {
+        *c = '\0';
+    }
+
+    return link;
+}
+
+static CURL *Link_to_curl(Link * link)
+{
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        lprintf(fatal, "curl_easy_init() failed!\n");
+    }
+    /*
+     * set up some basic curl stuff
+     */
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    /*
+     * for following directories without the '/'
+     */
+    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
+    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
+    curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
+    if (CONFIG.insecure_tls) {
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    }
+    // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+    if (CONFIG.http_username) {
+        curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
+    }
+
+    if (CONFIG.http_password) {
+        curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
+    }
+
+    if (CONFIG.proxy) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
+    }
+
+    if (CONFIG.proxy_username) {
+        curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
+                         CONFIG.proxy_username);
+    }
+
+    if (CONFIG.proxy_password) {
+        curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
+                         CONFIG.proxy_password);
+    }
+
+    return curl;
+}
+
+static void Link_req_file_stat(Link * this_link)
+{
+    CURL *curl = Link_to_curl(this_link);
+    curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+
+    /*
+     * We need to put the variable on the heap, because otherwise the
+     * variable gets popped from the stack as the function returns.
+     *
+     * It gets freed in curl_multi_perform_once();
+     */
+    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
+
+    transfer->link = this_link;
+    transfer->type = FILESTAT;
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+
+    transfer_nonblocking(curl);
+}
+
+/**
+ * \brief Fill in the uninitialised entries in a link table
+ * \details Try and get the stats for each link in the link table. This will get
+ * repeated until the uninitialised entry count drop to zero.
+ */
+static void LinkTable_uninitialised_fill(LinkTable * linktbl)
+{
+    int u;
+    char s[STATUS_LEN];
+    lprintf(debug, "LinkTable_uninitialised_fill(): ... ");
+    do {
+        u = 0;
+        for (int i = 0; i < linktbl->num; i++) {
+            Link *this_link = linktbl->links[i];
+            if (this_link->type == LINK_UNINITIALISED_FILE) {
+                Link_req_file_stat(linktbl->links[i]);
+                u++;
+            }
+        }
+        /*
+         * Block until the gaps are filled
+         */
+        int n = curl_multi_perform_once();
+        int i = 0;
+        int j = 0;
+        while ((i = curl_multi_perform_once())) {
+            if (CONFIG.log_type & debug) {
+                if (j) {
+                    erase_string(stderr, STATUS_LEN, s);
+                }
+                snprintf(s, STATUS_LEN, "%d / %d", n - i, n);
+                fprintf(stderr, "%s", s);
+                j++;
+            }
+        }
+    }
+    while (u);
+    if (CONFIG.log_type & debug) {
+        erase_string(stderr, STATUS_LEN, s);
+        fprintf(stderr, "... Done!\n");
+    }
+}
+
+/**
  * \brief Create the root linktable for single file mode
  */
 static LinkTable *single_LinkTable_new(const char *url)
 {
-    char *ptr = strrchr(url, '/');
-    int dir_len = ptr - url;
-    char *dir_name = CALLOC(dir_len + 1, sizeof(char));
-    
-    free(dir_name);
-    return NULL;
+    char *ptr = strrchr(url, '/') + 1;
+    LinkTable *linktbl = LinkTable_alloc(url);
+    Link *link = Link_new(ptr, LINK_UNINITIALISED_FILE);
+    strncpy(link->f_url, url, MAX_FILENAME_LEN);
+    LinkTable_add(linktbl, link);
+    LinkTable_uninitialised_fill(linktbl);
+    LinkTable_print(linktbl);
+    return linktbl;
 }
 
 LinkTable *LinkSystem_init(const char *raw_url)
@@ -79,6 +217,8 @@ LinkTable *LinkSystem_init(const char *raw_url)
      */
     if (CONFIG.mode == NORMAL) {
         ROOT_LINK_TBL = LinkTable_new(url);
+    } else if (CONFIG.mode == SINGLE) {
+        ROOT_LINK_TBL = single_LinkTable_new(url);
     } else if (CONFIG.mode == SONIC) {
         sonic_config_init(url, CONFIG.sonic_username,
                           CONFIG.sonic_password);
@@ -103,28 +243,6 @@ void LinkTable_add(LinkTable * linktbl, Link * link)
         lprintf(fatal, "realloc() failure!\n");
     }
     linktbl->links[linktbl->num - 1] = link;
-}
-
-/**
- * \brief create a new Link
- */
-static Link *Link_new(const char *linkname, LinkType type)
-{
-    Link *link = CALLOC(1, sizeof(Link));
-
-    strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
-    link->type = type;
-
-    /*
-     * remove the '/' from linkname if it exists
-     */
-    char *c =
-        &(link->linkname[strnlen(link->linkname, MAX_FILENAME_LEN) - 1]);
-    if (*c == '/') {
-        *c = '\0';
-    }
-
-    return link;
 }
 
 static LinkType linkname_to_LinkType(const char *linkname)
@@ -219,77 +337,6 @@ static void HTML_to_LinkTable(GumboNode * node, LinkTable * linktbl)
     return;
 }
 
-static CURL *Link_to_curl(Link * link)
-{
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        lprintf(fatal, "curl_easy_init() failed!\n");
-    }
-    /*
-     * set up some basic curl stuff
-     */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    /*
-     * for following directories without the '/'
-     */
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
-    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
-    curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
-    if (CONFIG.insecure_tls) {
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
-    }
-    // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-
-    if (CONFIG.http_username) {
-        curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
-    }
-
-    if (CONFIG.http_password) {
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
-    }
-
-    if (CONFIG.proxy) {
-        curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
-    }
-
-    if (CONFIG.proxy_username) {
-        curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
-                         CONFIG.proxy_username);
-    }
-
-    if (CONFIG.proxy_password) {
-        curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
-                         CONFIG.proxy_password);
-    }
-
-    return curl;
-}
-
-static void Link_req_file_stat(Link * this_link)
-{
-    CURL *curl = Link_to_curl(this_link);
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-
-    /*
-     * We need to put the variable on the heap, because otherwise the
-     * variable gets popped from the stack as the function returns.
-     *
-     * It gets freed in curl_multi_perform_once();
-     */
-    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
-
-    transfer->link = this_link;
-    transfer->type = FILESTAT;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
-
-    transfer_nonblocking(curl);
-}
-
 void Link_set_file_stat(Link * this_link, CURL * curl)
 {
     long http_resp;
@@ -312,49 +359,6 @@ void Link_set_file_stat(Link * this_link, CURL * curl)
             this_link->type = LINK_INVALID;
             lprintf(warning, ".\n");
         }
-    }
-}
-
-/**
- * \brief Fill in the uninitialised entries in a link table
- * \details Try and get the stats for each link in the link table. This will get
- * repeated until the uninitialised entry count drop to zero.
- */
-static void LinkTable_uninitialised_fill(LinkTable * linktbl)
-{
-    int u;
-    char s[STATUS_LEN];
-    lprintf(debug, "LinkTable_uninitialised_fill(): ... ");
-    do {
-        u = 0;
-        for (int i = 0; i < linktbl->num; i++) {
-            Link *this_link = linktbl->links[i];
-            if (this_link->type == LINK_UNINITIALISED_FILE) {
-                Link_req_file_stat(linktbl->links[i]);
-                u++;
-            }
-        }
-        /*
-         * Block until the gaps are filled
-         */
-        int n = curl_multi_perform_once();
-        int i = 0;
-        int j = 0;
-        while ((i = curl_multi_perform_once())) {
-            if (CONFIG.log_type & debug) {
-                if (j) {
-                    erase_string(stderr, STATUS_LEN, s);
-                }
-                snprintf(s, STATUS_LEN, "%d / %d", n - i, n);
-                fprintf(stderr, "%s", s);
-                j++;
-            }
-        }
-    }
-    while (u);
-    if (CONFIG.log_type & debug) {
-        erase_string(stderr, STATUS_LEN, s);
-        fprintf(stderr, "... Done!\n");
     }
 }
 

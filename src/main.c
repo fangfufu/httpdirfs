@@ -295,7 +295,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
                  */
                 break;
             case 22:
-                CONFIG.mode = SINGLE_FILE;
+                CONFIG.mode = SINGLE;
                 break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");

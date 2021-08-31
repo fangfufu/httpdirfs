@@ -29,7 +29,7 @@
 typedef enum {
     NORMAL = 1,
     SONIC = 2,
-    SINGLE_FILE = 3,
+    SINGLE = 3,
 } OperationMode;
 
 /**

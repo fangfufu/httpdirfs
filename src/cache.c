@@ -666,10 +666,14 @@ int Cache_create(const char *path)
 {
     Link *this_link = path_to_Link(path);
 
-    char *fn = "";
+    char *fn = "__UNINITIALISED__";
     if (CONFIG.mode == NORMAL) {
         fn = curl_easy_unescape(NULL,
                                 this_link->f_url + ROOT_LINK_OFFSET, 0,
+                                NULL);
+    } else if (CONFIG.mode == SINGLE) {
+        fn = curl_easy_unescape(NULL,
+                                this_link->linkname, 0,
                                 NULL);
     } else if (CONFIG.mode == SONIC) {
         fn = this_link->sonic_id;
@@ -751,7 +755,7 @@ Cache *Cache_open(const char *fn)
     /*
      * Check if both metadata and data file exist
      */
-    if (CONFIG.mode == NORMAL) {
+    if (CONFIG.mode == NORMAL || CONFIG.mode == SINGLE) {
         if (Cache_exist(fn)) {
 
             lprintf(cache_lock_debug,
