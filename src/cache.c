@@ -605,14 +605,15 @@ static int Data_open(Cache * cf)
 {
     char *datafn = path_append(DATA_DIR, cf->path);
     cf->dfp = fopen(datafn, "r+");
-    FREE(datafn);
     if (!cf->dfp) {
         /*
          * Failed to open the data file
          */
         lprintf(error, "fopen(%s): %s\n", datafn, strerror(errno));
+        FREE(datafn);
         return -1;
     }
+    FREE(datafn);
     return 0;
 }
 
@@ -634,7 +635,7 @@ static int Meta_open(Cache * cf)
         FREE(metafn);
         return -1;
     }
-    // FREE(metafn);
+    FREE(metafn);
     return 0;
 }
 
@@ -657,7 +658,7 @@ static void Meta_create(Cache * cf)
                 "cannot close metadata after creation: %s.\n",
                 strerror(errno));
     }
-    // FREE(metafn);
+    FREE(metafn);
 }
 
 int Cache_create(const char *path)
