@@ -5,6 +5,25 @@
  * \brief Sonic related function
  */
 
+typedef struct {
+    /**
+     * \brief Sonic id field
+     * \details This is used to store the followings:
+     *  - Arist ID
+     *  - Album ID
+     *  - Song ID
+     *  - Sub-directory ID (in the XML response, this is the ID on the "child"
+     *    element)
+     */
+    char *id;
+    /**
+     * \brief Sonic directory depth
+     * \details This is used exclusively in ID3 mode to store the depth of the
+     * current directory.
+     */
+    int depth;
+} Sonic;
+
 #include "link.h"
 
 /**

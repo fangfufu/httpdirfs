@@ -1,5 +1,6 @@
 #include "network.h"
 
+#include "util.h"
 #include "cache.h"
 #include "config.h"
 #include "log.h"

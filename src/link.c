@@ -1,5 +1,6 @@
 #include "link.h"
 
+#include "util.h"
 #include "cache.h"
 #include "network.h"
 #include "sonic.h"
@@ -677,11 +678,11 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
             next_table = LinkTable_new(link->f_url);
         } else if (CONFIG.mode == SONIC) {
             if (!CONFIG.sonic_id3) {
-                next_table = sonic_LinkTable_new_index(link->sonic_id);
+                next_table = sonic_LinkTable_new_index(link->sonic.id);
             } else {
                 next_table =
-                    sonic_LinkTable_new_id3(link->sonic_depth,
-                                            link->sonic_id);
+                    sonic_LinkTable_new_id3(link->sonic.depth,
+                                            link->sonic.id);
             }
         } else {
             lprintf(fatal, "Invalid CONFIG.mode\n");
@@ -752,13 +753,13 @@ static Link *path_to_Link_recursive(char *path, LinkTable * linktbl)
                         if (!CONFIG.sonic_id3) {
                             next_table =
                                 sonic_LinkTable_new_index
-                                (linktbl->links[i]->sonic_id);
+                                (linktbl->links[i]->sonic.id);
                         } else {
                             next_table =
                                 sonic_LinkTable_new_id3
                                 (linktbl->links
-                                 [i]->sonic_depth,
-                                 linktbl->links[i]->sonic_id);
+                                 [i]->sonic.depth,
+                                 linktbl->links[i]->sonic.id);
                         }
                     } else {
                         lprintf(fatal, "Invalid CONFIG.mode\n");

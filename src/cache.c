@@ -1,5 +1,7 @@
 #include "cache.h"
+
 #include "config.h"
+#include "util.h"
 #include "log.h"
 
 #include <sys/stat.h>
@@ -575,7 +577,7 @@ void Cache_delete(const char *fn)
 {
     if (CONFIG.mode == SONIC) {
         Link *link = path_to_Link(fn);
-        fn = link->sonic_id;
+        fn = link->sonic.id;
     }
 
     char *metafn = path_append(META_DIR, fn);
@@ -673,7 +675,7 @@ int Cache_create(const char *path)
     } else if (CONFIG.mode == SINGLE) {
         fn = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
     } else if (CONFIG.mode == SONIC) {
-        fn = this_link->sonic_id;
+        fn = this_link->sonic.id;
     } else {
         lprintf(fatal, "Invalid CONFIG.mode\n");
     }
@@ -755,7 +757,7 @@ Cache *Cache_open(const char *fn)
             return NULL;
         }
     } else if (CONFIG.mode == SONIC) {
-        if (Cache_exist(link->sonic_id)) {
+        if (Cache_exist(link->sonic.id)) {
 
             lprintf(cache_lock_debug,
                     "thread %x: unlocking cf_lock;\n", pthread_self());
@@ -781,7 +783,7 @@ Cache *Cache_open(const char *fn)
      * Set the path for the local cache file, if we are in sonic mode
      */
     if (CONFIG.mode == SONIC) {
-        fn = link->sonic_id;
+        fn = link->sonic.id;
     }
 
     cf->path = strndup(fn, MAX_PATH_LEN);

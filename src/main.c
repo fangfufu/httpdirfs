@@ -1,4 +1,5 @@
 #include "config.h"
+#include "util.h"
 #include "cache.h"
 #include "fuse_local.h"
 #include "network.h"

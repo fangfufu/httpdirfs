@@ -5,16 +5,18 @@
  * \file link.h
  * \brief link related structures and functions
  */
+
+typedef struct Link Link;
+typedef struct LinkTable LinkTable;
+
+#include "sonic.h"
 #include "config.h"
-#include "util.h"
+#include "cache.h"
 #include <curl/curl.h>
 
-/** \brief Link type */
-typedef struct Link Link;
-
-#include "cache.h"
-
-/** \brief the link type */
+/**
+ * \brief the link type
+ */
 typedef enum {
     LINK_HEAD = 'H',
     LINK_DIR = 'D',
@@ -23,33 +25,13 @@ typedef enum {
     LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
 
-/** \brief specify the type of data transfer */
+/**
+ * \brief specify the type of data transfer 
+ */
 typedef enum {
     FILESTAT = 's',
     DATA = 'd'
 } TransferType;
-
-/** \brief For storing transfer data */
-typedef struct {
-    /** \brief The array to store the data */
-    char *data;
-    /** \brief The size of the array */
-    size_t size;
-    /** \brief The minium requested size */
-    size_t min_req_size;
-    /** \brief The type of transfer being done */
-    TransferType type;
-    /** \brief Whether transfer is in progress */
-    int transferring;
-    /** \brief The link associated with the transfer */
-    Link *link;
-} TransferStruct;
-
-/**
- * \brief link table type
- * \details index 0 contains the Link for the base URL
- */
-typedef struct LinkTable LinkTable;
 
 /**
  * \brief Link type data structure
@@ -69,28 +51,34 @@ struct Link {
     long time;
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
-    /**
-     * \brief Sonic id field
-     * \details This is used to store the followings:
-     *  - Arist ID
-     *  - Album ID
-     *  - Song ID
-     *  - Sub-directory ID (in the XML response, this is the ID on the "child"
-     *    element)
-     */
-    char *sonic_id;
-    /**
-     * \brief Sonic directory depth
-     * \details This is used exclusively in ID3 mode to store the depth of the
-     * current directory.
-     */
-    int sonic_depth;
+    /** \brief Stores *sonic related data */
+    Sonic sonic;
 };
 
+/**
+ * \brief link table type
+ * \details index 0 contains the Link for the base URL
+ */
 struct LinkTable {
     int num;
     Link **links;
 };
+
+/** \brief For storing transfer data */
+typedef struct {
+    /** \brief The array to store the data */
+    char *data;
+    /** \brief The size of the array */
+    size_t size;
+    /** \brief The minium requested size */
+    size_t min_req_size;
+    /** \brief The type of transfer being done */
+    TransferType type;
+    /** \brief Whether transfer is in progress */
+    int transferring;
+    /** \brief The link associated with the transfer */
+    Link *link;
+} TransferStruct;
 
 /**
  * \brief root link table
