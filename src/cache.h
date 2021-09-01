@@ -27,6 +27,9 @@ typedef uint8_t Seg;
  * \brief cache data type in-memory data structure
  */
 struct Cache {
+    /** \brief How many times the cache has been opened */
+    int cache_opened;
+
     /** \brief the FILE pointer for the data file*/
     FILE *dfp;
     /** \brief the FILE pointer for the metadata */

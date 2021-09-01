@@ -68,8 +68,6 @@ struct Link {
     LinkTable *next_table;
     /** \brief CURLINFO_FILETIME obtained from the server */
     long time;
-    /** \brief How many times associated cache has been opened */
-    int cache_opened;
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
     /**

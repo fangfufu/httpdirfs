@@ -734,8 +734,8 @@ Cache *Cache_open(const char *fn)
             "thread %x: locking cf_lock;\n", pthread_self());
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
-    if (link->cache_opened) {
-        link->cache_opened++;
+    if (link->cache_ptr) {
+        link->cache_ptr->cache_opened++;
 
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock;\n", pthread_self());
@@ -853,7 +853,7 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
         return NULL;
     }
 
-    cf->link->cache_opened = 1;
+    cf->cache_opened = 1;
     /*
      * Yup, we just created a circular loop. ;)
      */
@@ -871,9 +871,9 @@ void Cache_close(Cache * cf)
             "thread %x: locking cf_lock;\n", pthread_self());
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
-    cf->link->cache_opened--;
+    cf->cache_opened--;
 
-    if (cf->link->cache_opened > 0) {
+    if (cf->cache_opened > 0) {
 
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock;\n", pthread_self());
