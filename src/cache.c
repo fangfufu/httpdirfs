@@ -634,7 +634,7 @@ static int Meta_open(Cache * cf)
         FREE(metafn);
         return -1;
     }
-    FREE(metafn);
+    // FREE(metafn);
     return 0;
 }
 
@@ -652,7 +652,12 @@ static void Meta_create(Cache * cf)
          */
         lprintf(fatal, "fopen(%s): %s\n", metafn, strerror(errno));
     }
-    FREE(metafn);
+    if (fclose(cf->mfp)) {
+        lprintf(error,
+                "cannot close metadata after creation: %s.\n",
+                strerror(errno));
+    }
+    // FREE(metafn);
 }
 
 int Cache_create(const char *path)
@@ -682,12 +687,6 @@ int Cache_create(const char *path)
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
     Meta_create(cf);
-
-    if (fclose(cf->mfp)) {
-        lprintf(error,
-                "cannot close metadata after creation: %s.\n",
-                strerror(errno));
-    }
 
     if (Meta_open(cf)) {
         Cache_free(cf);

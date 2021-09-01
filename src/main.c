@@ -164,6 +164,7 @@ void parse_config_file(char ***argv, int *argc)
         }
     }
     FREE(full_path);
+    fclose(config);
 }
 
 static int
