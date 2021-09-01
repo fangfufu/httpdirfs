@@ -113,7 +113,7 @@ static void Link_req_file_stat(Link * this_link)
      *
      * It gets freed in curl_multi_perform_once();
      */
-    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
+    TransferStatusStruct *transfer = CALLOC(1, sizeof(TransferStatusStruct));
 
     transfer->link = this_link;
     transfer->type = FILESTAT;
@@ -434,12 +434,12 @@ void LinkTable_print(LinkTable * linktbl)
     }
 }
 
-DataStruct Link_to_DataStruct(Link * head_link)
+TransferDataStruct Link_to_TransferDataStruct(Link * head_link)
 {
     char *url = head_link->f_url;
     CURL *curl = Link_to_curl(head_link);
 
-    DataStruct buf;
+    TransferDataStruct buf;
     buf.size = 0;
     buf.data = NULL;
 
@@ -493,7 +493,7 @@ LinkTable *LinkTable_new(const char *url)
     /*
      * start downloading the base URL
      */
-    DataStruct buf = Link_to_DataStruct(linktbl->links[0]);
+    TransferDataStruct buf = Link_to_TransferDataStruct(linktbl->links[0]);
     if (buf.size == 0) {
         LinkTable_free(linktbl);
         return NULL;
@@ -792,7 +792,7 @@ Link *path_to_Link(const char *path)
 }
 
 long
-path_download(const char *path, char *output_buf, size_t size,
+path_download(const char *path, char *output_buf, size_t req_size,
               off_t offset)
 {
     if (!path) {
@@ -805,12 +805,12 @@ path_download(const char *path, char *output_buf, size_t size,
     }
 
     size_t start = offset;
-    size_t end = start + size;
+    size_t end = start + req_size;
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
     lprintf(debug, "path_download(%s, %s);\n", path, range_str);
 
-    DataStruct buf;
+    TransferDataStruct buf;
     buf.size = 0;
     buf.data = NULL;
 
@@ -818,7 +818,7 @@ path_download(const char *path, char *output_buf, size_t size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    DataStruct header;
+    TransferDataStruct header;
     header.size = 0;
     header.data = NULL;
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &header);
@@ -849,18 +849,19 @@ range requests\n");
         return -ENOENT;
     }
 
-    double dl;
-    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD, &dl);
+    curl_off_t recv;
+    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
 
-    size_t recv = dl;
-    if (recv > size) {
-        recv = size;
+    /* The extra 1 byte is probably for '\0' */
+    if (recv - 1 == (long int) req_size) {
+        recv--;
+    } else {
+        lprintf(error, "req_size: %lu, recv: %ld\n", req_size, recv);
     }
 
     memmove(output_buf, buf.data, recv);
     curl_easy_cleanup(curl);
     FREE(buf.data);
 
-    lprintf(debug, "recv: %lu bytes\n", recv);
     return recv;
 }
