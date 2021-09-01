@@ -1,6 +1,5 @@
 # Binaries
 httpdirfs
-sonicfs
 
 # Intermediates
 *.o
@@ -14,3 +13,6 @@ doc/html
 .vscode
 *.c~
 *.h~
+
+#Others
+mnt

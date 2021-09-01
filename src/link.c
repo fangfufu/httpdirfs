@@ -131,7 +131,7 @@ static void LinkTable_uninitialised_fill(LinkTable * linktbl)
 {
     int u;
     char s[STATUS_LEN];
-    lprintf(debug, "LinkTable_uninitialised_fill(): ... ");
+    lprintf(debug, " ... ");
     do {
         u = 0;
         for (int i = 0; i < linktbl->num; i++) {
@@ -796,7 +796,7 @@ path_download(const char *path, char *output_buf, size_t req_size,
               off_t offset)
 {
     if (!path) {
-        lprintf(fatal, "\npath_download(): NULL path supplied\n");
+        lprintf(fatal, "NULL path supplied\n");
     }
     Link *link;
     link = path_to_Link(path);
@@ -808,7 +808,7 @@ path_download(const char *path, char *output_buf, size_t req_size,
     size_t end = start + req_size;
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    lprintf(debug, "path_download(%s, %s);\n", path, range_str);
+    lprintf(debug, "%s: %s\n", path, range_str);
 
     TransferDataStruct buf;
     buf.size = 0;
@@ -855,7 +855,7 @@ range requests\n");
     /* The extra 1 byte is probably for '\0' */
     if (recv - 1 == (long int) req_size) {
         recv--;
-    } else {
+    } else if (offset + req_size < link->content_length) {
         lprintf(error, "req_size: %lu, recv: %ld\n", req_size, recv);
     }
 
