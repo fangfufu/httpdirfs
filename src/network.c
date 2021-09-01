@@ -117,7 +117,7 @@ curl_process_msgs(CURLMsg * curl_msg, int n_running_curl, int n_mesgs)
     (void) n_mesgs;
     static volatile int slept = 0;
     if (curl_msg->msg == CURLMSG_DONE) {
-        TransferStatusStruct *transfer;
+        TransferStruct *transfer;
         CURL *curl = curl_msg->easy_handle;
         curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
                           &transfer);
@@ -311,7 +311,7 @@ void transfer_blocking(CURL * curl)
      * We don't need to malloc here, as the transfer is finished before
      * the variable gets popped from the stack
      */
-    volatile TransferStatusStruct transfer;
+    volatile TransferStruct transfer;
     transfer.type = DATA;
     transfer.transferring = 1;
     curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
@@ -357,7 +357,7 @@ write_memory_callback(void *contents, size_t size, size_t nmemb,
                       void *userp)
 {
     size_t realsize = size * nmemb;
-    TransferDataStruct *mem = (TransferDataStruct *) userp;
+    TransferStruct *mem = (TransferStruct *) userp;
 
     mem->data = realloc(mem->data, mem->size + realsize + 1);
     if (!mem->data) {

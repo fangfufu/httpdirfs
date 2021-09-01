@@ -23,6 +23,12 @@ typedef enum {
     LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
 
+/** \brief specify the type of data transfer */
+typedef enum {
+    FILESTAT = 's',
+    DATA = 'd'
+} TransferType;
+
 /** \brief For storing transfer data */
 typedef struct {
     /** \brief The array to store the data */
@@ -31,20 +37,13 @@ typedef struct {
     size_t size;
     /** \brief The minium requested size */
     size_t min_req_size;
-} TransferDataStruct;
-
-/** \brief specify the type of data transfer */
-typedef enum {
-    FILESTAT = 's',
-    DATA = 'd'
-} TransferType;
-
-/** \brief For storing transfer status and metadata */
-typedef struct {
+    /** \brief The type of transfer being done */
     TransferType type;
+    /** \brief Whether transfer is in progress */
     int transferring;
+    /** \brief The link associated with the transfer */
     Link *link;
-} TransferStatusStruct;
+} TransferStruct;
 
 /**
  * \brief link table type
@@ -147,9 +146,9 @@ LinkTable *LinkTable_disk_open(const char *dirn);
 
 /**
  * \brief Download a link's content to the memory
- * \warning You MUST free the memory field in TransferDataStruct after use!
+ * \warning You MUST free the memory field in TransferStruct after use!
  */
-TransferDataStruct Link_to_TransferDataStruct(Link * head_link);
+TransferStruct Link_to_TransferStruct(Link * head_link);
 
 /**
  * \brief Allocate a LinkTable

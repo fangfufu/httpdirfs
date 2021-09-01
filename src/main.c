@@ -144,11 +144,11 @@ void parse_config_file(char ***argv, int *argc)
                 char *space;
                 space = strchr(buf, ' ');
                 if (!space) {
-                    *argv = realloc(*argv, *argc * sizeof(char **));
+                    *argv = realloc(*argv, *argc * sizeof(char *));
                     (*argv)[*argc - 1] = strndup(buf, buf_len);
                 } else {
                     (*argc)++;
-                    *argv = realloc(*argv, *argc * sizeof(char **));
+                    *argv = realloc(*argv, *argc * sizeof(char *));
                     /*
                      * Only copy up to the space character
                      */

@@ -113,7 +113,7 @@ static void Link_req_file_stat(Link * this_link)
      *
      * It gets freed in curl_multi_perform_once();
      */
-    TransferStatusStruct *transfer = CALLOC(1, sizeof(TransferStatusStruct));
+    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
 
     transfer->link = this_link;
     transfer->type = FILESTAT;
@@ -434,12 +434,12 @@ void LinkTable_print(LinkTable * linktbl)
     }
 }
 
-TransferDataStruct Link_to_TransferDataStruct(Link * head_link)
+TransferStruct Link_to_TransferStruct(Link * head_link)
 {
     char *url = head_link->f_url;
     CURL *curl = Link_to_curl(head_link);
 
-    TransferDataStruct buf;
+    TransferStruct buf;
     buf.size = 0;
     buf.data = NULL;
 
@@ -493,7 +493,7 @@ LinkTable *LinkTable_new(const char *url)
     /*
      * start downloading the base URL
      */
-    TransferDataStruct buf = Link_to_TransferDataStruct(linktbl->links[0]);
+    TransferStruct buf = Link_to_TransferStruct(linktbl->links[0]);
     if (buf.size == 0) {
         LinkTable_free(linktbl);
         return NULL;
@@ -810,7 +810,7 @@ path_download(const char *path, char *output_buf, size_t req_size,
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
     lprintf(debug, "%s: %s\n", path, range_str);
 
-    TransferDataStruct buf;
+    TransferStruct buf;
     buf.size = 0;
     buf.data = NULL;
 
@@ -818,7 +818,7 @@ path_download(const char *path, char *output_buf, size_t req_size,
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buf);
     curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
 
-    TransferDataStruct header;
+    TransferStruct header;
     header.size = 0;
     header.data = NULL;
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &header);
