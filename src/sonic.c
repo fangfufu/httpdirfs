@@ -332,7 +332,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     /*
      * start downloading the base URL
      */
-    TransferStruct xml = Link_to_TransferStruct(linktbl->links[0]);
+    TransferStruct xml = Link_download_full(linktbl->links[0]);
     if (xml.size == 0) {
         LinkTable_free(linktbl);
         return NULL;

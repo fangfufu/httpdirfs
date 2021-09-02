@@ -112,7 +112,7 @@ static void Link_req_file_stat(Link * this_link)
      * We need to put the variable on the heap, because otherwise the
      * variable gets popped from the stack as the function returns.
      *
-     * It gets freed in curl_multi_perform_once();
+     * It gets freed in curl_process_msgs();
      */
     TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
 
@@ -435,10 +435,10 @@ void LinkTable_print(LinkTable * linktbl)
     }
 }
 
-TransferStruct Link_to_TransferStruct(Link * head_link)
+TransferStruct Link_download_full(Link * link)
 {
-    char *url = head_link->f_url;
-    CURL *curl = Link_to_curl(head_link);
+    char *url = link->f_url;
+    CURL *curl = Link_to_curl(link);
 
     TransferStruct buf;
     buf.size = 0;
@@ -468,7 +468,7 @@ TransferStruct Link_to_TransferStruct(Link * head_link)
     }
     while (HTTP_temp_failure(http_resp));
 
-    curl_easy_getinfo(curl, CURLINFO_FILETIME, &(head_link->time));
+    curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
     curl_easy_cleanup(curl);
     return buf;
 }
@@ -494,7 +494,7 @@ LinkTable *LinkTable_new(const char *url)
     /*
      * start downloading the base URL
      */
-    TransferStruct buf = Link_to_TransferStruct(linktbl->links[0]);
+    TransferStruct buf = Link_download_full(linktbl->links[0]);
     if (buf.size == 0) {
         LinkTable_free(linktbl);
         return NULL;
@@ -793,23 +793,14 @@ Link *path_to_Link(const char *path)
 }
 
 long
-path_download(const char *path, char *output_buf, size_t req_size,
+Link_download(Link *link, char *output_buf, size_t req_size,
               off_t offset)
 {
-    if (!path) {
-        lprintf(fatal, "NULL path supplied\n");
-    }
-    Link *link;
-    link = path_to_Link(path);
-    if (!link) {
-        return -ENOENT;
-    }
-
     size_t start = offset;
     size_t end = start + req_size;
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    lprintf(debug, "%s: %s\n", path, range_str);
+    lprintf(debug, "%s: %s\n", link->linkname, range_str);
 
     TransferStruct buf;
     buf.size = 0;
@@ -865,4 +856,20 @@ range requests\n");
     FREE(buf.data);
 
     return recv;
+}
+
+long
+path_download(const char *path, char *output_buf, size_t req_size,
+              off_t offset)
+{
+    if (!path) {
+        lprintf(fatal, "NULL path supplied\n");
+    }
+    Link *link;
+    link = path_to_Link(path);
+    if (!link) {
+        return -ENOENT;
+    }
+
+    return Link_download(link, output_buf, req_size, offset);
 }

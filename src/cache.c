@@ -89,7 +89,7 @@ static char *CacheSystem_calc_dir(const char *url)
 
 void CacheSystem_init(const char *path, int url_supplied)
 {
-    if (pthread_mutex_init(&cf_lock, NULL)) {
+    if (pthread_mutex_lock(&cf_lock, NULL)) {
         lprintf(fatal, "cf_lock initialisation failed!\n");
     }
 
@@ -940,7 +940,7 @@ static void *Cache_bgdl(void *arg)
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     lprintf(debug, "thread %x spawned.\n ", pthread_self());
-    long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
+    long recv = Link_download(cf->link, (char *) recv_buf, cf->blksz,
                               cf->next_dl_offset);
     if (recv < 0) {
         lprintf(error, "thread %x received %ld bytes, \
@@ -1019,7 +1019,7 @@ Cache_read(Cache * cf, char *const output_buf, const off_t len,
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     lprintf(debug, "thread %x: spawned.\n ", pthread_self());
-    long recv = path_download(cf->fs_path, (char *) recv_buf, cf->blksz,
+    long recv = Link_download(cf->link, (char *) recv_buf, cf->blksz,
                               dl_offset);
     if (recv < 0) {
         lprintf(error, "thread %x received %ld bytes, \

@@ -34,6 +34,33 @@ typedef enum {
 } TransferType;
 
 /**
+ * \brief For storing transfer data and metadata 
+ */
+typedef struct {
+    /** \brief The array to store the data */
+    char *data;
+    /** \brief The size of the array */
+    size_t size;
+    /** \brief The minium requested size */
+    size_t min_req_size;
+    /** \brief The type of transfer being done */
+    TransferType type;
+    /** \brief Whether transfer is in progress */
+    int transferring;
+    /** \brief The link associated with the transfer */
+    Link *link;
+} TransferStruct;
+
+/**
+ * \brief link table type
+ * \details index 0 contains the Link for the base URL
+ */
+struct LinkTable {
+    int num;
+    Link **links;
+};
+
+/**
  * \brief Link type data structure
  */
 struct Link {
@@ -51,34 +78,11 @@ struct Link {
     long time;
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
+    /** \brief The pointer associated with the transfer struct */
+    TransferStruct *ts_ptr;
     /** \brief Stores *sonic related data */
     Sonic sonic;
 };
-
-/**
- * \brief link table type
- * \details index 0 contains the Link for the base URL
- */
-struct LinkTable {
-    int num;
-    Link **links;
-};
-
-/** \brief For storing transfer data */
-typedef struct {
-    /** \brief The array to store the data */
-    char *data;
-    /** \brief The size of the array */
-    size_t size;
-    /** \brief The minium requested size */
-    size_t min_req_size;
-    /** \brief The type of transfer being done */
-    TransferType type;
-    /** \brief Whether transfer is in progress */
-    int transferring;
-    /** \brief The link associated with the transfer */
-    Link *link;
-} TransferStruct;
 
 /**
  * \brief root link table
@@ -106,11 +110,17 @@ void Link_set_file_stat(Link * this_link, CURL * curl);
 LinkTable *LinkTable_new(const char *url);
 
 /**
- * \brief download a link
+ * \brief download a path
  * \return the number of bytes downloaded
  */
 long path_download(const char *path, char *output_buf, size_t size,
                    off_t offset);
+
+/**
+ * \brief Download a Link
+ * \return the number of bytes downloaded
+ */
+long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset);
 
 /**
  * \brief find the link associated with a path
@@ -136,7 +146,7 @@ LinkTable *LinkTable_disk_open(const char *dirn);
  * \brief Download a link's content to the memory
  * \warning You MUST free the memory field in TransferStruct after use!
  */
-TransferStruct Link_to_TransferStruct(Link * head_link);
+TransferStruct Link_download_full(Link * head_link);
 
 /**
  * \brief Allocate a LinkTable
