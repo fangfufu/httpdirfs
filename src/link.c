@@ -435,44 +435,6 @@ void LinkTable_print(LinkTable * linktbl)
     }
 }
 
-TransferStruct Link_download_full(Link * link)
-{
-    char *url = link->f_url;
-    CURL *curl = Link_to_curl(link);
-
-    TransferStruct buf;
-    buf.size = 0;
-    buf.data = NULL;
-
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buf);
-
-    /*
-     * If we get temporary HTTP failure, wait for 5 seconds before retry
-     */
-    long http_resp = 0;
-    do {
-        transfer_blocking(curl);
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-        if (HTTP_temp_failure(http_resp)) {
-            lprintf(warning,
-                    "URL: %s, HTTP %ld, retrying later.\n",
-                    url, http_resp);
-            sleep(CONFIG.http_wait_sec);
-        } else if (http_resp != HTTP_OK) {
-            lprintf(warning,
-                    "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
-            buf.size = 0;
-            curl_easy_cleanup(curl);
-            return buf;
-        }
-    }
-    while (HTTP_temp_failure(http_resp));
-
-    curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
-    curl_easy_cleanup(curl);
-    return buf;
-}
-
 LinkTable *LinkTable_alloc(const char *url)
 {
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
@@ -792,10 +754,52 @@ Link *path_to_Link(const char *path)
     return link;
 }
 
+TransferStruct Link_download_full(Link * link)
+{
+    char *url = link->f_url;
+    CURL *curl = Link_to_curl(link);
+
+    TransferStruct buf;
+    buf.size = 0;
+    buf.data = NULL;
+
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buf);
+
+    /*
+     * If we get temporary HTTP failure, wait for 5 seconds before retry
+     */
+    long http_resp = 0;
+    do {
+        transfer_blocking(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (HTTP_temp_failure(http_resp)) {
+            lprintf(warning,
+                    "URL: %s, HTTP %ld, retrying later.\n",
+                    url, http_resp);
+            sleep(CONFIG.http_wait_sec);
+        } else if (http_resp != HTTP_OK) {
+            lprintf(warning,
+                    "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
+            buf.size = 0;
+            curl_easy_cleanup(curl);
+            return buf;
+        }
+    }
+    while (HTTP_temp_failure(http_resp));
+
+    curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
+    curl_easy_cleanup(curl);
+    return buf;
+}
+
 long
 Link_download(Link *link, char *output_buf, size_t req_size,
               off_t offset)
 {
+    if (!link) {
+        lprintf(fatal, "Invalid supplied\n");
+    }
+
     size_t start = offset;
     size_t end = start + req_size;
     char range_str[64];
@@ -865,6 +869,7 @@ path_download(const char *path, char *output_buf, size_t req_size,
     if (!path) {
         lprintf(fatal, "NULL path supplied\n");
     }
+
     Link *link;
     link = path_to_Link(path);
     if (!link) {

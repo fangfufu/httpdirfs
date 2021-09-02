@@ -78,8 +78,6 @@ struct Link {
     long time;
     /** \brief The pointer associated with the cache file */
     Cache *cache_ptr;
-    /** \brief The pointer associated with the transfer struct */
-    TransferStruct *ts_ptr;
     /** \brief Stores *sonic related data */
     Sonic sonic;
 };
