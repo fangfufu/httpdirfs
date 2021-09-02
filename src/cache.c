@@ -897,6 +897,8 @@ void Cache_close(Cache * cf)
         lprintf(error, "cannot close data file %s.\n", strerror(errno));
     }
 
+    cf->link->cache_ptr = NULL;
+
     lprintf(cache_lock_debug,
             "thread %x: unlocking cf_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
