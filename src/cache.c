@@ -89,7 +89,9 @@ static char *CacheSystem_calc_dir(const char *url)
 
 void CacheSystem_init(const char *path, int url_supplied)
 {
-    if (pthread_mutex_lock(&cf_lock, NULL)) {
+    lprintf(cache_lock_debug,
+            "thread %x: initialise cf_lock;\n", pthread_self());
+    if (pthread_mutex_init(&cf_lock, NULL)) {
         lprintf(fatal, "cf_lock initialisation failed!\n");
     }
 
