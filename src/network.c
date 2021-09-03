@@ -317,24 +317,24 @@ void transfer_nonblocking(CURL *curl)
     }
 }
 
-size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
+size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp)
 {
-    size_t realsize = size * nmemb;
-    TransferStruct *mem = (TransferStruct *) userp;
+    size_t recv_size = size * nmemb;
+    TransferStruct *ts = (TransferStruct *) userp;
 
-    mem->data = realloc(mem->data, mem->size + realsize + 1);
-    if (!mem->data) {
+    ts->data = realloc(ts->data, ts->curr_size + recv_size + 1);
+    if (!ts->data) {
         /*
          * out of memory!
          */
         lprintf(fatal, "realloc failure!\n");
     }
 
-    memmove(&mem->data[mem->size], contents, realsize);
-    mem->size += realsize;
-    mem->data[mem->size] = 0;
-    return realsize;
+    memmove(&ts->data[ts->curr_size], recv_data, recv_size);
+    ts->curr_size += recv_size;
+    ts->data[ts->curr_size] = '\0';
+    return recv_size;
 }
 
 int HTTP_temp_failure(HTTPResponseCode http_resp)

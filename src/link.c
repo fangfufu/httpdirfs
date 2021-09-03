@@ -530,7 +530,7 @@ LinkTable *LinkTable_new(const char *url)
      * start downloading the base URL
      */
     TransferStruct ts = Link_download_full(linktbl->links[0]);
-    if (ts.size == 0) {
+    if (ts.curr_size == 0) {
         LinkTable_free(linktbl);
         return NULL;
     }
@@ -833,7 +833,7 @@ TransferStruct Link_download_full(Link *link)
     CURL *curl = Link_to_curl(link);
 
     TransferStruct ts;
-    ts.size = 0;
+    ts.curr_size = 0;
     ts.data = NULL;
     ts.type = DATA;
     ts.transferring = 1;
@@ -865,7 +865,7 @@ TransferStruct Link_download_full(Link *link)
         } else if (http_resp != HTTP_OK) {
             lprintf(warning,
                     "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
-            ts.size = 0;
+            ts.curr_size = 0;
             FREE(ts.data);
             curl_easy_cleanup(curl);
             return ts;
@@ -957,17 +957,16 @@ range requests\n");
     return recv;
 }
 
-long
-Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
+long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 {
     TransferStruct ts;
-    ts.size = 0;
+    ts.curr_size = 0;
     ts.data = NULL;
     ts.type = DATA;
     ts.transferring = 1;
 
     TransferStruct header;
-    header.size = 0;
+    header.curr_size = 0;
     header.data = NULL;
 
     CURL *curl = Link_download_curl_setup(link, req_size, offset, &header, &ts);
@@ -989,9 +988,8 @@ Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
     return recv;
 }
 
-long
-path_download(const char *path, char *output_buf, size_t req_size,
-              off_t offset)
+long path_download(const char *path, char *output_buf, size_t req_size,
+                   off_t offset)
 {
     if (!path) {
         lprintf(fatal, "NULL path supplied\n");

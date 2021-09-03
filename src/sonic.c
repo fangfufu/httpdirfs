@@ -332,7 +332,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
      * start downloading the base URL
      */
     TransferStruct xml = Link_download_full(linktbl->links[0]);
-    if (xml.size == 0) {
+    if (xml.curr_size == 0) {
         LinkTable_free(linktbl);
         return NULL;
     }
@@ -342,7 +342,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
 
     XML_SetStartElementHandler(parser, handler);
 
-    if (XML_Parse(parser, xml.data, xml.size, 1) == XML_STATUS_ERROR) {
+    if (XML_Parse(parser, xml.data, xml.curr_size, 1) == XML_STATUS_ERROR) {
         lprintf(error,
                 "Parse error at line %lu: %s\n",
                 XML_GetCurrentLineNumber(parser),

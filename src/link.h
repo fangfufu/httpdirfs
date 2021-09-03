@@ -41,7 +41,7 @@ struct TransferStruct {
     /** \brief The array to store the data */
     char *data;
     /** \brief The current size of the array */
-    size_t size;
+    size_t curr_size;
     /** \brief The minium requested size */
     size_t min_req_size;
     /** \brief The type of transfer being done */
