@@ -825,7 +825,8 @@ Cache *Cache_open(const char *fn)
      */
     if (cf->content_length > Data_size(fn)) {
         lprintf(error, "metadata inconsistency %s, \
-cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_size(fn));
+cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
+                Data_size(fn));
         Cache_free(cf);
 
         lprintf(cache_lock_debug,

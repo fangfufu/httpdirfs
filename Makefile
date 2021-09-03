@@ -63,7 +63,7 @@ doc:
 	doxygen Doxyfile
 
 format:
-	astyle --style=kr --align-pointer=name src/*.c src/*.h
+	astyle --style=kr --align-pointer=name --max-code-length=80 src/*.c src/*.h
 
 clean:
 	-rm -f src/*.h~

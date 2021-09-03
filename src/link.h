@@ -40,7 +40,7 @@ typedef enum {
 struct TransferStruct {
     /** \brief The array to store the data */
     char *data;
-    /** \brief The size of the array */
+    /** \brief The current size of the array */
     size_t size;
     /** \brief The minium requested size */
     size_t min_req_size;
