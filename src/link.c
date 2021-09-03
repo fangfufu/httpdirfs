@@ -94,8 +94,7 @@ static CURL *Link_to_curl(Link *link)
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
     ret =
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-                         write_memory_callback);
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
@@ -114,16 +113,14 @@ static CURL *Link_to_curl(Link *link)
     }
 
     if (CONFIG.http_username) {
-        ret =
-            curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
+        ret = curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
     }
 
     if (CONFIG.http_password) {
-        ret =
-            curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
+        ret = curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
