@@ -8,6 +8,7 @@
 
 typedef struct Link Link;
 typedef struct LinkTable LinkTable;
+typedef struct TransferStruct TransferStruct;
 
 #include "sonic.h"
 #include "config.h"
@@ -26,7 +27,7 @@ typedef enum {
 } LinkType;
 
 /**
- * \brief specify the type of data transfer 
+ * \brief specify the type of data transfer
  */
 typedef enum {
     FILESTAT = 's',
@@ -34,9 +35,9 @@ typedef enum {
 } TransferType;
 
 /**
- * \brief For storing transfer data and metadata 
+ * \brief For storing transfer data and metadata
  */
-typedef struct {
+struct TransferStruct {
     /** \brief The array to store the data */
     char *data;
     /** \brief The size of the array */
@@ -46,10 +47,10 @@ typedef struct {
     /** \brief The type of transfer being done */
     TransferType type;
     /** \brief Whether transfer is in progress */
-    int transferring;
+    volatile int transferring;
     /** \brief The link associated with the transfer */
     Link *link;
-} TransferStruct;
+};
 
 /**
  * \brief link table type

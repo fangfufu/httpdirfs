@@ -118,11 +118,11 @@ curl_process_msgs(CURLMsg * curl_msg, int n_running_curl, int n_mesgs)
     (void) n_mesgs;
     static volatile int slept = 0;
     if (curl_msg->msg == CURLMSG_DONE) {
-        TransferStruct *transfer;
+        TransferStruct *ts;
         CURL *curl = curl_msg->easy_handle;
         curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
-                          &transfer);
-        transfer->transferring = 0;
+                          &ts);
+        ts->transferring = 0;
         char *url = NULL;
         curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
 
@@ -147,8 +147,8 @@ curl_process_msgs(CURLMsg * curl_msg, int n_running_curl, int n_mesgs)
             /*
              * Transfer successful, set the file size
              */
-            if (transfer->type == FILESTAT) {
-                Link_set_file_stat(transfer->link, curl);
+            if (ts->type == FILESTAT) {
+                Link_set_file_stat(ts->link, curl);
             }
         } else {
             lprintf(error, "%d - %s <%s>\n",
@@ -159,9 +159,9 @@ curl_process_msgs(CURLMsg * curl_msg, int n_running_curl, int n_mesgs)
         /*
          * clean up the handle, if we are querying the file size
          */
-        if (transfer->type == FILESTAT) {
+        if (ts->type == FILESTAT) {
             curl_easy_cleanup(curl);
-            FREE(transfer);
+            FREE(ts);
         }
     } else {
         lprintf(warning, "curl_msg->msg: %d\n", curl_msg->msg);
@@ -306,16 +306,10 @@ void NetworkSystem_init(void)
     crypto_lock_init();
 }
 
-void transfer_blocking(CURL * curl)
+void transfer_blocking(CURL *curl)
 {
-    /*
-     * We don't need to malloc here, as the transfer is finished before
-     * the variable gets popped from the stack
-     */
-    volatile TransferStruct transfer;
-    transfer.type = DATA;
-    transfer.transferring = 1;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, &transfer);
+    TransferStruct *ts;
+    curl_easy_getinfo(curl, CURLINFO_PRIVATE, &ts);
 
     lprintf(network_lock_debug,
             "thread %x: locking transfer_lock;\n", pthread_self());
@@ -331,12 +325,16 @@ void transfer_blocking(CURL * curl)
         lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
     }
 
-    while (transfer.transferring) {
+    while (ts->transferring) {
         curl_multi_perform_once();
     }
 }
 
-void transfer_nonblocking(CURL * curl)
+// void transfer_semiblocking(CURL *curl) {
+
+// }
+
+void transfer_nonblocking(CURL *curl)
 {
     lprintf(network_lock_debug,
             "thread %x: locking transfer_lock;\n", pthread_self());
@@ -371,7 +369,6 @@ write_memory_callback(void *contents, size_t size, size_t nmemb,
     memmove(&mem->data[mem->size], contents, realsize);
     mem->size += realsize;
     mem->data[mem->size] = 0;
-    // lprintf(debug, "realsize %d bytes\n", realsize);
     return realsize;
 }
 

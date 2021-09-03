@@ -456,8 +456,8 @@ LinkTable *LinkTable_new(const char *url)
     /*
      * start downloading the base URL
      */
-    TransferStruct buf = Link_download_full(linktbl->links[0]);
-    if (buf.size == 0) {
+    TransferStruct ts = Link_download_full(linktbl->links[0]);
+    if (ts.size == 0) {
         LinkTable_free(linktbl);
         return NULL;
     }
@@ -465,10 +465,10 @@ LinkTable *LinkTable_new(const char *url)
     /*
      * Otherwise parsed the received data
      */
-    GumboOutput *output = gumbo_parse(buf.data);
+    GumboOutput *output = gumbo_parse(ts.data);
     HTML_to_LinkTable(output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
-    FREE(buf.data);
+    FREE(ts.data);
 
     int skip_fill = 0;
     char *unescaped_path;
@@ -759,11 +759,14 @@ TransferStruct Link_download_full(Link * link)
     char *url = link->f_url;
     CURL *curl = Link_to_curl(link);
 
-    TransferStruct buf;
-    buf.size = 0;
-    buf.data = NULL;
+    TransferStruct ts;
+    ts.size = 0;
+    ts.data = NULL;
+    ts.type = DATA;
+    ts.transferring = 1;
 
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buf);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &ts);
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *) &ts);
 
     /*
      * If we get temporary HTTP failure, wait for 5 seconds before retry
@@ -780,16 +783,16 @@ TransferStruct Link_download_full(Link * link)
         } else if (http_resp != HTTP_OK) {
             lprintf(warning,
                     "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
-            buf.size = 0;
+            ts.size = 0;
             curl_easy_cleanup(curl);
-            return buf;
+            return ts;
         }
     }
     while (HTTP_temp_failure(http_resp));
 
     curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
     curl_easy_cleanup(curl);
-    return buf;
+    return ts;
 }
 
 long
@@ -806,19 +809,21 @@ Link_download(Link *link, char *output_buf, size_t req_size,
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
     lprintf(debug, "%s: %s\n", link->linkname, range_str);
 
-    TransferStruct buf;
-    buf.size = 0;
-    buf.data = NULL;
-
-    CURL *curl = Link_to_curl(link);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &buf);
-    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+    TransferStruct ts;
+    ts.size = 0;
+    ts.data = NULL;
+    ts.type = DATA;
+    ts.transferring = 1;
 
     TransferStruct header;
     header.size = 0;
     header.data = NULL;
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &header);
 
+    CURL *curl = Link_to_curl(link);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &header);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &ts);
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *) &ts);
+    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
     transfer_blocking(curl);
 
     /*
@@ -855,9 +860,9 @@ range requests\n");
         lprintf(error, "req_size: %lu, recv: %ld\n", req_size, recv);
     }
 
-    memmove(output_buf, buf.data, recv);
+    memmove(output_buf, ts.data, recv);
     curl_easy_cleanup(curl);
-    FREE(buf.data);
+    FREE(ts.data);
 
     return recv;
 }
