@@ -61,42 +61,95 @@ static CURL *Link_to_curl(Link * link)
     /*
      * set up some basic curl stuff
      */
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    CURLcode ret =
+        curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
     /*
      * for following directories without the '/'
      */
-    curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
-    curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
-    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
-    curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
-    if (CONFIG.insecure_tls) {
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+    ret = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
     }
-    // curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    ret = curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret =
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                         write_memory_callback);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    if (CONFIG.insecure_tls) {
+        ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.log_type & libcurl_debug) {
+        ret = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+    }
 
     if (CONFIG.http_username) {
-        curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
+        ret =
+            curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
     }
 
     if (CONFIG.http_password) {
-        curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
+        ret =
+            curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
     }
 
     if (CONFIG.proxy) {
-        curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
     }
 
     if (CONFIG.proxy_username) {
-        curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
-                         CONFIG.proxy_username);
+        ret = curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
+                               CONFIG.proxy_username);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
     }
 
     if (CONFIG.proxy_password) {
-        curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
-                         CONFIG.proxy_password);
+        ret = curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
+                               CONFIG.proxy_password);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
     }
 
     return curl;
@@ -105,8 +158,14 @@ static CURL *Link_to_curl(Link * link)
 static void Link_req_file_stat(Link * this_link)
 {
     CURL *curl = Link_to_curl(this_link);
-    curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
-    curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
 
     /*
      * We need to put the variable on the heap, because otherwise the
@@ -118,7 +177,10 @@ static void Link_req_file_stat(Link * this_link)
 
     transfer->link = this_link;
     transfer->type = FILESTAT;
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
 
     transfer_nonblocking(curl);
 }
@@ -777,8 +839,14 @@ TransferStruct Link_download_full(Link * link)
     ts.type = DATA;
     ts.transferring = 1;
 
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &ts);
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *) &ts);
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &ts);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *) &ts);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
 
     /*
      * If we get temporary HTTP failure, wait for 5 seconds before retry
@@ -786,8 +854,7 @@ TransferStruct Link_download_full(Link * link)
     long http_resp = 0;
     do {
         transfer_blocking(curl);
-        CURLcode ret =
-            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
@@ -806,8 +873,7 @@ TransferStruct Link_download_full(Link * link)
     }
     while (HTTP_temp_failure(http_resp));
 
-    CURLcode ret =
-        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
+    ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
@@ -839,10 +905,23 @@ Link_download(Link * link, char *output_buf, size_t req_size, off_t offset)
     header.data = NULL;
 
     CURL *curl = Link_to_curl(link);
-    curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &header);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &ts);
-    curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *) &ts);
-    curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+    CURLcode ret =
+        curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *) &header);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *) &ts);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *) &ts);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
     transfer_blocking(curl);
 
     /*
@@ -859,8 +938,7 @@ range requests\n");
     FREE(header.data);
 
     long http_resp;
-    CURLcode ret =
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }

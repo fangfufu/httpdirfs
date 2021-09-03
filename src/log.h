@@ -13,6 +13,7 @@ typedef enum {
     link_lock_debug = 1 << 5,
     network_lock_debug = 1 << 6,
     cache_lock_debug = 1 << 7,
+    libcurl_debug = 1 << 8,
 } LogType;
 
 /**
