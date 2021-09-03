@@ -193,56 +193,13 @@ int curl_multi_perform_once(void)
      */
     int n_running_curl;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
-    if (mc > 0) {
+    if (mc) {
         lprintf(error, "%s\n", curl_multi_strerror(mc));
     }
 
-    fd_set fdread;
-    fd_set fdwrite;
-    fd_set fdexcep;
-    int maxfd = -1;
-
-    long curl_timeo = -1;
-
-    FD_ZERO(&fdread);
-    FD_ZERO(&fdwrite);
-    FD_ZERO(&fdexcep);
-
-    /*
-     * set a default timeout for select()
-     */
-    struct timeval timeout;
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
-
-    curl_multi_timeout(curl_multi, &curl_timeo);
-    /*
-     * We effectively cap timeout to 1 sec
-     */
-    if (curl_timeo >= 0) {
-        timeout.tv_sec = curl_timeo / 1000;
-        if (timeout.tv_sec > 1) {
-            timeout.tv_sec = 1;
-        } else {
-            timeout.tv_usec = (curl_timeo % 1000) * 1000;
-        }
-    }
-
-    /*
-     * get file descriptors from the transfers
-     */
-    mc = curl_multi_fdset(curl_multi, &fdread, &fdwrite, &fdexcep, &maxfd);
-
-    if (mc > 0) {
-        lprintf(error, "%s.\n", curl_multi_strerror(mc));
-    }
-
-    if (maxfd == -1) {
-        usleep(100 * 1000);
-    } else {
-        if (select(maxfd + 1, &fdread, &fdwrite, &fdexcep, &timeout) < 0) {
-            lprintf(error, "select(): %s.\n", strerror(errno));
-        }
+    mc = curl_multi_poll(curl_multi, NULL, 0, 100, NULL);
+    if (mc) {
+        lprintf(error, "%s\n", curl_multi_strerror(mc));
     }
 
     /*
