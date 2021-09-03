@@ -31,7 +31,7 @@ char *path_append(const char *path, const char *filename)
 {
     int needs_separator = 0;
     if ((path[strnlen(path, MAX_PATH_LEN) - 1] != '/')
-        && (filename[0] != '/')) {
+            && (filename[0] != '/')) {
         needs_separator = 1;
     }
 
@@ -52,7 +52,7 @@ int64_t round_div(int64_t a, int64_t b)
     return (a + (b / 2)) / b;
 }
 
-void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t * x)
+void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
 {
     int i;
     i = pthread_mutex_unlock(x);
@@ -62,7 +62,7 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t * x)
     }
 }
 
-void PTHREAD_MUTEX_LOCK(pthread_mutex_t * x)
+void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
 {
     int i;
     i = pthread_mutex_lock(x);
@@ -86,7 +86,7 @@ void exit_failure(void)
     exit(EXIT_FAILURE);
 }
 
-void erase_string(FILE * file, size_t max_len, char *s)
+void erase_string(FILE *file, size_t max_len, char *s)
 {
     size_t l = strnlen(s, max_len);
     for (size_t k = 0; k < l; k++) {

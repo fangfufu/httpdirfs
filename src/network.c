@@ -87,7 +87,7 @@ failed!\n", i);
  * https://curl.haxx.se/libcurl/c/threaded-shared-conn.html
  */
 static void
-curl_callback_lock(CURL * handle, curl_lock_data data,
+curl_callback_lock(CURL *handle, curl_lock_data data,
                    curl_lock_access access, void *userptr)
 {
     (void) access;              /* unused */
@@ -98,7 +98,7 @@ curl_callback_lock(CURL * handle, curl_lock_data data,
 }
 
 static void
-curl_callback_unlock(CURL * handle, curl_lock_data data, void *userptr)
+curl_callback_unlock(CURL *handle, curl_lock_data data, void *userptr)
 {
     (void) userptr;             /* unused */
     (void) handle;              /* unused */
@@ -112,7 +112,7 @@ curl_callback_unlock(CURL * handle, curl_lock_data data, void *userptr)
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
 static void
-curl_process_msgs(CURLMsg * curl_msg, int n_running_curl, int n_mesgs)
+curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
 {
     (void) n_running_curl;
     (void) n_mesgs;
@@ -316,7 +316,7 @@ void NetworkSystem_init(void)
     crypto_lock_init();
 }
 
-void transfer_blocking(CURL * curl)
+void transfer_blocking(CURL *curl)
 {
     TransferStruct *ts;
     CURLcode ret = curl_easy_getinfo(curl, CURLINFO_PRIVATE, &ts);
@@ -343,11 +343,7 @@ void transfer_blocking(CURL * curl)
     }
 }
 
-// void transfer_semiblocking(CURL *curl) {
-
-// }
-
-void transfer_nonblocking(CURL * curl)
+void transfer_nonblocking(CURL *curl)
 {
     lprintf(network_lock_debug,
             "thread %x: locking transfer_lock;\n", pthread_self());

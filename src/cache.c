@@ -46,14 +46,14 @@ static char *CacheSystem_calc_dir(const char *url)
         xdg_cache_home = path_append(home, xdg_cache_home_default);
     }
     if (mkdir
-        (xdg_cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+            (xdg_cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+            && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
     char *cache_dir_root = path_append(xdg_cache_home, "/httpdirfs/");
     if (mkdir
-        (cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+            (cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+            && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
 
@@ -77,7 +77,7 @@ static char *CacheSystem_calc_dir(const char *url)
     char *escaped_url = curl_easy_escape(c, url, 0);
     char *full_path = path_append(cache_dir_root, escaped_url);
     if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+            && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
     FREE(fn);
@@ -107,12 +107,12 @@ void CacheSystem_init(const char *path, int url_supplied)
      * Check if directories exist, if not, create them
      */
     if (mkdir(META_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+            && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
 
     if (mkdir(DATA_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+            && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
 
@@ -123,8 +123,8 @@ void CacheSystem_init(const char *path, int url_supplied)
          */
         sonic_path = path_append(META_DIR, "rest/");
         if (mkdir
-            (sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
+                (sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+                && (errno != EEXIST)) {
             lprintf(fatal, "mkdir(): %s\n", strerror(errno));
         }
         FREE(sonic_path);
@@ -134,8 +134,8 @@ void CacheSystem_init(const char *path, int url_supplied)
          */
         sonic_path = path_append(DATA_DIR, "rest/");
         if (mkdir
-            (sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
+                (sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+                && (errno != EEXIST)) {
             lprintf(fatal, "mkdir(): %s\n", strerror(errno));
         }
         FREE(sonic_path);
@@ -148,7 +148,7 @@ void CacheSystem_init(const char *path, int url_supplied)
  * \brief read a metadata file
  * \return 0 on success, errno on error.
  */
-static int Meta_read(Cache * cf)
+static int Meta_read(Cache *cf)
 {
     FILE *fp = cf->mfp;
     rewind(fp);
@@ -236,7 +236,7 @@ file!\n");
  *  - -1 on error,
  *  - 0 on success
  */
-static int Meta_write(Cache * cf)
+static int Meta_write(Cache *cf)
 {
     FILE *fp = cf->mfp;
     rewind(fp);
@@ -279,7 +279,7 @@ static int Meta_write(Cache * cf)
  * \details We use sparse creation here
  * \return exit on failure
  */
-static void Data_create(Cache * cf)
+static void Data_create(Cache *cf)
 {
     int fd;
     int mode;
@@ -326,7 +326,7 @@ static long Data_size(const char *fn)
  *  - negative values on error,
  *  - otherwise, the number of bytes read.
  */
-static long Data_read(Cache * cf, uint8_t * buf, off_t len, off_t offset)
+static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 {
     if (len == 0) {
         lprintf(error, "requested to read 0 byte!\n");
@@ -379,7 +379,7 @@ static long Data_read(Cache * cf, uint8_t * buf, off_t len, off_t offset)
         }
     }
 
-  end:
+end:
 
     lprintf(cache_lock_debug,
             "thread %x: unlocking seek_lock;\n", pthread_self());
@@ -397,7 +397,7 @@ static long Data_read(Cache * cf, uint8_t * buf, off_t len, off_t offset)
  *  - -1 when the data file does not exist
  *  - otherwise, the number of bytes written.
  */
-static long Data_write(Cache * cf, const uint8_t * buf, off_t len,
+static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
                        off_t offset)
 {
     if (len == 0) {
@@ -437,7 +437,7 @@ static long Data_write(Cache * cf, const uint8_t * buf, off_t len,
         lprintf(error, "fwrite(): encountered error!\n");
     }
 
-  end:
+end:
     lprintf(cache_lock_debug,
             "thread %x: unlocking seek_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
@@ -499,7 +499,7 @@ static Cache *Cache_alloc()
 /**
  * \brief free a cache data structure
  */
-static void Cache_free(Cache * cf)
+static void Cache_free(Cache *cf)
 {
     if (pthread_mutex_destroy(&cf->seek_lock)) {
         lprintf(fatal, "could not destroy seek_lock!\n");
@@ -605,7 +605,7 @@ void Cache_delete(const char *fn)
  *  -   0 on success
  *  -   -1 on failure, with appropriate errno set.
  */
-static int Data_open(Cache * cf)
+static int Data_open(Cache *cf)
 {
     char *datafn = path_append(DATA_DIR, cf->path);
     cf->dfp = fopen(datafn, "r+");
@@ -627,7 +627,7 @@ static int Data_open(Cache * cf)
  *  -   0 on success
  *  -   -1 on failure, with appropriate errno set.
  */
-static int Meta_open(Cache * cf)
+static int Meta_open(Cache *cf)
 {
     char *metafn = path_append(META_DIR, cf->path);
     cf->mfp = fopen(metafn, "r+");
@@ -647,7 +647,7 @@ static int Meta_open(Cache * cf)
  * \brief Create a metafile
  * \return exit on error
  */
-static void Meta_create(Cache * cf)
+static void Meta_create(Cache *cf)
 {
     char *metafn = path_append(META_DIR, cf->path);
     cf->mfp = fopen(metafn, "w");
@@ -869,7 +869,7 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length, Data_si
     return cf;
 }
 
-void Cache_close(Cache * cf)
+void Cache_close(Cache *cf)
 {
     lprintf(cache_lock_debug,
             "thread %x: locking cf_lock;\n", pthread_self());
@@ -909,7 +909,7 @@ void Cache_close(Cache * cf)
  * \brief Check if a segment exists.
  * \return 1 if the segment exists
  */
-static int Seg_exist(Cache * cf, off_t offset)
+static int Seg_exist(Cache *cf, off_t offset)
 {
     off_t byte = offset / cf->blksz;
     return cf->seg[byte];
@@ -922,7 +922,7 @@ static int Seg_exist(Cache * cf, off_t offset)
  * \param[in] i 1 for exist, 0 for doesn't exist
  * \note Call this after downloading a segment.
  */
-static void Seg_set(Cache * cf, off_t offset, int i)
+static void Seg_set(Cache *cf, off_t offset, int i)
 {
     off_t byte = offset / cf->blksz;
     cf->seg[byte] = i;
@@ -952,8 +952,8 @@ which does't make sense\n", pthread_self(), recv);
     }
 
     if ((recv == cf->blksz) ||
-        (cf->next_dl_offset ==
-         (cf->content_length / cf->blksz * cf->blksz))) {
+            (cf->next_dl_offset ==
+             (cf->content_length / cf->blksz * cf->blksz))) {
         Data_write(cf, recv_buf, recv, cf->next_dl_offset);
         Seg_set(cf, cf->next_dl_offset, 1);
     } else {
@@ -976,7 +976,7 @@ error.\n", recv, cf->blksz);
 }
 
 long
-Cache_read(Cache * cf, char *const output_buf, const off_t len,
+Cache_read(Cache *cf, char *const output_buf, const off_t len,
            const off_t offset_start)
 {
     long send;
@@ -1036,7 +1036,7 @@ which does't make sense\n", pthread_self(), recv);
      * Condition 2: offset is the last segment
      */
     if ((recv == cf->blksz) ||
-        (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
+            (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
         Data_write(cf, recv_buf, recv, dl_offset);
         Seg_set(cf, dl_offset, 1);
     } else {
@@ -1053,12 +1053,11 @@ error.\n", recv, cf->blksz);
     /*
      * ----------- Download the next segment in background -----------------
      */
-  bgdl:
-    {
+bgdl: {
     }
     off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
     if ((next_dl_offset > dl_offset) && !Seg_exist(cf, next_dl_offset)
-        && next_dl_offset < cf->content_length) {
+            && next_dl_offset < cf->content_length) {
         /*
          * Stop the spawning of multiple background pthreads
          */

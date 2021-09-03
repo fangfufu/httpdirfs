@@ -28,10 +28,10 @@ int curl_multi_perform_once(void);
 void NetworkSystem_init(void);
 
 /** \brief blocking file transfer */
-void transfer_blocking(CURL * curl);
+void transfer_blocking(CURL *curl);
 
 /** \brief non blocking file transfer */
-void transfer_nonblocking(CURL * curl);
+void transfer_nonblocking(CURL *curl);
 
 /** \brief callback function for file transfer */
 size_t

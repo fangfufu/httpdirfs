@@ -63,11 +63,12 @@ doc:
 	doxygen Doxyfile
 
 format:
-	indent -kr -nut src/*.c src/*.h
+	astyle --style=kr --align-pointer=name src/*.c src/*.h
 
 clean:
 	-rm -f src/*.h~
 	-rm -f src/*.c~
+	-rm -f src/*orig
 	-rm -f *.o
 	-rm -f httpdirfs
 

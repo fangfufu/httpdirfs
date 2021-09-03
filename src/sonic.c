@@ -252,7 +252,7 @@ XML_parser_general(void *data, const char *elem, const char **attr)
          */
         if (!linkname_set) {
             if (!strcmp("title", attr[i])
-                || !strcmp("name", attr[i])) {
+                    || !strcmp("name", attr[i])) {
                 strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
                 linkname_set = 1;
                 continue;
@@ -296,7 +296,7 @@ XML_parser_general(void *data, const char *elem, const char **attr)
     }
 
     if (!linkname_set && strnlen(title, MAX_PATH_LEN) > 0 &&
-        strnlen(suffix, MAX_PATH_LEN) > 0) {
+            strnlen(suffix, MAX_PATH_LEN) > 0) {
         snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s",
                  track, title, suffix);
         linkname_set = 1;
@@ -323,8 +323,8 @@ XML_parser_general(void *data, const char *elem, const char **attr)
  * \brief parse a XML string in order to fill in the LinkTable
  */
 static LinkTable *sonic_url_to_LinkTable(const char *url,
-                                         XML_StartElementHandler handler,
-                                         int depth)
+        XML_StartElementHandler handler,
+        int depth)
 {
     LinkTable *linktbl = LinkTable_alloc(url);
     linktbl->links[0]->sonic.depth = depth;
@@ -467,25 +467,25 @@ LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
     char *url;
     LinkTable *linktbl = ROOT_LINK_TBL;
     switch (depth) {
-        /*
-         * Root table
-         */
+    /*
+     * Root table
+     */
     case 0:
         url = sonic_gen_url_first_part("getArtists");
         linktbl = sonic_url_to_LinkTable(url, XML_parser_id3_root, 0);
         FREE(url);
         break;
-        /*
-         * Album table - get all the albums of an artist
-         */
+    /*
+     * Album table - get all the albums of an artist
+     */
     case 3:
         url = sonic_getArtist_link(id);
         linktbl = sonic_url_to_LinkTable(url, XML_parser_general, depth);
         FREE(url);
         break;
-        /*
-         * Song table - get all the songs of an album
-         */
+    /*
+     * Song table - get all the songs of an album
+     */
     case 4:
         url = sonic_getAlbum_link(id);
         linktbl = sonic_url_to_LinkTable(url, XML_parser_general, depth);

@@ -101,7 +101,7 @@ LinkTable *LinkSystem_init(const char *raw_url);
 /**
  * \brief Set the stats of a link, after curl multi handle finished querying
  */
-void Link_set_file_stat(Link * this_link, CURL * curl);
+void Link_set_file_stat(Link *this_link, CURL *curl);
 
 /**
  * \brief create a new LinkTable
@@ -119,7 +119,7 @@ long path_download(const char *path, char *output_buf, size_t size,
  * \brief Download a Link
  * \return the number of bytes downloaded
  */
-long Link_download(Link * link, char *output_buf, size_t req_size,
+long Link_download(Link *link, char *output_buf, size_t req_size,
                    off_t offset);
 
 /**
@@ -135,7 +135,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path);
 /**
  * \brief dump a link table to the disk.
  */
-int LinkTable_disk_save(LinkTable * linktbl, const char *dirn);
+int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
 
 /**
  * \brief load a link table from the disk.
@@ -146,7 +146,7 @@ LinkTable *LinkTable_disk_open(const char *dirn);
  * \brief Download a link's content to the memory
  * \warning You MUST free the memory field in TransferStruct after use!
  */
-TransferStruct Link_download_full(Link * head_link);
+TransferStruct Link_download_full(Link *head_link);
 
 /**
  * \brief Allocate a LinkTable
@@ -157,15 +157,15 @@ LinkTable *LinkTable_alloc(const char *url);
 /**
  * \brief free a LinkTable
  */
-void LinkTable_free(LinkTable * linktbl);
+void LinkTable_free(LinkTable *linktbl);
 
 /**
  * \brief print a LinkTable
  */
-void LinkTable_print(LinkTable * linktbl);
+void LinkTable_print(LinkTable *linktbl);
 
 /**
  * \brief add a Link to a LinkTable
  */
-void LinkTable_add(LinkTable * linktbl, Link * link);
+void LinkTable_add(LinkTable *linktbl, Link *link);
 #endif

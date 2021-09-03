@@ -118,7 +118,7 @@ Cache *Cache_open(const char *fn);
  * \brief Close a cache data structure
  * \note This function is called by fs_release()
  */
-void Cache_close(Cache * cf);
+void Cache_close(Cache *cf);
 
 /**
  * \brief create a cache file set if it doesn't exist already
@@ -146,6 +146,6 @@ void Cache_delete(const char *fn);
  * \return the length of the segment the cache system managed to obtain.
  * \note Called by fs_read(), verified to be working
  */
-long Cache_read(Cache * cf, char *const output_buf, const off_t len,
+long Cache_read(Cache *cf, char *const output_buf, const off_t len,
                 const off_t offset_start);
 #endif
