@@ -866,6 +866,7 @@ TransferStruct Link_download_full(Link *link)
             lprintf(warning,
                     "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
             ts.size = 0;
+            FREE(ts.data);
             curl_easy_cleanup(curl);
             return ts;
         }
@@ -916,6 +917,46 @@ static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
     return curl;
 }
 
+static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
+{
+    /*
+     * Check for range seek support
+     */
+    if (!CONFIG.no_range_check) {
+        if (!strcasestr((header->data), "Accept-Ranges: bytes")) {
+            fprintf(stderr, "This web server does not support HTTP \
+range requests\n");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    FREE(header->data);
+
+    long http_resp;
+    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    if (!((http_resp != HTTP_OK) ||
+            (http_resp != HTTP_PARTIAL_CONTENT) ||
+            (http_resp != HTTP_RANGE_NOT_SATISFIABLE))) {
+        char *url;
+        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+        lprintf(warning, "Could not download %s, HTTP %ld\n", url, http_resp);
+        return -ENOENT;
+    }
+
+    curl_off_t recv;
+    ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+
+    curl_easy_cleanup(curl);
+
+    return recv;
+}
+
 long
 Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 {
@@ -933,38 +974,7 @@ Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 
     transfer_blocking(curl);
 
-    /*
-     * Check for range seek support
-     */
-    if (!CONFIG.no_range_check) {
-        if (!strcasestr((header.data), "Accept-Ranges: bytes")) {
-            fprintf(stderr, "This web server does not support HTTP \
-range requests\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    FREE(header.data);
-
-    long http_resp;
-    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (ret) {
-        lprintf(error, "%s", curl_easy_strerror(ret));
-    }
-    if (!((http_resp != HTTP_OK) ||
-            (http_resp != HTTP_PARTIAL_CONTENT) ||
-            (http_resp != HTTP_RANGE_NOT_SATISFIABLE))) {
-        lprintf(warning,
-                "Could not download %s, HTTP %ld\n",
-                link->f_url, http_resp);
-        return -ENOENT;
-    }
-
-    curl_off_t recv;
-    ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
-    if (ret) {
-        lprintf(error, "%s", curl_easy_strerror(ret));
-    }
+    curl_off_t recv = Link_download_cleanup(curl, &header);
 
     /* The extra 1 byte is probably for '\0' */
     if (recv - 1 == (long int) req_size) {
@@ -974,7 +984,6 @@ range requests\n");
     }
 
     memmove(output_buf, ts.data, recv);
-    curl_easy_cleanup(curl);
     FREE(ts.data);
 
     return recv;

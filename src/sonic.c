@@ -323,8 +323,7 @@ XML_parser_general(void *data, const char *elem, const char **attr)
  * \brief parse a XML string in order to fill in the LinkTable
  */
 static LinkTable *sonic_url_to_LinkTable(const char *url,
-        XML_StartElementHandler handler,
-        int depth)
+        XML_StartElementHandler handler, int depth)
 {
     LinkTable *linktbl = LinkTable_alloc(url);
     linktbl->links[0]->sonic.depth = depth;

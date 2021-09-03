@@ -360,9 +360,8 @@ void transfer_nonblocking(CURL *curl)
     }
 }
 
-size_t
-write_memory_callback(void *contents, size_t size, size_t nmemb,
-                      void *userp)
+size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
+                             void *userp)
 {
     size_t realsize = size * nmemb;
     TransferStruct *mem = (TransferStruct *) userp;

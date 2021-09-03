@@ -972,7 +972,9 @@ error.\n", recv, cf->blksz);
             "thread %x: unlocking w_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-    pthread_detach(pthread_self());
+    if (pthread_detach(pthread_self())) {
+        lprintf(error, "%s\n", strerror(errno));
+    };
     pthread_exit(NULL);
 }
 
