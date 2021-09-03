@@ -1,6 +1,6 @@
 #include "fuse_local.h"
 
-#include "cache.h"
+#include "link.h"
 #include "log.h"
 
 /*

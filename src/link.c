@@ -1,9 +1,7 @@
 #include "link.h"
 
 #include "util.h"
-#include "cache.h"
 #include "network.h"
-#include "sonic.h"
 #include "log.h"
 
 #include <gumbo.h>

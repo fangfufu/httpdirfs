@@ -10,8 +10,8 @@ typedef struct Link Link;
 typedef struct LinkTable LinkTable;
 typedef struct TransferStruct TransferStruct;
 
-#include "sonic.h"
 #include "config.h"
+#include "sonic.h"
 #include "cache.h"
 #include <curl/curl.h>
 
@@ -42,14 +42,16 @@ struct TransferStruct {
     char *data;
     /** \brief The current size of the array */
     size_t curr_size;
-    /** \brief The minium requested size */
-    size_t min_req_size;
     /** \brief The type of transfer being done */
     TransferType type;
     /** \brief Whether transfer is in progress */
     volatile int transferring;
     /** \brief The link associated with the transfer */
     Link *link;
+    /** \brief The minium requested size */
+    size_t min_req_size;
+    /** \brief Whether we have sent off the minimally requested data*/
+    int min_data_sent;
 };
 
 /**
