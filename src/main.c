@@ -1,8 +1,7 @@
-#include "util.h"
-#include "link.h"
 #include "fuse_local.h"
-#include "network.h"
+#include "link.h"
 #include "log.h"
+#include "util.h"
 
 #include <getopt.h>
 #include <stdlib.h>

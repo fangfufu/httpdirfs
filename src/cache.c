@@ -1,8 +1,8 @@
 #include "cache.h"
 
 #include "config.h"
-#include "util.h"
 #include "log.h"
+#include "util.h"
 
 #include <sys/stat.h>
 

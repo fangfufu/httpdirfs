@@ -9,16 +9,14 @@
  * separate folders.
  */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <pthread.h>
-
-/**
- * \brief cache data type
- */
 typedef struct Cache Cache;
 
 #include "link.h"
+#include "network.h"
+
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
 
 /**
  * \brief Type definition for a cache segment

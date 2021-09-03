@@ -1,10 +1,10 @@
 #include "sonic.h"
 
 #include "config.h"
-#include "util.h"
-#include "link.h"
-#include "network.h"
 #include "log.h"
+#include "link.h"
+
+#include "util.h"
 
 #include <expat.h>
 

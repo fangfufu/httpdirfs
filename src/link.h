@@ -8,11 +8,12 @@
 
 typedef struct Link Link;
 typedef struct LinkTable LinkTable;
-typedef struct TransferStruct TransferStruct;
 
-#include "config.h"
-#include "sonic.h"
 #include "cache.h"
+#include "config.h"
+#include "network.h"
+#include "sonic.h"
+
 #include <curl/curl.h>
 
 /**
@@ -25,34 +26,6 @@ typedef enum {
     LINK_INVALID = 'I',
     LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
-
-/**
- * \brief specify the type of data transfer
- */
-typedef enum {
-    FILESTAT = 's',
-    DATA = 'd'
-} TransferType;
-
-/**
- * \brief For storing transfer data and metadata
- */
-struct TransferStruct {
-    /** \brief The array to store the data */
-    char *data;
-    /** \brief The current size of the array */
-    size_t curr_size;
-    /** \brief The type of transfer being done */
-    TransferType type;
-    /** \brief Whether transfer is in progress */
-    volatile int transferring;
-    /** \brief The link associated with the transfer */
-    Link *link;
-    /** \brief The minium requested size */
-    size_t min_req_size;
-    /** \brief Whether we have sent off the minimally requested data*/
-    int min_data_sent;
-};
 
 /**
  * \brief link table type

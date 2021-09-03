@@ -1,15 +1,17 @@
-#include "config.h"
 #include "util.h"
+
+#include "config.h"
 #include "log.h"
 
 #include <openssl/md5.h>
 #include <uuid/uuid.h>
 
+#include <errno.h>
 #include <execinfo.h>
-#include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
+#include <unistd.h>
+
 
 /**
  * \brief Backtrace buffer size
