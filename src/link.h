@@ -119,7 +119,8 @@ long path_download(const char *path, char *output_buf, size_t size,
  * \brief Download a Link
  * \return the number of bytes downloaded
  */
-long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset);
+long Link_download(Link * link, char *output_buf, size_t req_size,
+                   off_t offset);
 
 /**
  * \brief find the link associated with a path

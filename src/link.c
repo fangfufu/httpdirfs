@@ -341,11 +341,23 @@ static void HTML_to_LinkTable(GumboNode * node, LinkTable * linktbl)
 void Link_set_file_stat(Link * this_link, CURL * curl)
 {
     long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    CURLcode ret =
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
     if (http_resp == HTTP_OK) {
         double cl = 0;
-        curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
-        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
+        ret =
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+        ret =
+            curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
         if (cl <= 0) {
             this_link->type = LINK_INVALID;
         } else {
@@ -774,7 +786,11 @@ TransferStruct Link_download_full(Link * link)
     long http_resp = 0;
     do {
         transfer_blocking(curl);
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        CURLcode ret =
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
         if (HTTP_temp_failure(http_resp)) {
             lprintf(warning,
                     "URL: %s, HTTP %ld, retrying later.\n",
@@ -790,14 +806,17 @@ TransferStruct Link_download_full(Link * link)
     }
     while (HTTP_temp_failure(http_resp));
 
-    curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
+    CURLcode ret =
+        curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
     curl_easy_cleanup(curl);
     return ts;
 }
 
 long
-Link_download(Link *link, char *output_buf, size_t req_size,
-              off_t offset)
+Link_download(Link * link, char *output_buf, size_t req_size, off_t offset)
 {
     if (!link) {
         lprintf(fatal, "Invalid supplied\n");
@@ -840,7 +859,11 @@ range requests\n");
     FREE(header.data);
 
     long http_resp;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    CURLcode ret =
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
     if (!((http_resp != HTTP_OK) ||
           (http_resp != HTTP_PARTIAL_CONTENT) ||
           (http_resp != HTTP_RANGE_NOT_SATISFIABLE))) {
@@ -851,7 +874,10 @@ range requests\n");
     }
 
     curl_off_t recv;
-    curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
+    ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
 
     /* The extra 1 byte is probably for '\0' */
     if (recv - 1 == (long int) req_size) {

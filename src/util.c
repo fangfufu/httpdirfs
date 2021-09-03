@@ -58,8 +58,7 @@ void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t * x)
     i = pthread_mutex_unlock(x);
     if (i) {
         lprintf(fatal,
-                "thread %x: %d, %s\n",
-                pthread_self(), i, strerror(i));
+                "thread %x: %d, %s\n", pthread_self(), i, strerror(i));
     }
 }
 
@@ -69,8 +68,7 @@ void PTHREAD_MUTEX_LOCK(pthread_mutex_t * x)
     i = pthread_mutex_lock(x);
     if (i) {
         lprintf(fatal,
-                "thread %x: %d, %s\n",
-                pthread_self(), i, strerror(i));
+                "thread %x: %d, %s\n", pthread_self(), i, strerror(i));
     }
 }
 

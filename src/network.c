@@ -120,17 +120,27 @@ curl_process_msgs(CURLMsg * curl_msg, int n_running_curl, int n_mesgs)
     if (curl_msg->msg == CURLMSG_DONE) {
         TransferStruct *ts;
         CURL *curl = curl_msg->easy_handle;
-        curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
-                          &ts);
+        CURLcode ret =
+            curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE,
+                              &ts);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
         ts->transferring = 0;
         char *url = NULL;
-        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+        ret = curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
 
         /*
          * Wait for 5 seconds if we get HTTP 429
          */
         long http_resp = 0;
-        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
         if (HTTP_temp_failure(http_resp)) {
             if (!slept) {
                 lprintf(warning,
@@ -306,10 +316,13 @@ void NetworkSystem_init(void)
     crypto_lock_init();
 }
 
-void transfer_blocking(CURL *curl)
+void transfer_blocking(CURL * curl)
 {
     TransferStruct *ts;
-    curl_easy_getinfo(curl, CURLINFO_PRIVATE, &ts);
+    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_PRIVATE, &ts);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
 
     lprintf(network_lock_debug,
             "thread %x: locking transfer_lock;\n", pthread_self());
@@ -334,7 +347,7 @@ void transfer_blocking(CURL *curl)
 
 // }
 
-void transfer_nonblocking(CURL *curl)
+void transfer_nonblocking(CURL * curl)
 {
     lprintf(network_lock_debug,
             "thread %x: locking transfer_lock;\n", pthread_self());
