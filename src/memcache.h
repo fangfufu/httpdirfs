@@ -1,5 +1,5 @@
-#ifndef RAMCACHE_H
-#define RAMCACHE_H
+#ifndef memcache_H
+#define memcache_H
 #include "link.h"
 
 /**
@@ -24,18 +24,6 @@ struct TransferStruct {
     volatile int transferring;
     /** \brief The link associated with the transfer */
     Link *link;
-    /** \brief The minium requested size */
-    size_t min_req_size;
-    /** \brief mutex for background transfer */
-    pthread_mutex_t lock;
-    /** \brief attribute associated with the mutex */
-    pthread_mutexattr_t lock_attr;
-    /** \brief Whether this TransferStruct was used for background transfer */
-    int bg_transfer;
-    /** \brief The cache file used for background transfer */
-    Cache *cf;
-    /** \brief The ID of the segment being downloaded */
-    off_t seg_id;
 };
 
 /**
@@ -43,15 +31,5 @@ struct TransferStruct {
  */
 size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
                              void *userp);
-
-/**
- * \brief Create a TransferStruct for background transfer
- */
-TransferStruct *TransferStruct_bg_transfer_new();
-
-/**
- * \brief Free a TransferStruct used for background transfer
- */
-void TransferStruct_free(TransferStruct *ts);
 
 #endif

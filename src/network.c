@@ -1,7 +1,7 @@
 #include "network.h"
 
 #include "log.h"
-#include "ramcache.h"
+#include "memcache.h"
 #include "util.h"
 
 #include <openssl/crypto.h>

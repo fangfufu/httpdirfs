@@ -3,7 +3,7 @@
 #include "config.h"
 #include "log.h"
 #include "link.h"
-#include "ramcache.h"
+#include "memcache.h"
 #include "util.h"
 
 #include <expat.h>
