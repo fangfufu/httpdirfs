@@ -11,12 +11,12 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
 {
     size_t recv_size = size * nmemb;
     TransferStruct *ts = (TransferStruct *) userp;
-
-    if (ts->bg_transfer) {
-        lprintf(ramcache_debug, "ramcache: thread %x: locking;\n",
-                pthread_self());
-    }
-    PTHREAD_MUTEX_LOCK(&ts->lock);
+    // lprintf(ramcache_debug, "bg_transfer: %d\n", ts->bg_transfer);
+    // if (ts->bg_transfer) {
+    //     lprintf(ramcache_debug, "ramcache: thread %x: locking;\n",
+    //             pthread_self());
+    // }
+    // PTHREAD_MUTEX_LOCK(&ts->lock);
 
     ts->data = realloc(ts->data, ts->curr_size + recv_size + 1);
     if (!ts->data) {
@@ -29,11 +29,11 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
     memmove(&ts->data[ts->curr_size], recv_data, recv_size);
     ts->curr_size += recv_size;
     ts->data[ts->curr_size] = '\0';
-    if (ts->bg_transfer) {
-        lprintf(ramcache_debug, "ramcache: thread %x: unlocking;\n",
-                pthread_self());
-    }
-    PTHREAD_MUTEX_UNLOCK(&ts->lock);
+    // if (ts->bg_transfer) {
+    //     lprintf(ramcache_debug, "ramcache: thread %x: unlocking;\n",
+    //             pthread_self());
+    // }
+    // PTHREAD_MUTEX_UNLOCK(&ts->lock);
     return recv_size;
 }
 

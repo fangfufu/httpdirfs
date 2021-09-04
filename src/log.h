@@ -20,7 +20,7 @@ typedef enum {
 /**
  * \brief The default log level
  */
-#define DEFAULT_LOG_LEVEL fatal | error | warning | info | debug | cache_lock_debug
+#define DEFAULT_LOG_LEVEL fatal | error | warning | info
 
 /**
  * \brief Get the log level from the environment.
