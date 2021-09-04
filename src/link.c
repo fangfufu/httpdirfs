@@ -41,8 +41,7 @@ static Link *Link_new(const char *linkname, LinkType type)
     /*
      * remove the '/' from linkname if it exists
      */
-    char *c =
-        &(link->linkname[strnlen(link->linkname, MAX_FILENAME_LEN) - 1]);
+    char *c = &(link->linkname[strnlen(link->linkname, MAX_FILENAME_LEN) - 1]);
     if (*c == '/') {
         *c = '\0';
     }

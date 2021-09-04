@@ -69,9 +69,6 @@ struct Cache {
 
     /** \brief the FUSE filesystem path to the remote file*/
     char *fs_path;
-
-    /** Transfer struct for the streaming cache */
-    TransferStruct *ts;
 };
 
 /**
