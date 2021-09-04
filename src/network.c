@@ -1,6 +1,7 @@
 #include "network.h"
 
 #include "log.h"
+#include "ramcache.h"
 #include "util.h"
 
 #include <openssl/crypto.h>
@@ -313,26 +314,6 @@ void transfer_nonblocking(CURL *curl)
     if (res > 0) {
         lprintf(error, "%s\n", curl_multi_strerror(res));
     }
-}
-
-size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
-                             void *userp)
-{
-    size_t recv_size = size * nmemb;
-    TransferStruct *ts = (TransferStruct *) userp;
-
-    ts->data = realloc(ts->data, ts->curr_size + recv_size + 1);
-    if (!ts->data) {
-        /*
-         * out of memory!
-         */
-        lprintf(fatal, "realloc failure!\n");
-    }
-
-    memmove(&ts->data[ts->curr_size], recv_data, recv_size);
-    ts->curr_size += recv_size;
-    ts->data[ts->curr_size] = '\0';
-    return recv_size;
 }
 
 int HTTP_temp_failure(HTTPResponseCode http_resp)
