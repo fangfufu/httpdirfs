@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <unistd.h>
+#include <stdbool.h>
 
 /*
  * ----------------- External variables ----------------------
@@ -110,9 +111,10 @@ curl_callback_unlock(CURL *handle, curl_lock_data data, void *userptr)
  * \details Adapted from:
  * https://curl.haxx.se/libcurl/c/10-at-a-time.html
  */
-static void
+static int
 curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
 {
+    int result = 0;
     (void) n_running_curl;
     (void) n_mesgs;
     static volatile int slept = 0;
@@ -163,6 +165,7 @@ curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
             lprintf(error, "%d - %s <%s>\n",
                     curl_msg->data.result,
                     curl_easy_strerror(curl_msg->data.result), url);
+                    result = curl_msg->data.result;
         }
         curl_multi_remove_handle(curl_multi, curl);
         /*
@@ -175,13 +178,50 @@ curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
     } else {
         lprintf(warning, "curl_msg->msg: %d\n", curl_msg->msg);
     }
+    return result;
 }
+
+static int http_error_result(int http_response)
+{
+    switch(http_response)
+    {
+        case 0:   //eg connection down  from kick-off ~suggest retrying till some max limit
+        case 200: //yay we at least got to our url
+        case 206: //Partial Content
+        break;
+
+        case 416:
+        //cannot d/l range ~ either cos no server support
+        //or cos we're asking for an invalid range ~ie: we already d/ld the file
+        printf("HTTP416: either the d/l is already complete or the http server cannot d/l a range\n");
+        default:
+            return 0;//suggest quitting on an unhandled error
+    }
+
+    return 1;
+}
+
+static int curl_error_result(int curl_result)
+{
+    switch (curl_result)
+    {
+        case CURLE_OK:
+        case CURLE_COULDNT_CONNECT:      //no network connectivity ?
+        case CURLE_OPERATION_TIMEDOUT:   //cos of CURLOPT_LOW_SPEED_TIME
+        case CURLE_COULDNT_RESOLVE_HOST: //host/DNS down ?
+            break; //we'll keep trying
+        default://see: http://curl.haxx.se/libcurl/c/libcurl-errors.html
+            return 0;
+    }
+    return 1;
+}
+
 
 /**
  * \details  effectively based on
  * https://curl.haxx.se/libcurl/c/multi-double.html
  */
-int curl_multi_perform_once(void)
+int curl_multi_perform_once(int *result)
 {
     lprintf(network_lock_debug,
             "thread %x: locking transfer_lock;\n", pthread_self());
@@ -207,7 +247,12 @@ int curl_multi_perform_once(void)
     int n_mesgs;
     CURLMsg *curl_msg;
     while ((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
-        curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
+        int nResult = curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
+        if (!http_error_result(n_mesgs) || !curl_error_result(nResult)) {
+            *result = 1;
+        }else{
+            *result = 0;
+        }
     }
 
     lprintf(network_lock_debug,
@@ -272,7 +317,7 @@ void NetworkSystem_init(void)
     crypto_lock_init();
 }
 
-void transfer_blocking(CURL *curl)
+void transfer_blocking(CURL *curl, size_t start)
 {
     TransferStruct *ts;
     CURLcode ret = curl_easy_getinfo(curl, CURLINFO_PRIVATE, &ts);
@@ -293,8 +338,22 @@ void transfer_blocking(CURL *curl)
             "thread %x: unlocking transfer_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
-    while (ts->transferring) {
-        curl_multi_perform_once();
+    int result = 0;
+    bool restartDown = false;
+
+    while (ts->transferring && !restartDown) {
+        /*
+        * When the network is abnormal during the file download, start to resume the transfer
+        */
+        if (0 != result) {
+            curl_multi_remove_handle(curl_multi,curl);
+            curl_easy_setopt(curl, CURLOPT_RESUME_FROM_LARGE, start);
+            res = curl_multi_add_handle(curl_multi, curl);
+            if (res > 0) {
+                lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
+            }
+        }
+        curl_multi_perform_once(&result);
     }
 }
 
