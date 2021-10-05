@@ -45,7 +45,7 @@ ifeq ($(OS),FreeBSD)
 		$(DESTDIR)$(prefix)/bin/httpdirfs
 	gzip -f -k doc/man/httpdirfs.1
 	install -m 644 doc/man/httpdirfs.1.gz \
-		$(DESTDIR)$(prefix)/man/man1/httpdirfs.1.gz
+		$(DESTDIR)$(prefix)/share/man/man1/httpdirfs.1.gz
 endif
 ifeq ($(OS),Darwin)
 	install -d $(DESTDIR)$(prefix)/bin
