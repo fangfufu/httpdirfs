@@ -365,7 +365,7 @@ HTTPDirFS options:\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
         --no-range-check    Disable the build-in check for the server's support\n\
                             for HTTP range requests\n\
-        --insecure_tls      Disable licurl TLS certificate verification by\n\
+        --insecure-tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
