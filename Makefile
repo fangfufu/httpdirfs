@@ -57,6 +57,7 @@ ifeq ($(OS),Darwin)
 endif
 
 man: httpdirfs
+	mkdir -p doc/man
 	help2man --no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
 
 doc:
