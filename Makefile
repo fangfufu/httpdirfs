@@ -58,7 +58,8 @@ endif
 
 man: httpdirfs
 	mkdir -p doc/man
-	help2man --no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
+	help2man --name "mount HTTP directory as a virtual filesystem" \
+		--no-discard-stderr ./httpdirfs > doc/man/httpdirfs.1
 
 doc:
 	doxygen Doxyfile
