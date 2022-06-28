@@ -169,7 +169,7 @@ void parse_config_file(char ***argv, int *argc)
 static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
 {
-    char c;
+    int c;
     int long_index = 0;
     const char *short_opts = "o:hVdfsp:u:P:";
     const struct option long_opts[] = {
