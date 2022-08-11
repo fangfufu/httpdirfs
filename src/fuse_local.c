@@ -95,8 +95,8 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (!link) {
         return -ENOENT;
     }
-    if ((fi->flags & 3) != O_RDONLY) {
-        return -EACCES;
+    if ((fi->flags & O_RDWR) != O_RDONLY) {
+        return -EROFS;
     }
     if (CACHE_SYSTEM_INIT) {
         fi->fh = (uint64_t) Cache_open(path);
