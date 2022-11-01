@@ -143,7 +143,7 @@ void FREE(void *ptr)
     if (ptr) {
         free(ptr);
     } else {
-        lprintf(fatal, "attempted to double free a pointer!\n");
+        lprintf(fatal, "attempted to free NULL ptr!\n");
     }
 }
 
