@@ -860,7 +860,7 @@ TransferStruct Link_download_full(Link *link)
             lprintf(warning,
                     "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
             ts.curr_size = 0;
-            FREE(ts.data);
+            free(ts.data); /* not FREE(); can be NULL on error path! */
             curl_easy_cleanup(curl);
             return ts;
         }
