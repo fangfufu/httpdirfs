@@ -53,6 +53,8 @@ typedef struct {
     char *proxy_username;
     /** \brief HTTP proxy password */
     char *proxy_password;
+    /** \brief HTTP proxy certificate file */
+    char *proxy_cafile;
     /** \brief HTTP maximum connection count */
     long max_conns;
     /** \brief HTTP user agent*/
@@ -63,6 +65,8 @@ typedef struct {
     int no_range_check;
     /** \brief Disable TLS certificate verification */
     int insecure_tls;
+    /** \brief Server certificate file */
+    char *cafile;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
     int cache_enabled;

@@ -199,6 +199,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { "insecure-tls", no_argument, NULL, 'L' },     /* 20 */
         { "config", required_argument, NULL, 'L' },     /* 21 */
         { "single-file-mode", required_argument, NULL, 'L' },   /* 22 */
+        { "cacert", required_argument, NULL, 'L' },     /* 23 */
+        { "proxy-cacert", required_argument, NULL, 'L' },       /* 24 */
         { 0, 0, 0, 0 }
     };
     while ((c =
@@ -296,6 +298,12 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 22:
                 CONFIG.mode = SINGLE;
                 break;
+            case 23:
+                CONFIG.cafile = strdup(optarg);
+                break;
+            case 24:
+                CONFIG.proxy_cafile = strdup(optarg);
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -347,9 +355,11 @@ HTTPDirFS options:\n\
                             https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
         --proxy-username    Username for the proxy\n\
         --proxy-password    Password for the proxy\n\
+        --proxy-cacert      Certificate authority for the proxy\n\
         --cache             Enable cache (default: off)\n\
         --cache-location    Set a custom cache location\n\
                             (default: \"${XDG_CACHE_HOME}/httpdirfs\")\n\
+        --cacert            Certificate authority for the server\n\
         --dl-seg-size       Set cache download segment size, in MB (default: 8)\n\
                             Note: this setting is ignored if previously\n\
                             cached data is found for the requested file.\n\

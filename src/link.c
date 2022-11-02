@@ -95,6 +95,25 @@ static CURL *Link_to_curl(Link *link)
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
+    if (CONFIG.cafile) {
+        /*
+         * Having been given a certificate file, disable any search directory
+         * built into libcurl, so that we exclusively use the explicitly given
+         * certificate(s).
+         *
+         * If we ever add a CAPATH option, we should do the mirror for CAINFO,
+         * too: disable both and then enable whichever one(s) were given.
+         */
+        ret = curl_easy_setopt(curl, CURLOPT_CAPATH, NULL);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+
+        ret = curl_easy_setopt(curl, CURLOPT_CAINFO, CONFIG.cafile);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+    }
     if (CONFIG.insecure_tls) {
         ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
         if (ret) {
@@ -141,6 +160,20 @@ static CURL *Link_to_curl(Link *link)
     if (CONFIG.proxy_password) {
         ret = curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
                                CONFIG.proxy_password);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.proxy_cafile) {
+        /* See CONFIG.cafile above */
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAPATH, NULL);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAINFO,
+                               CONFIG.proxy_cafile);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
@@ -860,7 +893,7 @@ TransferStruct Link_download_full(Link *link)
             lprintf(warning,
                     "cannot retrieve URL: %s, HTTP %ld\n", url, http_resp);
             ts.curr_size = 0;
-            FREE(ts.data);
+            free(ts.data); /* not FREE(); can be NULL on error path! */
             curl_easy_cleanup(curl);
             return ts;
         }
