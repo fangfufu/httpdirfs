@@ -319,14 +319,16 @@ XML_parser_general(void *data, const char *elem, const char **attr)
     LinkTable_add(linktbl, link);
 }
 
-static void sanitize_LinkTable(LinkTable *linktbl) {
+static void sanitise_LinkTable(LinkTable *linktbl) {
     for (int i = 0; i < linktbl->num; i++) {
-	    if (strcmp(linktbl->links[i]->linkname, ".") == 0) {
-		    strcpy(linktbl->links[i]->linkname, "dot");
+	    if (!strcmp(linktbl->links[i]->linkname, ".")) {
+            /* Note the super long sanitised name to avoid collision */
+		    strcpy(linktbl->links[i]->linkname, "__DOT__");
 	    }
 
-	    if (strcmp(linktbl->links[i]->linkname, "/") == 0) {
-		    strcpy(linktbl->links[i]->linkname, "slash");
+	    if (!strcmp(linktbl->links[i]->linkname, "/")) {
+            /* Ditto */
+		    strcpy(linktbl->links[i]->linkname, "__FORWARD-SLASH__");
 	    }
 
 	    for (size_t j = 0; j < strlen(linktbl->links[i]->linkname); j++) {
@@ -336,7 +338,7 @@ static void sanitize_LinkTable(LinkTable *linktbl) {
 	    }
 
 	    if (linktbl->links[i]->next_table != NULL) {
-		    sanitize_LinkTable(linktbl->links[i]->next_table);
+		    sanitise_LinkTable(linktbl->links[i]->next_table);
 	    }
     }
 }
@@ -377,7 +379,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
 
     LinkTable_print(linktbl);
 
-    sanitize_LinkTable(linktbl);
+    sanitise_LinkTable(linktbl);
 
     return linktbl;
 
