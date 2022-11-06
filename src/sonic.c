@@ -319,6 +319,28 @@ XML_parser_general(void *data, const char *elem, const char **attr)
     LinkTable_add(linktbl, link);
 }
 
+static void sanitize_LinkTable(LinkTable *linktbl) {
+    for (int i = 0; i < linktbl->num; i++) {
+	    if (strcmp(linktbl->links[i]->linkname, ".") == 0) {
+		    strcpy(linktbl->links[i]->linkname, "dot");
+	    }
+
+	    if (strcmp(linktbl->links[i]->linkname, "/") == 0) {
+		    strcpy(linktbl->links[i]->linkname, "slash");
+	    }
+
+	    for (size_t j = 0; j < strlen(linktbl->links[i]->linkname); j++) {
+		    if (linktbl->links[i]->linkname[j] == '/') {
+			    linktbl->links[i]->linkname[j] = '-';
+		    }
+	    }
+
+	    if (linktbl->links[i]->next_table != NULL) {
+		    sanitize_LinkTable(linktbl->links[i]->next_table);
+	    }
+    }
+}
+
 /**
  * \brief parse a XML string in order to fill in the LinkTable
  */
@@ -354,6 +376,8 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     FREE(xml.data);
 
     LinkTable_print(linktbl);
+
+    sanitize_LinkTable(linktbl);
 
     return linktbl;
 
@@ -497,5 +521,6 @@ LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
         lprintf(fatal, "case %d.\n", depth);
         break;
     }
+
     return linktbl;
 }
