@@ -5,6 +5,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+## [1.2.4] - 2023-01-11
+
+### Added
+- Add ``--cacert`` and ``--proxy-cacert`` options
+
+### Fixed
+- ``Link_download_full``: don't ``FREE(NULL)``
+- Correct error message in ``FREE()``
+- Error handling for ``fs_open`` and ``getopt_long``
+- Fix IO error with funkwhale subsonic API
+- Fix --insecure-tls in help and README
 
 ## [1.2.3] - 2021-08-31
 
@@ -200,7 +211,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.3...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.4...master
+[1.2.4]: https://github.com/fangfufu/httpdirfs/compare/1.2.3...1.2.4
 [1.2.3]: https://github.com/fangfufu/httpdirfs/compare/1.2.2...1.2.3
 [1.2.2]: https://github.com/fangfufu/httpdirfs/compare/1.2.1...1.2.2
 [1.2.1]: https://github.com/fangfufu/httpdirfs/compare/1.2.0...1.2.1
