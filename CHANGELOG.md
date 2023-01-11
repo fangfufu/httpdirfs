@@ -15,7 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Correct error message in ``FREE()``
 - Error handling for ``fs_open`` and ``getopt_long``
 - Fix IO error with funkwhale subsonic API
-- Fix --insecure-tls in help and README
+- Fix ``--insecure-tls`` in help and README
 
 ## [1.2.3] - 2021-08-31
 
