@@ -51,24 +51,6 @@ Under Debian 10 "Buster" and newer versions, you need the following packages:
 
     libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev
 
-### Debian 9 "Stretch"
-Under Debian 9 "Stretch", you need the following packages:
-
-    libgumbo-dev libfuse-dev libssl1.0-dev libcurl4-openssl-dev
-
-If you get the following warnings during compilation,
-
-    /usr/bin/ld: warning: libcrypto.so.1.0.2, needed by /usr/lib/gcc/x86_64-linux-gnu/6/../../../x86_64-linux-gnu/libcurl.so, may conflict with libcrypto.so.1.1
-
-then this program will crash if you connect to HTTPS website. You need to check
-if you have ``libssl1.0-dev`` installed rather than ``libssl-dev``.
-This is you likely have the binaries of OpenSSL 1.0.2 installed alongside with
-the header files for OpenSSL 1.1. The header files for OpenSSL 1.0.2 link in
-additional mutex related callback functions, whereas the header files for
-OpenSSL 1.1 do not.
-
-You can check your SSL engine version using the ``--version`` flag.
-
 ### FreeBSD
 The following dependencies are required from either pkg or ports:
 
