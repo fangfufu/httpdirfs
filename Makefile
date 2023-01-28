@@ -1,4 +1,4 @@
-VERSION = 1.2.3
+VERSION = 1.2.4
 
 CFLAGS += -g -O2  -Wall -Wextra -Wshadow \
 	-fsanitize=undefined -fanalyzer -Wno-analyzer-file-leak \
