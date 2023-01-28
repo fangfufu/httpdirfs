@@ -949,7 +949,7 @@ static void *Cache_bgdl(void *arg)
                               cf->next_dl_offset);
     if (recv < 0) {
         lprintf(error, "thread %x received %ld bytes, \
-which does't make sense\n", pthread_self(), recv);
+which doesn't make sense\n", pthread_self(), recv);
     }
 
     if ((recv == cf->blksz) ||
@@ -1030,7 +1030,7 @@ Cache_read(Cache *cf, char *const output_buf, const off_t len,
                               dl_offset);
     if (recv < 0) {
         lprintf(error, "thread %x received %ld bytes, \
-which does't make sense\n", pthread_self(), recv);
+which doesn't make sense\n", pthread_self(), recv);
     }
     /*
      * check if we have received enough data, write it to the disk
