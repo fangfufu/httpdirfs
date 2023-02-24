@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [1.2.5] - 2023-02-24
+
+### Fixed
+- No longer compile with UBSAN enabled by default to avoid introducing
+security vulnerability.
+
 ## [1.2.4] - 2023-01-11
 
 ### Added
@@ -211,7 +218,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.4...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...master
+[1.2.5]: https://github.com/fangfufu/httpdirfs/compare/1.2.4...1.2.5
 [1.2.4]: https://github.com/fangfufu/httpdirfs/compare/1.2.3...1.2.4
 [1.2.3]: https://github.com/fangfufu/httpdirfs/compare/1.2.2...1.2.3
 [1.2.2]: https://github.com/fangfufu/httpdirfs/compare/1.2.1...1.2.2
