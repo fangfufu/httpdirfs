@@ -384,6 +384,28 @@ static int linknames_equal(char *linkname, const char *linkname_new)
     return 0;
 }
 
+
+static const char* strrchr_ex(const char* str, const char c, int max_pos)
+{
+	const char* ptr = 0;
+	int i;
+	int len = strlen(str);
+	if (max_pos > len - 1)
+		max_pos = len - 1;
+	if (max_pos < 0)
+		max_pos = 0;
+	for (i = max_pos; max_pos >=0 ; --i)
+	{
+		if (str[i] == c)
+		{
+			ptr = str + i+1;
+			break;
+		}
+
+	}
+	return ptr;
+}
+
 /**
  * Shamelessly copied and pasted from:
  * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
@@ -400,20 +422,37 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
         /*
          * if it is valid, copy the link onto the heap
          */
-        LinkType type = linkname_to_LinkType(href->value);
+
+	const char* relative_link = href->value;
+        size_t len = strnlen(href->value, MAX_FILENAME_LEN);
+	if (relative_link[len-1] == '/')
+	{	
+		// dir
+		const char *found = strrchr_ex(relative_link, '/', len-2);
+		if (found)
+			relative_link = found;
+	}
+	else
+	{
+		const char *found = strrchr(relative_link, '/');
+		if (found)
+			relative_link = found+1;
+	}
+
+        LinkType type = linkname_to_LinkType(relative_link);
         /*
          * We also check if the link being added is the same as the last link.
          * This is to prevent duplicated link, if an Apache server has the
          * IconsAreLinks option.
          */
-        size_t comp_len = strnlen(href->value, MAX_FILENAME_LEN);
+        size_t comp_len = strnlen(relative_link, MAX_FILENAME_LEN);
         if (type == LINK_DIR) {
             comp_len--;
         }
         if (((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) &&
                 !linknames_equal(linktbl->links[linktbl->num - 1]->linkname,
-                                 href->value)) {
-            LinkTable_add(linktbl, Link_new(href->value, type));
+                                 relative_link)) {
+            LinkTable_add(linktbl, Link_new(relative_link, type));
         }
     }
     /*
