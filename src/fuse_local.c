@@ -44,7 +44,7 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         if (!link) {
             return -ENOENT;
         }
-        struct timespec spec;
+        struct timespec spec = {0};
         spec.tv_sec = link->time;
 #if defined(__APPLE__) && defined(__MACH__)
         stbuf->st_mtimespec = spec;
@@ -138,14 +138,11 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     (void) fi;
     LinkTable *linktbl;
 
-    if (!strcmp(path, "/")) {
-        linktbl = ROOT_LINK_TBL;
-    } else {
-        linktbl = path_to_Link_LinkTable_new(path);
-        if (!linktbl) {
-            return -ENOENT;
-        }
+    linktbl = path_to_Link_LinkTable_new(path);
+    if (!linktbl) {
+        return -ENOENT;
     }
+
 
     /*
      * start adding the links
