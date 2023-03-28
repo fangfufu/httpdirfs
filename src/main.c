@@ -373,7 +373,7 @@ HTTPDirFS options:\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: 5)\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
-        --no-range-check    Disable the build-in check for the server's support\n\
+        --no-range-check    Disable the built-in check for the server's support\n\
                             for HTTP range requests\n\
         --insecure-tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\

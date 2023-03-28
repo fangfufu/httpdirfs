@@ -24,7 +24,7 @@ typedef struct {
 static SonicConfigStruct SONIC_CONFIG;
 
 /**
- * \brief initalise Sonic configuration struct
+ * \brief initialise Sonic configuration struct
  */
 void
 sonic_config_init(const char *server, const char *username,

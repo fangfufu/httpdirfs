@@ -8,7 +8,7 @@
 typedef struct {
     /**
      * \brief Sonic id field
-     * \details This is used to store the followings:
+     * \details This is used to store the following:
      *  - Arist ID
      *  - Album ID
      *  - Song ID
