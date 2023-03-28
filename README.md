@@ -121,7 +121,7 @@ HTTPDirFS options:
         --retry-wait        Set delay in seconds before retrying an HTTP request
                             after encountering an error. (default: 5)
         --user-agent        Set user agent string (default: "HTTPDirFS")
-        --no-range-check    Disable the build-in check for the server's support
+        --no-range-check    Disable the built-in check for the server's support
                             for HTTP range requests
         --insecure-tls      Disable licurl TLS certificate verification by
                             setting CURLOPT_SSL_VERIFYHOST to 0
@@ -250,7 +250,7 @@ Alternatively, you can specify your own configuration file by using the
 
 ### Log levels
 You can control how much log HTTPDirFS outputs by setting the
-``HTTPDIRFS_LOG_LEVEL`` enviromental variable. For details of the different
+``HTTPDIRFS_LOG_LEVEL`` environmental variable. For details of the different
 types of log that are supported, please refer to
 [log.h](https://github.com/fangfufu/httpdirfs/blob/master/src/log.h) and
 [log.c](https://github.com/fangfufu/httpdirfs/blob/master/src/log.c).
