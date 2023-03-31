@@ -53,6 +53,8 @@ void Config_init(void)
 
     CONFIG.insecure_tls = 0;
 
+    CONFIG.refresh_timeout = DEFAULT_REFRESH_TIMEOUT;
+
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 

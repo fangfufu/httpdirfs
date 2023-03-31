@@ -33,6 +33,7 @@ typedef enum {
  */
 struct LinkTable {
     int num;
+    time_t index_time;
     Link **links;
 };
 

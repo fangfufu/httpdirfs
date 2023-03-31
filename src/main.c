@@ -201,6 +201,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { "single-file-mode", required_argument, NULL, 'L' },   /* 22 */
         { "cacert", required_argument, NULL, 'L' },     /* 23 */
         { "proxy-cacert", required_argument, NULL, 'L' },       /* 24 */
+        { "refresh-timeout", required_argument, NULL, 'L' }, /* 25 */
         { 0, 0, 0, 0 }
     };
     while ((c =
@@ -304,6 +305,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 24:
                 CONFIG.proxy_cafile = strdup(optarg);
                 break;
+            case 25:
+                CONFIG.refresh_timeout = atoi(optarg);
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -370,6 +374,7 @@ HTTPDirFS options:\n\
                             to 1TB in size using the default segment size.\n\
         --max-conns         Set maximum number of network connections that\n\
                             libcurl is allowed to make. (default: 10)\n\
+        --refresh-timeout X Refresh directories after X seconds\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: 5)\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\

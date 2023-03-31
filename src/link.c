@@ -501,11 +501,15 @@ static void LinkTable_invalid_reset(LinkTable *linktbl)
 
 void LinkTable_free(LinkTable *linktbl)
 {
-    for (int i = 0; i < linktbl->num; i++) {
-        FREE(linktbl->links[i]);
+    if (linktbl)
+    {
+        for (int i = 0; i < linktbl->num; i++) {
+            LinkTable_free(linktbl->links[i]->next_table);
+            FREE(linktbl->links[i]);
+        }
+        FREE(linktbl->links);
+        FREE(linktbl);
     }
-    FREE(linktbl->links);
-    FREE(linktbl);
 }
 
 void LinkTable_print(LinkTable *linktbl)
@@ -538,6 +542,10 @@ void LinkTable_print(LinkTable *linktbl)
 LinkTable *LinkTable_alloc(const char *url)
 {
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
+    linktbl->num = 0;
+    linktbl->index_time = 0;
+    linktbl->links = NULL;
+
 
     /*
      * populate the base URL
@@ -552,6 +560,7 @@ LinkTable *LinkTable_alloc(const char *url)
 LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = LinkTable_alloc(url);
+    linktbl->index_time = time(NULL);
 
     /*
      * start downloading the base URL
@@ -733,24 +742,50 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 
 LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
-    Link *link = path_to_Link(path);
-    LinkTable *next_table = link->next_table;
+    struct Link *link = NULL, *tmp_link = NULL;
+    struct Link linkcpy = {0};
+    LinkTable *next_table = NULL;
+    if (!strcmp(path, "/")) {
+        next_table = ROOT_LINK_TBL;
+        linkcpy = *next_table->links[0];
+        tmp_link = &linkcpy;
+    } else {
+        link = path_to_Link(path);
+        tmp_link = link;
+        LinkTable *next_table = link->next_table;
+    }
+
+    if (next_table)
+    {
+        time_t time_now = time(NULL);
+        if (time_now - next_table->index_time  > CONFIG.refresh_timeout)
+        {
+            // refresh directory contents
+            LinkTable_free(next_table);
+            next_table = NULL;
+            if (link)
+                link->next_table = NULL;
+        }
+    }
     if (!next_table) {
         if (CONFIG.mode == NORMAL) {
-            next_table = LinkTable_new(link->f_url);
+            next_table = LinkTable_new(tmp_link->f_url);
         } else if (CONFIG.mode == SONIC) {
             if (!CONFIG.sonic_id3) {
-                next_table = sonic_LinkTable_new_index(link->sonic.id);
+                next_table = sonic_LinkTable_new_index(tmp_link->sonic.id);
             } else {
                 next_table =
-                    sonic_LinkTable_new_id3(link->sonic.depth,
-                                            link->sonic.id);
+                    sonic_LinkTable_new_id3(tmp_link->sonic.depth,
+                                            tmp_link->sonic.id);
             }
         } else {
             lprintf(fatal, "Invalid CONFIG.mode\n");
         }
     }
-    link->next_table = next_table;
+    if (link)
+        link->next_table = next_table;
+    else
+        ROOT_LINK_TBL = next_table;
     return next_table;
 }
 

@@ -24,6 +24,11 @@
 #define DEFAULT_NETWORK_MAX_CONNS   10
 
 /**
+ * \brief The default refresh_timeout 
+ */
+#define DEFAULT_REFRESH_TIMEOUT  86400 
+
+/**
  * \brief Operation modes
  */
 typedef enum {
@@ -67,6 +72,8 @@ typedef struct {
     int insecure_tls;
     /** \brief Server certificate file */
     char *cafile;
+    /** \brief Refresh directory listing after refresh_timeout seconds*/
+    int refresh_timeout;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
     int cache_enabled;
