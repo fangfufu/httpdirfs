@@ -501,8 +501,7 @@ static void LinkTable_invalid_reset(LinkTable *linktbl)
 
 void LinkTable_free(LinkTable *linktbl)
 {
-    if (linktbl)
-    {
+    if (linktbl) {
         for (int i = 0; i < linktbl->num; i++) {
             LinkTable_free(linktbl->links[i]->next_table);
             FREE(linktbl->links[i]);
@@ -755,11 +754,9 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
         tmp_link = link;
     }
 
-    if (next_table)
-    {
+    if (next_table) {
         time_t time_now = time(NULL);
-        if (time_now - next_table->index_time  > CONFIG.refresh_timeout)
-        {
+        if (time_now - next_table->index_time  > CONFIG.refresh_timeout) {
             /* refresh directory contents */
             LinkTable_free(next_table);
             next_table = NULL;

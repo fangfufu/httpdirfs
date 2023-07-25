@@ -319,27 +319,28 @@ XML_parser_general(void *data, const char *elem, const char **attr)
     LinkTable_add(linktbl, link);
 }
 
-static void sanitise_LinkTable(LinkTable *linktbl) {
+static void sanitise_LinkTable(LinkTable *linktbl)
+{
     for (int i = 0; i < linktbl->num; i++) {
-	    if (!strcmp(linktbl->links[i]->linkname, ".")) {
+        if (!strcmp(linktbl->links[i]->linkname, ".")) {
             /* Note the super long sanitised name to avoid collision */
-		    strcpy(linktbl->links[i]->linkname, "__DOT__");
-	    }
+            strcpy(linktbl->links[i]->linkname, "__DOT__");
+        }
 
-	    if (!strcmp(linktbl->links[i]->linkname, "/")) {
+        if (!strcmp(linktbl->links[i]->linkname, "/")) {
             /* Ditto */
-		    strcpy(linktbl->links[i]->linkname, "__FORWARD-SLASH__");
-	    }
+            strcpy(linktbl->links[i]->linkname, "__FORWARD-SLASH__");
+        }
 
-	    for (size_t j = 0; j < strlen(linktbl->links[i]->linkname); j++) {
-		    if (linktbl->links[i]->linkname[j] == '/') {
-			    linktbl->links[i]->linkname[j] = '-';
-		    }
-	    }
+        for (size_t j = 0; j < strlen(linktbl->links[i]->linkname); j++) {
+            if (linktbl->links[i]->linkname[j] == '/') {
+                linktbl->links[i]->linkname[j] = '-';
+            }
+        }
 
-	    if (linktbl->links[i]->next_table != NULL) {
-		    sanitise_LinkTable(linktbl->links[i]->next_table);
-	    }
+        if (linktbl->links[i]->next_table != NULL) {
+            sanitise_LinkTable(linktbl->links[i]->next_table);
+        }
     }
 }
 

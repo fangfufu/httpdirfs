@@ -24,9 +24,9 @@
 #define DEFAULT_NETWORK_MAX_CONNS   10
 
 /**
- * \brief The default refresh_timeout 
+ * \brief The default refresh_timeout
  */
-#define DEFAULT_REFRESH_TIMEOUT  86400 
+#define DEFAULT_REFRESH_TIMEOUT  86400
 
 /**
  * \brief Operation modes
