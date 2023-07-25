@@ -435,9 +435,9 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
     if (http_resp == HTTP_OK) {
-        double cl = 0;
+        curl_off_t cl = 0;
         ret =
-            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
