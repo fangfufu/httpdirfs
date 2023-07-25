@@ -44,7 +44,7 @@ static int fs_getattr(const char *path, struct stat *stbuf)
         if (!link) {
             return -ENOENT;
         }
-        struct timespec spec = {0};
+        struct timespec spec = { 0 };
         spec.tv_sec = link->time;
 #if defined(__APPLE__) && defined(__MACH__)
         stbuf->st_mtimespec = spec;

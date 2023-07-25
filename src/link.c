@@ -742,17 +742,17 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 
 LinkTable *path_to_Link_LinkTable_new(const char *path)
 {
-    struct Link *link = NULL, *tmp_link = NULL;
-    struct Link linkcpy = {0};
+    Link *link = NULL;
+    Link *tmp_link = NULL;
+    Link link_cpy = { 0 };
     LinkTable *next_table = NULL;
     if (!strcmp(path, "/")) {
         next_table = ROOT_LINK_TBL;
-        linkcpy = *next_table->links[0];
-        tmp_link = &linkcpy;
+        link_cpy = *next_table->links[0];
+        tmp_link = &link_cpy;
     } else {
         link = path_to_Link(path);
         tmp_link = link;
-        LinkTable *next_table = link->next_table;
     }
 
     if (next_table)
@@ -760,11 +760,12 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
         time_t time_now = time(NULL);
         if (time_now - next_table->index_time  > CONFIG.refresh_timeout)
         {
-            // refresh directory contents
+            /* refresh directory contents */
             LinkTable_free(next_table);
             next_table = NULL;
-            if (link)
+            if (link) {
                 link->next_table = NULL;
+            }
         }
     }
     if (!next_table) {
@@ -782,10 +783,11 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
             lprintf(fatal, "Invalid CONFIG.mode\n");
         }
     }
-    if (link)
+    if (link) {
         link->next_table = next_table;
-    else
+    } else {
         ROOT_LINK_TBL = next_table;
+    }
     return next_table;
 }
 
