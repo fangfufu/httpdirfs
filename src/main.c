@@ -225,6 +225,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             return 1;
         case 'd':
             add_arg(fuse_argv, fuse_argc, "-d");
+            CONFIG.log_type |= debug;
             break;
         case 'f':
             add_arg(fuse_argv, fuse_argc, "-f");
