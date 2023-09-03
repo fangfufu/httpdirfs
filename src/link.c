@@ -36,6 +36,7 @@ static Link *Link_new(const char *linkname, LinkType type)
     Link *link = CALLOC(1, sizeof(Link));
 
     strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
+    strncpy(link->linkpath, linkname, MAX_FILENAME_LEN);
     link->type = type;
 
     /*
@@ -269,26 +270,20 @@ static LinkTable *single_LinkTable_new(const char *url)
     return linktbl;
 }
 
-LinkTable *LinkSystem_init(const char *raw_url)
+LinkTable *LinkSystem_init(const char *url)
 {
     if (pthread_mutex_init(&link_lock, NULL)) {
         lprintf(error, "link_lock initialisation failed!\n");
     }
-    /*
-     * Remove excess '/' if it is there
-     */
-    char *url = strdup(raw_url);
     int url_len = strnlen(url, MAX_PATH_LEN) - 1;
-    if (url[url_len] == '/') {
-        url[url_len] = '\0';
-    }
     /*
      * --------- Set the length of the root link -----------
      */
     /*
      * This is where the '/' should be
      */
-    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN);
+    ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) -
+      ((url[url_len] == '/') ? 1 : 0);
 
     /*
      * --------------------- Enable cache system --------------------
@@ -319,7 +314,6 @@ LinkTable *LinkSystem_init(const char *raw_url)
     } else {
         lprintf(fatal, "Invalid CONFIG.mode\n");
     }
-    FREE(url);
     return ROOT_LINK_TBL;
 }
 
@@ -469,7 +463,7 @@ static void LinkTable_fill(LinkTable *linktbl)
     for (int i = 1; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         char *url;
-        url = path_append(head_link->f_url, this_link->linkname);
+        url = path_append(head_link->f_url, this_link->linkpath);
         strncpy(this_link->f_url, url, MAX_PATH_LEN);
         FREE(url);
         char *unescaped_linkname;
