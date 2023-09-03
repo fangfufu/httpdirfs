@@ -465,23 +465,40 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
 
 static void LinkTable_fill(LinkTable *linktbl)
 {
+    CURL *c = curl_easy_init();
     Link *head_link = linktbl->links[0];
     lprintf(debug, "Filling %s\n", head_link->f_url);
     for (int i = 1; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
-        char *url;
-        url = path_append(head_link->f_url, this_link->linkpath);
+        /* Some web sites use characters in their href attributes that really
+           shouldn't be in their href attributes, most commonly spaces. And
+           some web sites _do_ properly encode their href attributes. So we
+           first unescape the link path, and then we escape it, so that curl
+           will definitely be happy with it (e.g., curl won't accept URLs with
+           spaces in them!). If we only escaped it, and there were already
+           encoded characters in it, then that would break the link. */
+        char *unescaped_path = curl_easy_unescape(c, this_link->linkpath, 0,
+                                                  NULL);
+        char *escaped_path = curl_easy_escape(c, unescaped_path, 0);
+        curl_free(unescaped_path);
+        /* Our code does the wrong thing if there's a trailing slash that's been
+           replaced with %2F, which curl_easy_escape does, God bless it, so if
+           it did that then let's put it back. */
+        int escaped_len = strlen(escaped_path);
+        if (escaped_len >= 3 && !strcmp(escaped_path + escaped_len - 3, "%2F"))
+            strcpy(escaped_path + escaped_len - 3, "/");
+        char *url = path_append(head_link->f_url, escaped_path);
+        curl_free(escaped_path);
         strncpy(this_link->f_url, url, MAX_PATH_LEN);
         FREE(url);
         char *unescaped_linkname;
-        CURL *c = curl_easy_init();
         unescaped_linkname = curl_easy_unescape(c, this_link->linkname,
                                                 0, NULL);
         strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
         curl_free(unescaped_linkname);
-        curl_easy_cleanup(c);
     }
     LinkTable_uninitialised_fill(linktbl);
+    curl_easy_cleanup(c);
 }
 
 /**
