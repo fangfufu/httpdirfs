@@ -27,6 +27,7 @@ int ROOT_LINK_OFFSET = 0;
  * effectively gives LinkTable generation priority over file transfer.
  */
 static pthread_mutex_t link_lock;
+static void make_link_relative(const char *page_url, char *link_url);
 
 /**
  * \brief create a new Link
@@ -382,7 +383,8 @@ static int linknames_equal(char *linkname, const char *linkname_new)
  * Shamelessly copied and pasted from:
  * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
  */
-static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
+static void HTML_to_LinkTable(const char *url, GumboNode *node,
+                              LinkTable *linktbl)
 {
     if (node->type != GUMBO_NODE_ELEMENT) {
         return;
@@ -391,23 +393,25 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
     if (node->v.element.tag == GUMBO_TAG_A &&
             (href =
                  gumbo_get_attribute(&node->v.element.attributes, "href"))) {
+        char *link_url = href->value;
+        make_link_relative(url, link_url);
         /*
          * if it is valid, copy the link onto the heap
          */
-        LinkType type = linkname_to_LinkType(href->value);
+        LinkType type = linkname_to_LinkType(link_url);
         /*
          * We also check if the link being added is the same as the last link.
          * This is to prevent duplicated link, if an Apache server has the
          * IconsAreLinks option.
          */
-        size_t comp_len = strnlen(href->value, MAX_FILENAME_LEN);
+        size_t comp_len = strnlen(link_url, MAX_FILENAME_LEN);
         if (type == LINK_DIR) {
             comp_len--;
         }
         if (((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) &&
                 !linknames_equal(linktbl->links[linktbl->num - 1]->linkname,
-                                 href->value)) {
-            LinkTable_add(linktbl, Link_new(href->value, type));
+                                 link_url)) {
+            LinkTable_add(linktbl, Link_new(link_url, type));
         }
     }
     /*
@@ -415,7 +419,7 @@ static void HTML_to_LinkTable(GumboNode *node, LinkTable *linktbl)
      */
     GumboVector *children = &node->v.element.children;
     for (size_t i = 0; i < children->length; ++i) {
-        HTML_to_LinkTable((GumboNode *) children->data[i], linktbl);
+        HTML_to_LinkTable(url, (GumboNode *) children->data[i], linktbl);
     }
     return;
 }
@@ -568,7 +572,7 @@ LinkTable *LinkTable_new(const char *url)
      * Otherwise parsed the received data
      */
     GumboOutput *output = gumbo_parse(ts.data);
-    HTML_to_LinkTable(output->root, linktbl);
+    HTML_to_LinkTable(url, output->root, linktbl);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
     FREE(ts.data);
 
@@ -1057,4 +1061,52 @@ long path_download(const char *path, char *output_buf, size_t req_size,
     }
 
     return Link_download(link, output_buf, req_size, offset);
+}
+
+static void make_link_relative(const char *page_url, char *link_url) 
+{
+    /*
+      Some servers make the links to subdirectories absolute, but our code
+      expects them to be relative, so change the contents of link_url as
+      needed to accommodate that.
+    */
+    if (link_url[0] != '/') {
+        /* Already relative, nothing to do here! */
+        return;
+    }
+
+    /* Find the slash after the host name. */
+    int slashes_left_to_find = 3;
+    while (*page_url) {
+        if (*page_url == '/' && ! --slashes_left_to_find)
+            break;
+        /* N.B. This is here, rather than doing `while (*page_url++)`, because
+           when we're done we want the pointer to point at the final slash. */
+        page_url++;
+    }
+    if (slashes_left_to_find)
+      if (! *page_url)
+        /* We're at the top level of the web site and the user entered the URL
+           without a trailing slash. */
+        page_url = "/";
+    else
+        /* Well, that's odd. Let's return rather than trying to dig ourselves
+           deeper into whatever hole we're in. */
+        return;
+    /* The page URL is no longer the full page_url, it's just the part after
+       the host name.
+    /* The link URL should start with the page URL. */
+    if (strstr(link_url, page_url) != link_url)
+        return;
+    int skip_len = strlen(page_url);
+    if (page_url[skip_len-1] != '/') {
+        if (page_url[skip_len] != '/')
+            /* Um, I'm not sure what to do here, so give up. */
+            return;
+        skip_len++;
+    }
+    /* Move the part of the link URL after the parent page's pat to
+       the beginning of the link URL string, discarding what came
+       before it. */
+    memmove(link_url, link_url + skip_len, strlen(link_url) - skip_len + 1);
 }
