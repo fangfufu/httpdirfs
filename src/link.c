@@ -53,6 +53,7 @@ static Link *Link_new(const char *linkname, LinkType type)
 
 static CURL *Link_to_curl(Link *link)
 {
+    lprintf(debug, "%s\n", link->f_url);
     CURL *curl = curl_easy_init();
     if (!curl) {
         lprintf(fatal, "curl_easy_init() failed!\n");
@@ -186,6 +187,7 @@ static CURL *Link_to_curl(Link *link)
 
 static void Link_req_file_stat(Link *this_link)
 {
+    lprintf(debug, "%s\n", this_link->f_url);
     CURL *curl = Link_to_curl(this_link);
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
     if (ret) {
@@ -464,6 +466,7 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
 static void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
+    lprintf(debug, "Filling %s\n", head_link->f_url);
     for (int i = 1; i < linktbl->num; i++) {
         Link *this_link = linktbl->links[i];
         char *url;
