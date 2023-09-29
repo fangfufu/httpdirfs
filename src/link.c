@@ -395,7 +395,7 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     if (node->v.element.tag == GUMBO_TAG_A &&
             (href =
                  gumbo_get_attribute(&node->v.element.attributes, "href"))) {
-        char *link_url = href->value;
+        char *link_url = (char *) href->value;
         make_link_relative(url, link_url);
         /*
          * if it is valid, copy the link onto the heap
@@ -705,6 +705,11 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     return res;
 }
 
+/* This is necessary to get the compiler on some platforms to stop
+   complaining about the fact that we're not using the return value of
+   fread, when we know we aren't and that's fine. */
+static inline void ignore_value(int i) { (void) i; }
+
 LinkTable *LinkTable_disk_open(const char *dirn)
 {
     char *metadirn = path_append(META_DIR, dirn);
@@ -728,12 +733,16 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     linktbl->links = CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
-        fread(linktbl->links[i]->linkname, sizeof(char),
-              MAX_FILENAME_LEN, fp);
-        fread(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp);
-        fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp);
-        fread(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp);
-        fread(&linktbl->links[i]->time, sizeof(long), 1, fp);
+        /* The return values are safe to ignore here since we check them
+           immediately afterwards with feof() and ferror(). */
+        ignore_value(fread(linktbl->links[i]->linkname, sizeof(char),
+                           MAX_FILENAME_LEN, fp));
+        ignore_value(fread(linktbl->links[i]->f_url, sizeof(char),
+                           MAX_PATH_LEN, fp));
+        ignore_value(fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
+        ignore_value(fread(&linktbl->links[i]->content_length,
+                           sizeof(size_t), 1, fp));
+        ignore_value(fread(&linktbl->links[i]->time, sizeof(long), 1, fp));
         if (feof(fp)) {
             /*
              * reached EOF
@@ -1114,7 +1123,7 @@ static void make_link_relative(const char *page_url, char *link_url)
            deeper into whatever hole we're in. */
         return;
     /* The page URL is no longer the full page_url, it's just the part after
-       the host name.
+       the host name. */
     /* The link URL should start with the page URL. */
     if (strstr(link_url, page_url) != link_url)
         return;
