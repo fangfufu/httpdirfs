@@ -1131,15 +1131,16 @@ static void make_link_relative(const char *page_url, char *link_url)
            when we're done we want the pointer to point at the final slash. */
         page_url++;
     }
-    if (slashes_left_to_find)
-      if (! *page_url)
+    if (slashes_left_to_find) {
+      if (slashes_left_to_find == 1 && ! *page_url)
         /* We're at the top level of the web site and the user entered the URL
            without a trailing slash. */
         page_url = "/";
-    else
+      else
         /* Well, that's odd. Let's return rather than trying to dig ourselves
            deeper into whatever hole we're in. */
         return;
+    }
     /* The page URL is no longer the full page_url, it's just the part after
        the host name. */
     /* The link URL should start with the page URL. */
