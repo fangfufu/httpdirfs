@@ -1043,9 +1043,9 @@ range requests\n");
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
-    if (!((http_resp != HTTP_OK) ||
-            (http_resp != HTTP_PARTIAL_CONTENT) ||
-            (http_resp != HTTP_RANGE_NOT_SATISFIABLE))) {
+    if ((http_resp != HTTP_OK) &&
+	(http_resp != HTTP_PARTIAL_CONTENT) &&
+	(http_resp != HTTP_RANGE_NOT_SATISFIABLE)) {
         char *url;
         curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
         lprintf(warning, "Could not download %s, HTTP %ld\n", url, http_resp);
