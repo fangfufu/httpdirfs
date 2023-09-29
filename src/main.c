@@ -220,7 +220,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
              */
             return 1;
         case 'V':
-            print_version(argv[0], 1);
+            print_version();
             add_arg(fuse_argv, fuse_argc, "-V");
             return 1;
         case 'd':
