@@ -14,5 +14,17 @@ doc/html
 *.c~
 *.h~
 
+# autotools
+autom4te.cache
+
 #Others
 mnt
+
+# Generated files
+Doxyfile
+Makefile
+config.log
+config.status
+doc
+src/.deps
+src/.dirstamp

@@ -56,17 +56,21 @@ The following dependencies are required from either pkg or ports:
 
 Packages:
 
-    gmake fusefs-libs gumbo e2fsprogs-libuuid curl expat
+    gmake fusefs-libs gumbo e2fsprogs-libuuid curl expat pkgconf help2man
+
+If you want to be ableto build the documentation ("gmake doc") you also need
+doxygen (devel/doxygen).
 
 Ports:
 
-    devel/gmake sysutils/fusefs-libs devel/gumbo misc/e2fsprogs-libuuid ftp/curl textproc/expat2
+    devel/gmake sysutils/fusefs-libs devel/gumbo misc/e2fsprogs-libuuid ftp/curl textproc/expat2 devel/pkgconf devel/doxygen misc/help2man
 
 **Note:** If you want brotli compression support, you will need to install curl
 from ports and enable the option.
 
 You can then build + install with:
 
+    ./configure
     gmake
     sudo gmake install
 
@@ -74,12 +78,16 @@ Alternatively, you may use the FreeBSD [ports(7)](https://man.freebsd.org/ports/
 infrastructure to build HTTPDirFS from source with the modifications you need.
 
 ### macOS
-You need to install macFUSE, cURL, gumbo, and OpenSSL from Homebrew:
+You need to install some packages from Homebrew:
 
-    brew install macfuse curl gumbo-parser openssl pkg-config
+    brew install macfuse curl gumbo-parser openssl pkg-config help2man
+
+If you want to be able to build the documentation ("make doc") you also need
+help2man, doxygen, and graphviz.
 
 Build and install:
 
+    ./configure
     make
     sudo make install
 
