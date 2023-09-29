@@ -406,10 +406,20 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
          * This is to prevent duplicated link, if an Apache server has the
          * IconsAreLinks option.
          */
+	/* The following four lines of code have no effect so I've commented
+	   them out. I'm not removing them entirely because it's possible the
+	   original intent was to do a check of some sort here and it's an
+	   error that this check wasn't fully implemented, in which case this
+	   commented out code and the comment above it should serve as a
+	   reminder to whoever originally wrote it that there's something
+	   unfinished here that needs to be finished.
+	*/
+	/*
         size_t comp_len = strnlen(link_url, MAX_FILENAME_LEN);
         if (type == LINK_DIR) {
             comp_len--;
         }
+	*/
         if (((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) &&
                 !linknames_equal(linktbl->links[linktbl->num - 1]->linkname,
                                  link_url)) {
