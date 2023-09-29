@@ -739,7 +739,15 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
 
-    fread(&linktbl->num, sizeof(int), 1, fp);
+    if (sizeof(int) != fread(&linktbl->num, sizeof(int), 1, fp)) {
+        /*
+         * reached EOF
+         */
+        lprintf(error, "reached EOF!\n");
+        LinkTable_free(linktbl);
+        LinkTable_disk_delete(dirn);
+        return NULL;
+    }
     linktbl->links = CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
