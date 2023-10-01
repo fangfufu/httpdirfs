@@ -1113,12 +1113,33 @@ long path_download(const char *path, char *output_buf, size_t req_size,
 static void make_link_relative(const char *page_url, char *link_url) 
 {
     /*
-      Some servers make the links to subdirectories absolute, but our code
-      expects them to be relative, so change the contents of link_url as
-      needed to accommodate that.
+      Some servers make the links to subdirectories absolute (in URI terms:
+      path-absolute), but our code expects them to be relative (in URI terms:
+      path-noscheme), so change the contents of link_url as needed to
+      accommodate that.
+
+      Also, some servers serve their links as `./name`. This is helpful to
+      them because it is the only way to express relative references when the
+      first new path segment of the target contains an unescaped colon (`:`),
+      eg in `./6:1-balun.png`. While stripping the ./ strictly speaking
+      reintroduces that ambiguity, it is of little practical concern in this
+      implementation, as full URI link targets are filtered by their number of
+      slashes anyway. In URI terms, this converts path-noscheme with a leading
+      `.` segment into path-noscheme or path-rootless without that segment.
     */
+
+    if (link_url[0] == '.' && link_url[1] == '/') {
+        memmove(link_url, link_url + 2, strlen(link_url) - 1);
+        return;
+    }
+
     if (link_url[0] != '/') {
-        /* Already relative, nothing to do here! */
+        /* Already relative, nothing to do here!
+
+          (Full URIs, eg. `http://example.com/path`, pass through here
+          unmodified, but those are classified in different LinkTypes later
+          anyway).
+         */
         return;
     }
 
