@@ -799,6 +799,8 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
     if (!next_table) {
         if (CONFIG.mode == NORMAL) {
             next_table = LinkTable_new(tmp_link->f_url);
+        } else if (CONFIG.mode == SINGLE) {
+            next_table = single_LinkTable_new(tmp_link->f_url);
         } else if (CONFIG.mode == SONIC) {
             if (!CONFIG.sonic_id3) {
                 next_table = sonic_LinkTable_new_index(tmp_link->sonic.id);
@@ -808,7 +810,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
                                             tmp_link->sonic.id);
             }
         } else {
-            lprintf(fatal, "Invalid CONFIG.mode\n");
+            lprintf(fatal, "Invalid CONFIG.mode: %d\n", CONFIG.mode);
         }
     }
     if (link) {
@@ -981,7 +983,7 @@ static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
     }
 
     size_t start = offset;
-    size_t end = start + req_size;
+    size_t end = start + req_size - 1;
 
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
@@ -1061,6 +1063,11 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
     header.curr_size = 0;
     header.data = NULL;
 
+    if (offset + req_size > link->content_length) {
+        lprintf(error, "requested size to large, req_size: %lu, recv: %ld, content-length: %ld\n", req_size, recv, link->content_length);
+        req_size = link->content_length - offset;
+    }
+
     CURL *curl = Link_download_curl_setup(link, req_size, offset, &header, &ts);
 
     transfer_blocking(curl);
@@ -1096,7 +1103,7 @@ long path_download(const char *path, char *output_buf, size_t req_size,
     return Link_download(link, output_buf, req_size, offset);
 }
 
-static void make_link_relative(const char *page_url, char *link_url) 
+static void make_link_relative(const char *page_url, char *link_url)
 {
     /*
       Some servers make the links to subdirectories absolute (in URI terms:
