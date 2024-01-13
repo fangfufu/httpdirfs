@@ -164,10 +164,10 @@ static int Meta_read(Cache *cf)
     }
 
     if (sizeof(long) != fread(&cf->time, sizeof(long), 1, fp) ||
-        sizeof(off_t) != fread(&cf->content_length, sizeof(off_t), 1, fp) ||
-        sizeof(int) != fread(&cf->blksz, sizeof(int), 1, fp) ||
-        sizeof(long) != fread(&cf->segbc, sizeof(long), 1, fp) ||
-        ferror(fp)) {
+            sizeof(off_t) != fread(&cf->content_length, sizeof(off_t), 1, fp) ||
+            sizeof(int) != fread(&cf->blksz, sizeof(int), 1, fp) ||
+            sizeof(long) != fread(&cf->segbc, sizeof(long), 1, fp) ||
+            ferror(fp)) {
         lprintf(error, "error reading core metadata!\n");
         return EIO;
     }

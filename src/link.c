@@ -286,7 +286,7 @@ LinkTable *LinkSystem_init(const char *url)
      * This is where the '/' should be
      */
     ROOT_LINK_OFFSET = strnlen(url, MAX_PATH_LEN) -
-      ((url[url_len] == '/') ? 1 : 0);
+                       ((url[url_len] == '/') ? 1 : 0);
 
     /*
      * --------------------- Enable cache system --------------------
@@ -474,7 +474,7 @@ static void LinkTable_fill(LinkTable *linktbl)
            spaces in them!). If we only escaped it, and there were already
            encoded characters in it, then that would break the link. */
         char *unescaped_path = curl_easy_unescape(c, this_link->linkpath, 0,
-                                                  NULL);
+                               NULL);
         char *escaped_path = curl_easy_escape(c, unescaped_path, 0);
         curl_free(unescaped_path);
         /* Our code does the wrong thing if there's a trailing slash that's been
@@ -704,7 +704,10 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 /* This is necessary to get the compiler on some platforms to stop
    complaining about the fact that we're not using the return value of
    fread, when we know we aren't and that's fine. */
-static inline void ignore_value(int i) { (void) i; }
+static inline void ignore_value(int i)
+{
+    (void) i;
+}
 
 LinkTable *LinkTable_disk_open(const char *dirn)
 {
@@ -1032,8 +1035,8 @@ range requests\n");
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
     if ((http_resp != HTTP_OK) &&
-	(http_resp != HTTP_PARTIAL_CONTENT) &&
-	(http_resp != HTTP_RANGE_NOT_SATISFIABLE)) {
+            (http_resp != HTTP_PARTIAL_CONTENT) &&
+            (http_resp != HTTP_RANGE_NOT_SATISFIABLE)) {
         char *url;
         curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
         lprintf(warning, "Could not download %s, HTTP %ld\n", url, http_resp);
@@ -1064,7 +1067,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
     header.data = NULL;
 
     if (offset + req_size > link->content_length) {
-        lprintf(error, "requested size to large, req_size: %lu, recv: %ld, content-length: %ld\n", req_size, recv, link->content_length);
+        lprintf(error,
+                "requested size too large, req_size: %lu, recv: %ld, content-length: %ld\n",
+                req_size, recv, link->content_length);
         req_size = link->content_length - offset;
     }
 
@@ -1146,14 +1151,14 @@ static void make_link_relative(const char *page_url, char *link_url)
         page_url++;
     }
     if (slashes_left_to_find) {
-      if (slashes_left_to_find == 1 && ! *page_url)
-        /* We're at the top level of the web site and the user entered the URL
-           without a trailing slash. */
-        page_url = "/";
-      else
-        /* Well, that's odd. Let's return rather than trying to dig ourselves
-           deeper into whatever hole we're in. */
-        return;
+        if (slashes_left_to_find == 1 && ! *page_url)
+            /* We're at the top level of the web site and the user entered the URL
+               without a trailing slash. */
+            page_url = "/";
+        else
+            /* Well, that's odd. Let's return rather than trying to dig ourselves
+               deeper into whatever hole we're in. */
+            return;
     }
     /* The page URL is no longer the full page_url, it's just the part after
        the host name. */
