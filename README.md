@@ -1,6 +1,5 @@
 [![CodeFactor](https://www.codefactor.io/repository/github/fangfufu/httpdirfs/badge)](https://www.codefactor.io/repository/github/fangfufu/httpdirfs)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/30af0a5b4d6f4a4d83ddb68f5193ad23)](https://app.codacy.com/gh/fangfufu/httpdirfs/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
-[![DeepSource](https://app.deepsource.com/gh/fangfufu/httpdirfs.svg/?label=code+coverage&show_trend=true&token=yJaBZ0TH729GhF4xQotZYtZG)](https://app.deepsource.com/gh/fangfufu/httpdirfs/)
 
 # HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support!
 
