@@ -1,3 +1,7 @@
+[![CodeQL](https://github.com/fangfufu/httpdirfs/actions/workflows/codeql.yml/badge.svg)](https://github.com/fangfufu/httpdirfs/actions/workflows/codeql.yml)
+[![CodeFactor](https://www.codefactor.io/repository/github/fangfufu/httpdirfs/badge)](https://www.codefactor.io/repository/github/fangfufu/httpdirfs)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/30af0a5b4d6f4a4d83ddb68f5193ad23)](https://app.codacy.com/gh/fangfufu/httpdirfs/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+
 # HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support!
 
 Have you ever wanted to mount those HTTP directory listings as if it was a
@@ -22,9 +26,9 @@ present a HTTP directory listing.
 
 ## Installation
 Please note if you install HTTDirFS from a repository, it can be outdated.
-### Debian 11 "Bullseye"
-HTTPDirFS is available as a package in Debian 11 "Bullseye", If you are on
-Debian Bullseye, you can simply run the following
+### Debian 12 "Bookworm"
+HTTPDirFS is available as a package in Debian 12 "Bookworm", If you are on
+Debian Bookworm, you can simply run the following
 command as ``root``:
 
 	apt install httpdirfs
@@ -42,14 +46,14 @@ HTTPDirFS is available in the
 
 ## Compilation
 ### Ubuntu
-Under Ubuntu 18.04.4 LTS, you need the following packages:
+Under Ubuntu 22.04 LTS, you need the following packages:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
 
-### Debian 11 "Bullseye" and Debian 10 "Buster"
-Under Debian 10 "Buster" and newer versions, you need the following packages:
+### Debian 12 "Bookworm"
+Under Debian 12 "Bookworm" and newer versions, you need the following packages:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
 
 ### FreeBSD
 The following dependencies are required from either pkg or ports:
@@ -300,6 +304,8 @@ for the technical and moral support. Your wisdom is much appreciated!
 compatibility patches.
 - I would like to thank [hiliev](https://github.com/hiliev) for providing macOS
 compatibility patches.
+- I would like to thank [Jonathan Kamens](https://github.com/jikamens) for providing
+a whole bunch of code improvements and the improved build system.
 - I would like to thank [-Archivist](https://www.reddit.com/user/-Archivist/)
 for not providing FTP or WebDAV access to his server. This piece of software was
 written in direct response to his appalling behaviour.
