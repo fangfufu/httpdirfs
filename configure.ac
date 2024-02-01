@@ -5,7 +5,7 @@ AC_PROG_CC
 AC_SEARCH_LIBS([backtrace],[execinfo])
 
 # Because we use $(fuse_LIBS) in $(CFLAGS); see comment in Makefile.in
-AX_CHECK_COMPILE_FLAG([-Wunused-command-line-argument],[NUCLA=-Wno-unused-command-line-argument],,[-Werror])
+AX_CHECK_COMPILE_FLAG([-Wunused-command-line-argument],[NUCLA=-Wno-unused-command-line-argument],[-Werror])
 AC_SUBST([NUCLA])
 AM_INIT_AUTOMAKE([foreign subdir-objects])
 PKG_CHECK_MODULES([pkgconf],[gumbo libcurl uuid expat openssl])
