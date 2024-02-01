@@ -14,9 +14,9 @@ typedef struct Cache Cache;
 #include "link.h"
 #include "network.h"
 
-#include <stdio.h>
-#include <stdint.h>
 #include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
 
 /**
  * \brief Type definition for a cache segment
@@ -27,48 +27,48 @@ typedef uint8_t Seg;
  * \brief cache data type in-memory data structure
  */
 struct Cache {
-    /** \brief How many times the cache has been opened */
-    int cache_opened;
+  /** \brief How many times the cache has been opened */
+  int cache_opened;
 
-    /** \brief the FILE pointer for the data file*/
-    FILE *dfp;
-    /** \brief the FILE pointer for the metadata */
-    FILE *mfp;
-    /** \brief the path to the local cache file */
-    char *path;
-    /** \brief the Link associated with this cache data set */
-    Link *link;
-    /** \brief the modified time of the file */
-    long time;
-    /** \brief the size of the file */
-    off_t content_length;
-    /** \brief the block size of the data file */
-    int blksz;
-    /** \brief segment array byte count */
-    long segbc;
-    /** \brief the detail of each segment */
-    Seg *seg;
+  /** \brief the FILE pointer for the data file*/
+  FILE *dfp;
+  /** \brief the FILE pointer for the metadata */
+  FILE *mfp;
+  /** \brief the path to the local cache file */
+  char *path;
+  /** \brief the Link associated with this cache data set */
+  Link *link;
+  /** \brief the modified time of the file */
+  long time;
+  /** \brief the size of the file */
+  off_t content_length;
+  /** \brief the block size of the data file */
+  int blksz;
+  /** \brief segment array byte count */
+  long segbc;
+  /** \brief the detail of each segment */
+  Seg *seg;
 
-    /** \brief mutex lock for seek operation */
-    pthread_mutex_t seek_lock;
-    /** \brief mutex lock for write operation */
-    pthread_mutex_t w_lock;
+  /** \brief mutex lock for seek operation */
+  pthread_mutex_t seek_lock;
+  /** \brief mutex lock for write operation */
+  pthread_mutex_t w_lock;
 
-    /** \brief background download pthread */
-    pthread_t bgt;
-    /**
-     * \brief mutex lock for the background download thread
-     * \note This lock is locked by the foreground thread, but unlocked by the
-     * background thread!
-     */
-    pthread_mutex_t bgt_lock;
-    /** \brief mutex attributes for bgt_lock */
-    pthread_mutexattr_t bgt_lock_attr;
-    /** \brief the offset of the next segment to be downloaded in background*/
-    off_t next_dl_offset;
+  /** \brief background download pthread */
+  pthread_t bgt;
+  /**
+   * \brief mutex lock for the background download thread
+   * \note This lock is locked by the foreground thread, but unlocked by the
+   * background thread!
+   */
+  pthread_mutex_t bgt_lock;
+  /** \brief mutex attributes for bgt_lock */
+  pthread_mutexattr_t bgt_lock_attr;
+  /** \brief the offset of the next segment to be downloaded in background*/
+  off_t next_dl_offset;
 
-    /** \brief the FUSE filesystem path to the remote file*/
-    char *fs_path;
+  /** \brief the FUSE filesystem path to the remote file*/
+  char *fs_path;
 };
 
 /**

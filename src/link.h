@@ -20,11 +20,11 @@ typedef struct LinkTable LinkTable;
  * \brief the link type
  */
 typedef enum {
-    LINK_HEAD = 'H',
-    LINK_DIR = 'D',
-    LINK_FILE = 'F',
-    LINK_INVALID = 'I',
-    LINK_UNINITIALISED_FILE = 'U'
+  LINK_HEAD = 'H',
+  LINK_DIR = 'D',
+  LINK_FILE = 'F',
+  LINK_INVALID = 'I',
+  LINK_UNINITIALISED_FILE = 'U'
 } LinkType;
 
 /**
@@ -32,32 +32,32 @@ typedef enum {
  * \details index 0 contains the Link for the base URL
  */
 struct LinkTable {
-    int num;
-    time_t index_time;
-    Link **links;
+  int num;
+  time_t index_time;
+  Link **links;
 };
 
 /**
  * \brief Link type data structure
  */
 struct Link {
-    /** \brief The link name in the last level of the URL */
-    char linkname[MAX_FILENAME_LEN + 1];
-    char linkpath[MAX_FILENAME_LEN + 1];
-    /** \brief The full URL of the file */
-    char f_url[MAX_PATH_LEN + 1];
-    /** \brief The type of the link */
-    LinkType type;
-    /** \brief CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
-    size_t content_length;
-    /** \brief The next LinkTable level, if it is a LINK_DIR */
-    LinkTable *next_table;
-    /** \brief CURLINFO_FILETIME obtained from the server */
-    long time;
-    /** \brief The pointer associated with the cache file */
-    Cache *cache_ptr;
-    /** \brief Stores *sonic related data */
-    Sonic sonic;
+  /** \brief The link name in the last level of the URL */
+  char linkname[MAX_FILENAME_LEN + 1];
+  char linkpath[MAX_FILENAME_LEN + 1];
+  /** \brief The full URL of the file */
+  char f_url[MAX_PATH_LEN + 1];
+  /** \brief The type of the link */
+  LinkType type;
+  /** \brief CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */
+  size_t content_length;
+  /** \brief The next LinkTable level, if it is a LINK_DIR */
+  LinkTable *next_table;
+  /** \brief CURLINFO_FILETIME obtained from the server */
+  long time;
+  /** \brief The pointer associated with the cache file */
+  Cache *cache_ptr;
+  /** \brief Stores *sonic related data */
+  Sonic sonic;
 };
 
 /**
@@ -96,8 +96,7 @@ long path_download(const char *path, char *output_buf, size_t size,
  * \brief Download a Link
  * \return the number of bytes downloaded
  */
-long Link_download(Link *link, char *output_buf, size_t req_size,
-                   off_t offset);
+long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset);
 
 /**
  * \brief find the link associated with a path
