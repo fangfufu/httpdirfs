@@ -99,6 +99,24 @@ Build and install:
 Apple's command-line build tools are usually installed as part of setting up 
 Homebrew. HTTPDirFS will be installed in ``/usr/local``.
 
+## Running Tests
+GoogleTest is the utilized unit test framework. Google recommends you live
+at head, so it is also recommended that you compile and install the latest from
+[source](https://github.com/google/googletest.git), since what you install from
+a repository may be outdated. Below are the package names if installing from a
+repository
+
+### Ubuntu and Debian
+    libgtest-dev
+
+### FreeBSD and macOS
+    googletest
+
+Build and run tests
+
+    ./configure --enable-unittests
+    make check
+
 ## Usage
 
 	./httpdirfs -f --cache $URL $MOUNT_POINT

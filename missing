@@ -205,3 +205,11 @@ give_advice "$1" | sed -e '1s/^/WARNING: /' \
 # Propagate the correct exit status (expected to be 127 for a program
 # not found, 63 for a program that failed due to version mismatch).
 exit $st
+
+# Local variables:
+# eval: (add-hook 'before-save-hook 'time-stamp)
+# time-stamp-start: "scriptversion="
+# time-stamp-format: "%:y-%02m-%02d.%02H"
+# time-stamp-time-zone: "UTC0"
+# time-stamp-end: "; # UTC"
+# End:
