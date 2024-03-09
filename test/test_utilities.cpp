@@ -33,25 +33,19 @@ namespace {
     }
 
     TEST(PathAppendTest, PathLengthGreaterThanMaxPathLen) {
-        const char test_folder_name[] = "/abcdefg";
-        const int test_folder_name_len = 8;
+        const std::string test_folder("/abcdefg");
+        const int test_folder_len = test_folder.size();
         const int path_len_4098 = 4098;
-        char very_long_path[path_len_4098] = { 0 };
-        char *p = very_long_path;
+        std::string very_long_path;
 
         /*
-         *  MAX_PATH_LEN is an integer multiple of test_folder_name_len,
-         *  so it would fit perfectly in the 4096 bytes of very_long_path.
-         *  According to strncat manual, if the length of the C string in
-         *  source is less than num, only the content up to the terminating
-         *  null-character is copied.
+         *  MAX_PATH_LEN is an integer multiple of test_folder_len,
+         *  so it would fit perfectly in 4096 bytes,
          */
-        for (int i = 0; i < path_len_4098; i += test_folder_name_len) {
-            strncat(p, test_folder_name, test_folder_name_len + 1);
-            p += test_folder_name_len;
-        }
+        for (int i = path_len_4098 / test_folder_len; i != 0; i--)
+            very_long_path += test_folder;
 
-        char *path = path_append(very_long_path, test_file_name);
+        char *path = path_append(very_long_path.c_str(), test_file_name);
         ASSERT_NE(nullptr, path);
         ASSERT_EQ(path[MAX_PATH_LEN - 1], 'g');
         ASSERT_EQ(path[MAX_PATH_LEN + 0], '/');
