@@ -1,3 +1,4 @@
+if UNITTESTS
 AM_CPPFLAGS = -I../src $(gtest_CPPFLAGS)
 AM_CXXFLAGS = -std=c++14
 LDADD = $(fuse_LIBS) $(pkgconf_LIBS) -lgtest_main $(gtest_LIBS)
@@ -13,4 +14,4 @@ test_utilities_SOURCES = \
 	../src/util.c \
 	../src/log.c \
 	../src/config.c
-
+endif

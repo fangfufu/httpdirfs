@@ -212,7 +212,7 @@ am__define_uniq_tagged_files = \
   unique=`for i in $$list; do \
     if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
   done | $(am__uniquify_input)`
-DIST_SUBDIRS = $(SUBDIRS)
+DIST_SUBDIRS = test
 am__DIST_COMMON = $(srcdir)/Doxyfile.in $(srcdir)/Makefile.in \
 	README.md compile config.guess config.sub depcomp install-sh \
 	missing
@@ -373,7 +373,7 @@ top_srcdir = @top_srcdir@
 httpdirfs_SOURCES = src/main.c src/network.c src/fuse_local.c src/link.c \
 	src/cache.c src/util.c src/sonic.c src/log.c src/config.c src/memcache.c
 
-SUBDIRS = test
+@UNITTESTS_TRUE@SUBDIRS = test
 man_MANS = doc/man/httpdirfs.1
 CLEANFILES = doc/man/*
 DISTCLEANFILES = doc/html/*

@@ -87,8 +87,8 @@ NORMAL_UNINSTALL = :
 PRE_UNINSTALL = :
 POST_UNINSTALL = :
 build_triplet = @build@
-check_PROGRAMS = test_utilities$(EXEEXT)
-noinst_PROGRAMS = test_utilities$(EXEEXT)
+@UNITTESTS_TRUE@check_PROGRAMS = test_utilities$(EXEEXT)
+@UNITTESTS_TRUE@noinst_PROGRAMS = test_utilities$(EXEEXT)
 subdir = test
 ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
 am__aclocal_m4_deps = $(top_srcdir)/configure.ac
@@ -99,15 +99,17 @@ mkinstalldirs = $(install_sh) -d
 CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 PROGRAMS = $(noinst_PROGRAMS)
+am__test_utilities_SOURCES_DIST = test_utilities.cpp ../src/util.c \
+	../src/log.c ../src/config.c
 am__dirstamp = $(am__leading_dot)dirstamp
-am_test_utilities_OBJECTS = test_utilities.$(OBJEXT) \
-	../src/util.$(OBJEXT) ../src/log.$(OBJEXT) \
-	../src/config.$(OBJEXT)
+@UNITTESTS_TRUE@am_test_utilities_OBJECTS = test_utilities.$(OBJEXT) \
+@UNITTESTS_TRUE@	../src/util.$(OBJEXT) ../src/log.$(OBJEXT) \
+@UNITTESTS_TRUE@	../src/config.$(OBJEXT)
 test_utilities_OBJECTS = $(am_test_utilities_OBJECTS)
 test_utilities_LDADD = $(LDADD)
 am__DEPENDENCIES_1 =
-test_utilities_DEPENDENCIES = $(am__DEPENDENCIES_1) \
-	$(am__DEPENDENCIES_1)
+@UNITTESTS_TRUE@test_utilities_DEPENDENCIES = $(am__DEPENDENCIES_1) \
+@UNITTESTS_TRUE@	$(am__DEPENDENCIES_1)
 AM_V_P = $(am__v_P_@AM_V@)
 am__v_P_ = $(am__v_P_@AM_DEFAULT_V@)
 am__v_P_0 = false
@@ -153,7 +155,7 @@ am__v_CXXLD_ = $(am__v_CXXLD_@AM_DEFAULT_V@)
 am__v_CXXLD_0 = @echo "  CXXLD   " $@;
 am__v_CXXLD_1 = 
 SOURCES = $(test_utilities_SOURCES)
-DIST_SOURCES = $(test_utilities_SOURCES)
+DIST_SOURCES = $(am__test_utilities_SOURCES_DIST)
 am__can_run_installinfo = \
   case $$AM_UPDATE_INFO_DIR in \
     n|no|NO) false;; \
@@ -488,15 +490,15 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-AM_CPPFLAGS = -I../src $(gtest_CPPFLAGS)
-AM_CXXFLAGS = -std=c++14
-LDADD = $(fuse_LIBS) $(pkgconf_LIBS) -lgtest_main $(gtest_LIBS)
-TESTS = $(check_PROGRAMS)
-test_utilities_SOURCES = \
-	test_utilities.cpp \
-	../src/util.c \
-	../src/log.c \
-	../src/config.c
+@UNITTESTS_TRUE@AM_CPPFLAGS = -I../src $(gtest_CPPFLAGS)
+@UNITTESTS_TRUE@AM_CXXFLAGS = -std=c++14
+@UNITTESTS_TRUE@LDADD = $(fuse_LIBS) $(pkgconf_LIBS) -lgtest_main $(gtest_LIBS)
+@UNITTESTS_TRUE@TESTS = $(check_PROGRAMS)
+@UNITTESTS_TRUE@test_utilities_SOURCES = \
+@UNITTESTS_TRUE@	test_utilities.cpp \
+@UNITTESTS_TRUE@	../src/util.c \
+@UNITTESTS_TRUE@	../src/log.c \
+@UNITTESTS_TRUE@	../src/config.c
 
 all: all-am
 

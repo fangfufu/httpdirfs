@@ -616,10 +616,12 @@ ac_subst_vars='am__EXEEXT_FALSE
 am__EXEEXT_TRUE
 LTLIBOBJS
 LIBOBJS
-fuse_LIBS
-fuse_CFLAGS
 pkgconf_LIBS
 pkgconf_CFLAGS
+UNITTESTS_FALSE
+UNITTESTS_TRUE
+fuse_LIBS
+fuse_CFLAGS
 PKG_CONFIG_LIBDIR
 PKG_CONFIG_PATH
 PKG_CONFIG
@@ -725,6 +727,7 @@ ac_user_opts='
 enable_option_checking
 enable_dependency_tracking
 enable_silent_rules
+enable_unittests
 '
       ac_precious_vars='build_alias
 host_alias
@@ -740,10 +743,10 @@ CCC
 PKG_CONFIG
 PKG_CONFIG_PATH
 PKG_CONFIG_LIBDIR
-pkgconf_CFLAGS
-pkgconf_LIBS
 fuse_CFLAGS
-fuse_LIBS'
+fuse_LIBS
+pkgconf_CFLAGS
+pkgconf_LIBS'
 
 
 # Initialize some variables set by options.
@@ -1376,6 +1379,7 @@ Optional Features:
                           speeds up one-time build
   --enable-silent-rules   less verbose build output (undo: "make V=1")
   --disable-silent-rules  verbose build output (undo: "make V=0")
+  --enable-unittests      build the unit tests (default is NO)
 
 Some influential environment variables:
   CC          C compiler command
@@ -1392,12 +1396,12 @@ Some influential environment variables:
               directories to add to pkg-config's search path
   PKG_CONFIG_LIBDIR
               path overriding pkg-config's built-in search path
+  fuse_CFLAGS C compiler flags for fuse, overriding pkg-config
+  fuse_LIBS   linker flags for fuse, overriding pkg-config
   pkgconf_CFLAGS
               C compiler flags for pkgconf, overriding pkg-config
   pkgconf_LIBS
               linker flags for pkgconf, overriding pkg-config
-  fuse_CFLAGS C compiler flags for fuse, overriding pkg-config
-  fuse_LIBS   linker flags for fuse, overriding pkg-config
 
 Use these variables to override the choices made by `configure' or to help
 it to find libraries and programs with nonstandard names/locations.
@@ -2631,8 +2635,6 @@ build_os=$*
 IFS=$ac_save_IFS
 case $build_os in *\ *) build_os=`echo "$build_os" | sed 's/ /-/g'`;; esac
 
-
-ac_config_files="$ac_config_files Makefile Doxyfile test/Makefile"
 
 
 
@@ -5104,6 +5106,9 @@ END
   fi
 fi
 
+ac_config_files="$ac_config_files Makefile Doxyfile"
+
+# This is separate because we need to be able to use $(fuse_LIBS) in CFLAGS
 
 
 
@@ -5236,98 +5241,6 @@ printf "%s\n" "no" >&6; }
 fi
 
 pkg_failed=no
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gumbo libcurl uuid expat openssl gtest" >&5
-printf %s "checking for gumbo libcurl uuid expat openssl gtest... " >&6; }
-
-if test -n "$pkgconf_CFLAGS"; then
-    pkg_cv_pkgconf_CFLAGS="$pkgconf_CFLAGS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gumbo libcurl uuid expat openssl gtest\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "gumbo libcurl uuid expat openssl gtest") 2>&5
-  ac_status=$?
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_pkgconf_CFLAGS=`$PKG_CONFIG --cflags "gumbo libcurl uuid expat openssl gtest" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-if test -n "$pkgconf_LIBS"; then
-    pkg_cv_pkgconf_LIBS="$pkgconf_LIBS"
- elif test -n "$PKG_CONFIG"; then
-    if test -n "$PKG_CONFIG" && \
-    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gumbo libcurl uuid expat openssl gtest\""; } >&5
-  ($PKG_CONFIG --exists --print-errors "gumbo libcurl uuid expat openssl gtest") 2>&5
-  ac_status=$?
-  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
-  test $ac_status = 0; }; then
-  pkg_cv_pkgconf_LIBS=`$PKG_CONFIG --libs "gumbo libcurl uuid expat openssl gtest" 2>/dev/null`
-		      test "x$?" != "x0" && pkg_failed=yes
-else
-  pkg_failed=yes
-fi
- else
-    pkg_failed=untried
-fi
-
-
-
-if test $pkg_failed = yes; then
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-
-if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
-        _pkg_short_errors_supported=yes
-else
-        _pkg_short_errors_supported=no
-fi
-        if test $_pkg_short_errors_supported = yes; then
-	        pkgconf_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "gumbo libcurl uuid expat openssl gtest" 2>&1`
-        else
-	        pkgconf_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "gumbo libcurl uuid expat openssl gtest" 2>&1`
-        fi
-	# Put the nasty error message in config.log where it belongs
-	echo "$pkgconf_PKG_ERRORS" >&5
-
-	as_fn_error $? "Package requirements (gumbo libcurl uuid expat openssl gtest) were not met:
-
-$pkgconf_PKG_ERRORS
-
-Consider adjusting the PKG_CONFIG_PATH environment variable if you
-installed software in a non-standard prefix.
-
-Alternatively, you may set the environment variables pkgconf_CFLAGS
-and pkgconf_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details." "$LINENO" 5
-elif test $pkg_failed = untried; then
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
-printf "%s\n" "no" >&6; }
-	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
-printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
-as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
-is in your PATH or set the PKG_CONFIG environment variable to the full
-path to pkg-config.
-
-Alternatively, you may set the environment variables pkgconf_CFLAGS
-and pkgconf_LIBS to avoid the need to call pkg-config.
-See the pkg-config man page for more details.
-
-To get pkg-config, see <http://pkg-config.freedesktop.org/>.
-See \`config.log' for more details" "$LINENO" 5; }
-else
-	pkgconf_CFLAGS=$pkg_cv_pkgconf_CFLAGS
-	pkgconf_LIBS=$pkg_cv_pkgconf_LIBS
-        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
-printf "%s\n" "yes" >&6; }
-
-fi
-# This is separate because we need to be able to use $(fuse_LIBS) in CFLAGS
-
-pkg_failed=no
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for fuse" >&5
 printf %s "checking for fuse... " >&6; }
 
@@ -5417,6 +5330,211 @@ else
 printf "%s\n" "yes" >&6; }
 
 fi
+
+# Check whether --enable-unittests was given.
+if test ${enable_unittests+y}
+then :
+  enableval=$enable_unittests; unittests=$enableval
+else $as_nop
+  unittests=no
+fi
+
+ if test "x$unittests" = "xyes"; then
+  UNITTESTS_TRUE=
+  UNITTESTS_FALSE='#'
+else
+  UNITTESTS_TRUE='#'
+  UNITTESTS_FALSE=
+fi
+
+if test "x$unittests" = "xyes"; then
+    ac_config_files="$ac_config_files test/Makefile"
+
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gumbo libcurl uuid expat openssl gtest" >&5
+printf %s "checking for gumbo libcurl uuid expat openssl gtest... " >&6; }
+
+if test -n "$pkgconf_CFLAGS"; then
+    pkg_cv_pkgconf_CFLAGS="$pkgconf_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gumbo libcurl uuid expat openssl gtest\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "gumbo libcurl uuid expat openssl gtest") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_pkgconf_CFLAGS=`$PKG_CONFIG --cflags "gumbo libcurl uuid expat openssl gtest" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$pkgconf_LIBS"; then
+    pkg_cv_pkgconf_LIBS="$pkgconf_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gumbo libcurl uuid expat openssl gtest\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "gumbo libcurl uuid expat openssl gtest") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_pkgconf_LIBS=`$PKG_CONFIG --libs "gumbo libcurl uuid expat openssl gtest" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        pkgconf_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "gumbo libcurl uuid expat openssl gtest" 2>&1`
+        else
+	        pkgconf_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "gumbo libcurl uuid expat openssl gtest" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$pkgconf_PKG_ERRORS" >&5
+
+	as_fn_error $? "Package requirements (gumbo libcurl uuid expat openssl gtest) were not met:
+
+$pkgconf_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables pkgconf_CFLAGS
+and pkgconf_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables pkgconf_CFLAGS
+and pkgconf_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
+else
+	pkgconf_CFLAGS=$pkg_cv_pkgconf_CFLAGS
+	pkgconf_LIBS=$pkg_cv_pkgconf_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+
+fi
+else
+
+pkg_failed=no
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking for gumbo libcurl uuid expat openssl" >&5
+printf %s "checking for gumbo libcurl uuid expat openssl... " >&6; }
+
+if test -n "$pkgconf_CFLAGS"; then
+    pkg_cv_pkgconf_CFLAGS="$pkgconf_CFLAGS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gumbo libcurl uuid expat openssl\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "gumbo libcurl uuid expat openssl") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_pkgconf_CFLAGS=`$PKG_CONFIG --cflags "gumbo libcurl uuid expat openssl" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+if test -n "$pkgconf_LIBS"; then
+    pkg_cv_pkgconf_LIBS="$pkgconf_LIBS"
+ elif test -n "$PKG_CONFIG"; then
+    if test -n "$PKG_CONFIG" && \
+    { { printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"gumbo libcurl uuid expat openssl\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "gumbo libcurl uuid expat openssl") 2>&5
+  ac_status=$?
+  printf "%s\n" "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_pkgconf_LIBS=`$PKG_CONFIG --libs "gumbo libcurl uuid expat openssl" 2>/dev/null`
+		      test "x$?" != "x0" && pkg_failed=yes
+else
+  pkg_failed=yes
+fi
+ else
+    pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        pkgconf_PKG_ERRORS=`$PKG_CONFIG --short-errors --print-errors --cflags --libs "gumbo libcurl uuid expat openssl" 2>&1`
+        else
+	        pkgconf_PKG_ERRORS=`$PKG_CONFIG --print-errors --cflags --libs "gumbo libcurl uuid expat openssl" 2>&1`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$pkgconf_PKG_ERRORS" >&5
+
+	as_fn_error $? "Package requirements (gumbo libcurl uuid expat openssl) were not met:
+
+$pkgconf_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables pkgconf_CFLAGS
+and pkgconf_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details." "$LINENO" 5
+elif test $pkg_failed = untried; then
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: no" >&5
+printf "%s\n" "no" >&6; }
+	{ { printf "%s\n" "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+printf "%s\n" "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables pkgconf_CFLAGS
+and pkgconf_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
+else
+	pkgconf_CFLAGS=$pkg_cv_pkgconf_CFLAGS
+	pkgconf_LIBS=$pkg_cv_pkgconf_LIBS
+        { printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+printf "%s\n" "yes" >&6; }
+
+fi
+fi
+
 cat >confcache <<\_ACEOF
 # This file is a shell script that caches the results of configure
 # tests run on this system so they can be shared between configure
@@ -5590,6 +5708,10 @@ else
   am__EXEEXT_FALSE=
 fi
 
+if test -z "${UNITTESTS_TRUE}" && test -z "${UNITTESTS_FALSE}"; then
+  as_fn_error $? "conditional \"UNITTESTS\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
 
 : "${CONFIG_STATUS=./config.status}"
 ac_write_fail=0
@@ -6157,10 +6279,10 @@ cat >>$CONFIG_STATUS <<\_ACEOF || ac_write_fail=1
 for ac_config_target in $ac_config_targets
 do
   case $ac_config_target in
+    "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
     "Makefile") CONFIG_FILES="$CONFIG_FILES Makefile" ;;
     "Doxyfile") CONFIG_FILES="$CONFIG_FILES Doxyfile" ;;
     "test/Makefile") CONFIG_FILES="$CONFIG_FILES test/Makefile" ;;
-    "depfiles") CONFIG_COMMANDS="$CONFIG_COMMANDS depfiles" ;;
 
   *) as_fn_error $? "invalid argument: \`$ac_config_target'" "$LINENO" 5;;
   esac

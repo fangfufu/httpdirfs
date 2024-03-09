@@ -26,6 +26,7 @@ Doxyfile
 Makefile
 *.log
 *.scan
+*.trs
 config.status
 doc
 src/.deps
