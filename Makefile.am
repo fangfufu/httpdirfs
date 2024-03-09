@@ -8,6 +8,11 @@ CFLAGS = -g -O2  -Wall -Wextra -Wshadow $(NUCLA) \
 	-rdynamic -D_GNU_SOURCE -DVERSION=\"$(VERSION)\"\
         $(pkgconf_CFLAGS) $(fuse_CFLAGS) $(fuse_LIBS)
 LIBS += $(pkgconf_LIBS) $(fuse_LIBS)
+
+if UNITTESTS
+SUBDIRS = test
+endif
+
 man_MANS = doc/man/httpdirfs.1
 CLEANFILES = doc/man/*
 DISTCLEANFILES = doc/html/*
