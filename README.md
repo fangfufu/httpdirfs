@@ -109,7 +109,7 @@ repository
 
 ### Ubuntu and Debian
 
-    libgtest-dev
+    libgtest-dev gtest
 
 ### FreeBSD and macOS
 
