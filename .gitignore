@@ -13,6 +13,7 @@ doc/html
 .vscode
 *.c~
 *.h~
+configure~
 
 # autotools
 autom4te.cache
@@ -23,8 +24,10 @@ mnt
 # Generated files
 Doxyfile
 Makefile
-config.log
+*.log
+*.scan
 config.status
 doc
 src/.deps
 src/.dirstamp
+test/.deps
