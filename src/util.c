@@ -49,6 +49,45 @@ char *path_append(const char *path, const char *filename)
     return str;
 }
 
+char *escape_spaces(const char *path)
+{
+    if (!strchr(path, ' ')) {
+        return NULL;
+    }
+
+    int len = strnlen(path, MAX_PATH_LEN);
+    /* Best case scenario of only one character to escape and
+     * <escaped path array>[MAX_PATH_LEN - 1] is '\0'
+     */
+    if (len + 3 >= MAX_PATH_LEN - 1) {
+        lprintf(fatal, "path too long: %s\n", path);
+    }
+
+    int replacement_len = 3;
+    const char* replacement = "%20";
+
+    char *escaped = CALLOC(MAX_PATH_LEN, sizeof(char));
+
+    int j = 0;
+    for (int i = 0; i < len; i++) {
+        /* Precaution against writing beyond the buffer, since we do not count
+         * all spaces beforehand to know the exact amount of memory to calloc
+         * for the escaped path.
+         */
+        if (j >= MAX_PATH_LEN - 1) {
+            lprintf(fatal, "path too long: %s\n", path);
+        }
+        if (path[i] == ' ') {
+            mempcpy(escaped + j, replacement, replacement_len);
+            j += replacement_len;
+        } else {
+            escaped[j++] = path[i];
+        }
+    }
+    return escaped;
+}
+
+
 int64_t round_div(int64_t a, int64_t b)
 {
     return (a + (b / 2)) / b;

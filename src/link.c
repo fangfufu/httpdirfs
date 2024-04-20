@@ -77,10 +77,15 @@ static CURL *Link_to_curl(Link *link)
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
-    ret = curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+
+    char *escaped_spaces = escape_spaces(link->f_url);
+    ret = curl_easy_setopt(curl, CURLOPT_URL,
+                            escaped_spaces ? escaped_spaces : link->f_url);
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
+    free(escaped_spaces);
+
     ret = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));

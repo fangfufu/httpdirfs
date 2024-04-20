@@ -18,6 +18,14 @@
 char *path_append(const char *path, const char *filename);
 
 /**
+ * \brief escapes the space character in a path/URL
+ * \details This function escapes the space character in a path, and
+ * returns a pointer to the escaped path.
+ * \note You need to free the char * after use.
+ */
+char *escape_spaces(const char *path);
+
+/**
  * \brief division, but rounded to the nearest integer rather than truncating
  */
 int64_t round_div(int64_t a, int64_t b);
