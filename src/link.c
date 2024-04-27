@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <regex.h>
 
 #define STATUS_LEN 64
 
@@ -28,6 +29,7 @@ int ROOT_LINK_OFFSET = 0;
  */
 static pthread_mutex_t link_lock;
 static void make_link_relative(const char *page_url, char *link_url);
+static char *escape_full_url(const char *f_url);
 
 /**
  * \brief create a new Link
@@ -273,11 +275,12 @@ static LinkTable *single_LinkTable_new(const char *url)
     return linktbl;
 }
 
-LinkTable *LinkSystem_init(const char *url)
+LinkTable *LinkSystem_init(const char *f_url)
 {
     if (pthread_mutex_init(&link_lock, NULL)) {
         lprintf(error, "link_lock initialisation failed!\n");
     }
+    char *url = escape_full_url(f_url);
     int url_len = strnlen(url, MAX_PATH_LEN) - 1;
     /*
      * --------- Set the length of the root link -----------
@@ -317,6 +320,7 @@ LinkTable *LinkSystem_init(const char *url)
     } else {
         lprintf(fatal, "Invalid CONFIG.mode\n");
     }
+    FREE(url);
     return ROOT_LINK_TBL;
 }
 
@@ -1176,4 +1180,90 @@ static void make_link_relative(const char *page_url, char *link_url)
        the beginning of the link URL string, discarding what came
        before it. */
     memmove(link_url, link_url + skip_len, strlen(link_url) - skip_len + 1);
+}
+
+
+/**
+ * \brief Pattern matching strings for URLs entered by user.
+ * \details The order is important as we match from most specifiec to least.
+ * For example, 192.168.1.1:80 is more specific than 192.168.1.1, even though
+ * visiting the latter refers to the former by default.
+ */
+const char *const ip_patterns[] = {
+    "([0-9]{1,3}\\.){3}[0-9]{1,3}:[0-9]*",  // IPv4 with port
+    "([0-9]{1,3}\\.){3}[0-9]{1,3}",         // IPv4 without port
+    NULL,
+};
+
+static char *escape_full_url(const char *f_url)
+{
+    char *const proto = strstr(f_url, "://");
+    const char *url = proto + 3;
+
+    int ret;
+    int ip_in_path = 0;
+    regex_t regex;
+    regmatch_t  pmatch[1];
+
+    for (int i = 0; ip_patterns[i]; i++) {
+        ret = regcomp(&regex, ip_patterns[i], REG_EXTENDED | REG_ICASE);
+        if (ret) {
+            lprintf(fatal, "Could not compile regex\n");
+        }
+        ret = regexec(&regex, url, 1, pmatch, 0);
+        if (!ret) {
+            ip_in_path = 1;
+            break;
+        }
+    }
+    if (ip_in_path) {
+        int path_offset = pmatch[0].rm_eo - pmatch[0].rm_so;
+        if (*(url + path_offset) == '/' ) {
+            url += path_offset + 1;
+        } else {
+            url += path_offset;
+        }
+    }
+
+    CURL *c = curl_easy_init();
+    char *next;
+    char *unescaped_path = curl_easy_unescape(c, url, 0, NULL);
+    char *escaped_path = curl_easy_escape(c, unescaped_path, 0);
+    curl_free(unescaped_path);
+
+    char *const base_url = CALLOC(MAX_PATH_LEN, sizeof(char));
+    next = mempcpy(base_url, f_url, url - f_url);
+    int len = strnlen(escaped_path, MAX_PATH_LEN);
+    if (strnlen(next, MAX_PATH_LEN - (url - f_url)) + len >= MAX_PATH_LEN - 1) {
+        lprintf(fatal, "URL too long\n");
+    }
+    next = mempcpy(next, escaped_path, len);
+    next -= len;
+
+    /* At this point, next should point to the part just after the IP address
+     * or just after the protocol, depending on whether a user entered a URL
+     * with a domain name or IP address.
+     */
+
+    /* curl_easy_escape does the correct thing and escapes whatever may break
+     * the URL, but we must always preserve the slash in the URL since we make
+     * decisions elsewhere based on the path (slash).
+     */
+    const char *e_slash;
+    const char *e_p;
+    char *b_p;
+    e_slash = strstr(escaped_path, "%2F");
+    for(e_p=escaped_path, b_p=next; (b_p - next < len) || e_slash; ) {
+        *b_p++ = *e_p++;
+        if (e_p == e_slash) {
+            *b_p++ = '/';
+            e_p += 3;
+            e_slash = strstr(e_p, "%2F");
+        }
+    }
+
+    curl_free(escaped_path);
+    curl_easy_cleanup(c);
+    regfree(&regex);
+    return base_url;
 }
