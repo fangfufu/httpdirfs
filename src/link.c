@@ -644,6 +644,9 @@ LinkTable *LinkTable_new(const char *url)
     curl_free(unescaped_path);
     curl_easy_cleanup(c);
 
+    static int i = 0;
+    lprintf(debug, "\n!!!!Calling LinkTable_new for the %d time!!!!\n", i)
+    i++;
     LinkTable_print(linktbl);
 
     return linktbl;

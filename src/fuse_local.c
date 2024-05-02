@@ -139,6 +139,9 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     (void) fi;
     LinkTable *linktbl;
 
+    static int j = 0;
+    lprintf(debug, "\n!!!!Calling fs_readdir for the %d time!!!!\n", j)
+    j++;
     linktbl = path_to_Link_LinkTable_new(path);
     if (!linktbl) {
         return -ENOENT;
