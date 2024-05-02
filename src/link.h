@@ -43,6 +43,7 @@ struct LinkTable {
 struct Link {
     /** \brief The link name in the last level of the URL */
     char linkname[MAX_FILENAME_LEN + 1];
+    /** \brief This is for storing the unescaped path */
     char linkpath[MAX_FILENAME_LEN + 1];
     /** \brief The full URL of the file */
     char f_url[MAX_PATH_LEN + 1];
@@ -116,6 +117,7 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
 
 /**
  * \brief load a link table from the disk.
+ * \param[in] dirn We expected the unescaped_path here!
  */
 LinkTable *LinkTable_disk_open(const char *dirn);
 

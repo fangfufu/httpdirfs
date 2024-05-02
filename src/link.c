@@ -722,17 +722,15 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     FREE(metadirn);
 
     if (!fp) {
+        lprintf(debug, "Linktable at %s does not exist.", path);
         FREE(path);
         return NULL;
     }
 
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
 
-    if (sizeof(int) != fread(&linktbl->num, sizeof(int), 1, fp)) {
-        /*
-         * reached EOF
-         */
-        lprintf(error, "reached EOF!\n");
+    if (fread(&linktbl->num, sizeof(int), 1, fp) != 1) {
+        lprintf(error, "Failed to read the first int of %s!\n", path);
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
         return NULL;
