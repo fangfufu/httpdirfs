@@ -574,6 +574,7 @@ LinkTable *LinkTable_new(const char *url)
 {
     LinkTable *linktbl = LinkTable_alloc(url);
     linktbl->index_time = time(NULL);
+    lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
 
     /*
      * start downloading the base URL
@@ -660,6 +661,14 @@ static void LinkTable_disk_delete(const char *dirn)
     FREE(metadirn);
 }
 
+/* This is necessary to get the compiler on some platforms to stop
+   complaining about the fact that we're not using the return value of
+   fread, when we know we aren't and that's fine. */
+static inline void ignore_value(int i)
+{
+    (void) i;
+}
+
 int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 {
     char *metadirn = path_append(META_DIR, dirn);
@@ -673,16 +682,20 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
         FREE(path);
         return -1;
     }
-    FREE(path);
 
-    fwrite(&linktbl->num, sizeof(int), 1, fp);
+    lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
+    if (fwrite(&linktbl->num, sizeof(int), 1, fp) != 1 ||
+        fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
+            lprintf(error, "Failed to save the header of %s!\n", path);
+        }
+    FREE(path);
     for (int i = 0; i < linktbl->num; i++) {
-        fwrite(linktbl->links[i]->linkname, sizeof(char),
-               MAX_FILENAME_LEN, fp);
-        fwrite(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp);
-        fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp);
-        fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp);
-        fwrite(&linktbl->links[i]->time, sizeof(long), 1, fp);
+        ignore_value(fwrite(linktbl->links[i]->linkname, sizeof(char),
+               MAX_FILENAME_LEN, fp));
+        ignore_value(fwrite(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp));
+        ignore_value(fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
+        ignore_value(fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp));
+        ignore_value(fwrite(&linktbl->links[i]->time, sizeof(long), 1, fp));
     }
 
     int res = 0;
@@ -699,14 +712,6 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     }
 
     return res;
-}
-
-/* This is necessary to get the compiler on some platforms to stop
-   complaining about the fact that we're not using the return value of
-   fread, when we know we aren't and that's fine. */
-static inline void ignore_value(int i)
-{
-    (void) i;
 }
 
 LinkTable *LinkTable_disk_open(const char *dirn)
@@ -728,13 +733,16 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     }
 
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
-
-    if (fread(&linktbl->num, sizeof(int), 1, fp) != 1) {
-        lprintf(error, "Failed to read the first int of %s!\n", path);
+    if (fread(&linktbl->num, sizeof(int), 1, fp) != 1 ||
+        fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
+        lprintf(error, "Failed to read the header of %s!\n", path);
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
+        FREE(path);
         return NULL;
     }
+    lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
+
     linktbl->links = CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
@@ -749,16 +757,13 @@ LinkTable *LinkTable_disk_open(const char *dirn)
                            sizeof(size_t), 1, fp));
         ignore_value(fread(&linktbl->links[i]->time, sizeof(long), 1, fp));
         if (feof(fp)) {
-            /*
-             * reached EOF
-             */
-            lprintf(error, "reached EOF!\n");
+            lprintf(error, "Corrupted LinkTable!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
         }
         if (ferror(fp)) {
-            lprintf(error, "encountered ferror!\n");
+            lprintf(error, "Encountered ferror!\n");
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             return NULL;
@@ -769,6 +774,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
                 "cannot close the file pointer, %s\n", strerror(errno));
     }
     return linktbl;
+    FREE(path);
 }
 
 LinkTable *path_to_Link_LinkTable_new(const char *path)
@@ -790,6 +796,9 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
         time_t time_now = time(NULL);
         if (time_now - next_table->index_time  > CONFIG.refresh_timeout) {
             /* refresh directory contents */
+            lprintf(info, "time_now: %d, index_time: %d\n", time_now, next_table->index_time)
+            lprintf(info, "diff: %d, limit: %d\n", time_now - next_table->index_time, CONFIG.refresh_timeout);
+            lprintf(info, "Refreshing LinkTable for %s\n", path);
             LinkTable_free(next_table);
             next_table = NULL;
             if (link) {
