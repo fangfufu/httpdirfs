@@ -1074,8 +1074,8 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
     header.data = NULL;
 
     if (offset + req_size > link->content_length) {
-        lprintf(error,
-                "requested size too large, req_size: %lu, recv: %ld, content-length: %ld\n",
+        lprintf(info,
+                "requested size too larger than remaining size, req_size: %lu, recv: %ld, content-length: %ld\n",
                 req_size, recv, link->content_length);
         req_size = link->content_length - offset;
     }
