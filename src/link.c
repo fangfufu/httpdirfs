@@ -691,13 +691,13 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 
     lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
     if (fwrite(&linktbl->num, sizeof(int), 1, fp) != 1 ||
-        fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
-            lprintf(error, "Failed to save the header of %s!\n", path);
-        }
+            fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
+        lprintf(error, "Failed to save the header of %s!\n", path);
+    }
     FREE(path);
     for (int i = 0; i < linktbl->num; i++) {
         ignore_value(fwrite(linktbl->links[i]->linkname, sizeof(char),
-               MAX_FILENAME_LEN, fp));
+                            MAX_FILENAME_LEN, fp));
         ignore_value(fwrite(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp));
         ignore_value(fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
         ignore_value(fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp));
@@ -740,7 +740,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
     if (fread(&linktbl->num, sizeof(int), 1, fp) != 1 ||
-        fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
+            fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to read the header of %s!\n", path);
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
@@ -805,8 +805,10 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
             /*
              * TODO: Save the updated LinkTable
              */
-            lprintf(info, "time_now: %d, index_time: %d\n", time_now, next_table->index_time)
-            lprintf(info, "diff: %d, limit: %d\n", time_now - next_table->index_time, CONFIG.refresh_timeout);
+            lprintf(info, "time_now: %d, index_time: %d\n", time_now,
+                    next_table->index_time)
+            lprintf(info, "diff: %d, limit: %d\n", time_now - next_table->index_time,
+                    CONFIG.refresh_timeout);
             lprintf(info, "Refreshing LinkTable for %s\n", path);
             LinkTable_free(next_table);
             next_table = NULL;
