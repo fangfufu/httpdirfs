@@ -95,6 +95,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (!link) {
         return -ENOENT;
     }
+    lprintf(debug, "%s found.\n", path);
     if ((fi->flags & O_RDWR) != O_RDONLY) {
         return -EROFS;
     }
