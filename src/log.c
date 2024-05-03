@@ -36,7 +36,11 @@ log_printf(LogType type, const char *file, const char *func, int line,
         case info:
             goto print_actual_message;
         default:
-            fprintf(stderr, "Debug(%x):", type);
+            fprintf(stderr, "Debug");
+            if (type != debug) {
+                fprintf(stderr, "(%x)", type);
+            }
+            fprintf(stderr, ":");
             break;
         }
 
