@@ -1,6 +1,7 @@
 #ifndef LOG_H
 #define LOG_H
 
+#define DEBUG   0
 /**
  * \brief Log types
  */
@@ -9,7 +10,7 @@ typedef enum {
     error = 1 << 1,
     warning = 1 << 2,
     info = 1 << 3,
-    debug = 1 << 4,
+    debug = DEBUG << 4,
     link_lock_debug = 1 << 5,
     network_lock_debug = 1 << 6,
     cache_lock_debug = 1 << 7,
@@ -40,9 +41,10 @@ void log_printf(LogType type, const char *file, const char *func, int line,
  */
 #define lprintf(type, ...) \
     log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__);
-#endif
 
 /**
  * \brief Print the version information for HTTPDirFS
  */
 void print_version();
+
+#endif
