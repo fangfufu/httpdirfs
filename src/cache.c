@@ -549,15 +549,15 @@ static int Cache_exist(const char *fn)
     int no_data = access(datafn, F_OK);
 
     if (no_meta ^ no_data) {
+        lprintf(warning, "Cache file partially missing.\n");
         if (no_meta) {
-            lprintf(warning, "Cache file partially missing.\n");
             if (unlink(datafn)) {
-                lprintf(error, "unlink(): %s\n", strerror(errno));
+                lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
         }
         if (no_data) {
             if (unlink(metafn)) {
-                lprintf(error, "unlink(): %s\n", strerror(errno));
+                lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
         }
     }
@@ -710,7 +710,13 @@ int Cache_create(const char *path)
 
     int res = Cache_exist(fn);
 
+    if (res) {
+        lprintf(fatal, "Cache file creation failed for %s\n", path);
+    }
+
     if (CONFIG.mode == NORMAL) {
+        curl_free(fn);
+    } else if (CONFIG.mode == SONIC) {
         curl_free(fn);
     }
 
