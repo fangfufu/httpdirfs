@@ -802,6 +802,9 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
         time_t time_now = time(NULL);
         if (time_now - next_table->index_time  > CONFIG.refresh_timeout) {
             /* refresh directory contents */
+            /*
+             * TODO: Save the updated LinkTable
+             */
             lprintf(info, "time_now: %d, index_time: %d\n", time_now, next_table->index_time)
             lprintf(info, "diff: %d, limit: %d\n", time_now - next_table->index_time, CONFIG.refresh_timeout);
             lprintf(info, "Refreshing LinkTable for %s\n", path);
