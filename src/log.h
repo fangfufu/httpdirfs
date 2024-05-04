@@ -40,7 +40,7 @@ void log_printf(LogType type, const char *file, const char *func, int line,
  * \details This macro automatically prints out the filename and line number
  */
 #define lprintf(type, ...) \
-    log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__);
+    log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__)
 
 /**
  * \brief Print the version information for HTTPDirFS

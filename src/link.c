@@ -646,7 +646,7 @@ LinkTable *LinkTable_new(const char *url)
 
 #ifdef DEBUG
     static int i = 0;
-    lprintf(debug, "\n!!!!Calling LinkTable_new for the %d time!!!!\n", i)
+    lprintf(debug, "\n!!!!Calling LinkTable_new for the %d time!!!!\n", i);
     i++;
 #endif
 
@@ -806,7 +806,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
              * TODO: Save the updated LinkTable
              */
             lprintf(info, "time_now: %d, index_time: %d\n", time_now,
-                    next_table->index_time)
+                    next_table->index_time);
             lprintf(info, "diff: %d, limit: %d\n", time_now - next_table->index_time,
                     CONFIG.refresh_timeout);
             lprintf(info, "Refreshing LinkTable for %s\n", path);

@@ -145,7 +145,7 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
 
 #ifdef DEBUG
     static int j = 0;
-    lprintf(debug, "\n!!!!Calling fs_readdir for the %d time!!!!\n", j)
+    lprintf(debug, "\n!!!!Calling fs_readdir for the %d time!!!!\n", j);
     j++;
 #endif
 
