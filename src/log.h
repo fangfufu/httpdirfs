@@ -1,7 +1,6 @@
 #ifndef LOG_H
 #define LOG_H
 
-#define DEBUG   0
 /**
  * \brief Log types
  */
@@ -10,7 +9,7 @@ typedef enum {
     error = 1 << 1,
     warning = 1 << 2,
     info = 1 << 3,
-    debug = DEBUG << 4,
+    debug = 1 << 4,
     link_lock_debug = 1 << 5,
     network_lock_debug = 1 << 6,
     cache_lock_debug = 1 << 7,
@@ -21,7 +20,7 @@ typedef enum {
 /**
  * \brief The default log level
  */
-#define DEFAULT_LOG_LEVEL fatal | error | warning | info | debug
+#define DEFAULT_LOG_LEVEL fatal | error | warning | info
 
 /**
  * \brief Get the log level from the environment.

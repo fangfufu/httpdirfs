@@ -15,7 +15,11 @@ int log_level_init()
     if (env) {
         return atoi(env);
     }
+#ifdef DEBUG
+    return DEFAULT_LOG_LEVEL | debug;
+#else
     return DEFAULT_LOG_LEVEL;
+#endif
 }
 
 void
