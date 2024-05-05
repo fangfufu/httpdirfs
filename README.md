@@ -49,12 +49,14 @@ HTTPDirFS is available in the
 ### Ubuntu
 Under Ubuntu 22.04 LTS, you need the following packages:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man libexpat1-dev pkg-config
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
+    libexpat1-dev pkg-config autoconf
 
 ### Debian 12 "Bookworm"
 Under Debian 12 "Bookworm" and newer versions, you need the following packages:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man libexpat1-dev pkg-config
+    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
+    libexpat1-dev pkg-config autoconf
 
 ### FreeBSD
 The following dependencies are required from either pkg or ports:
