@@ -670,9 +670,7 @@ int Cache_create(const char *path)
     Link *this_link = path_to_Link(path);
 
     char *fn = "__UNINITIALISED__";
-    /*
-     * TODO: Warning: curl_easy_unescape breaks cache creation
-     */
+
     if (CONFIG.mode == NORMAL) {
         fn = curl_easy_unescape(NULL,
                                 this_link->f_url + ROOT_LINK_OFFSET, 0,

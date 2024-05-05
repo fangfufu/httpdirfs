@@ -263,7 +263,8 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
  */
 static LinkTable *single_LinkTable_new(const char *url)
 {
-    char *ptr = strrchr(url, '/') + 1;
+    char *orig_ptr = strrchr(url, '/') + 1;
+    char *ptr = curl_easy_unescape(NULL, orig_ptr, 0, NULL);
     LinkTable *linktbl = LinkTable_alloc(url);
     Link *link = Link_new(ptr, LINK_UNINITIALISED_FILE);
     strncpy(link->f_url, url, MAX_FILENAME_LEN);

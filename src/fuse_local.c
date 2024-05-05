@@ -116,10 +116,6 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
             /*
              * The cache definitely cannot be opened for some reason.
              */
-            /*
-             * TODO: This appears to be broken when the file needs to be
-             * percentage encoded
-             */
             if (!fi->fh) {
                 lprintf(fatal, "Cache file creation failure for %s.\n", path);
                 return -ENOENT;
