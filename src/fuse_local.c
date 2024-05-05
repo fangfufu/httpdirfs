@@ -100,14 +100,18 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EROFS;
     }
     if (CACHE_SYSTEM_INIT) {
+        lprintf(debug, "Cache_open(%s);\n", path);
         fi->fh = (uint64_t) Cache_open(path);
         if (!fi->fh) {
             /*
              * The link clearly exists, the cache cannot be opened, attempt
              * cache creation
              */
+            lprintf(debug, "Cache_delete(%s);\n", path);
             Cache_delete(path);
+            lprintf(debug, "Cache_create(%s);\n", path);
             Cache_create(path);
+            lprintf(debug, "Cache_open(%s);\n", path);
             fi->fh = (uint64_t) Cache_open(path);
             /*
              * The cache definitely cannot be opened for some reason.
@@ -117,6 +121,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
              * percentage encoded
              */
             if (!fi->fh) {
+                lprintf(fatal, "Cache file creation failure for %s.\n", path);
                 return -ENOENT;
             }
         }
