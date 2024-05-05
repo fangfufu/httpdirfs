@@ -646,7 +646,7 @@ LinkTable *LinkTable_new(const char *url)
 
 #ifdef DEBUG
     static int i = 0;
-    lprintf(debug, "\n!!!!Calling LinkTable_new for the %d time!!!!\n", i);
+    lprintf(debug, "!!!!Calling LinkTable_new for the %d time!!!!\n", i);
     i++;
 #endif
 
