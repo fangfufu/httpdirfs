@@ -602,6 +602,9 @@ LinkTable *LinkTable_new(const char *url)
     if (CACHE_SYSTEM_INIT) {
         CacheDir_create(unescaped_path);
         LinkTable *disk_linktbl;
+        /*
+         * TODO: Here we could be loading the old LinkTable again.
+         */
         disk_linktbl = LinkTable_disk_open(unescaped_path);
         if (disk_linktbl) {
             /*
