@@ -462,7 +462,6 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
 
 static void LinkTable_fill(LinkTable *linktbl)
 {
-    CURL *c = curl_easy_init();
     Link *head_link = linktbl->links[0];
     lprintf(debug, "Filling %s\n", head_link->f_url);
     for (int i = 1; i < linktbl->num; i++) {
@@ -474,9 +473,9 @@ static void LinkTable_fill(LinkTable *linktbl)
            will definitely be happy with it (e.g., curl won't accept URLs with
            spaces in them!). If we only escaped it, and there were already
            encoded characters in it, then that would break the link. */
-        char *unescaped_path = curl_easy_unescape(c, this_link->linkpath, 0,
+        char *unescaped_path = curl_easy_unescape(NULL, this_link->linkpath, 0,
                                NULL);
-        char *escaped_path = curl_easy_escape(c, unescaped_path, 0);
+        char *escaped_path = curl_easy_escape(NULL, unescaped_path, 0);
         curl_free(unescaped_path);
         /* Our code does the wrong thing if there's a trailing slash that's been
            replaced with %2F, which curl_easy_escape does, God bless it, so if
@@ -489,13 +488,12 @@ static void LinkTable_fill(LinkTable *linktbl)
         strncpy(this_link->f_url, url, MAX_PATH_LEN);
         FREE(url);
         char *unescaped_linkname;
-        unescaped_linkname = curl_easy_unescape(c, this_link->linkname,
+        unescaped_linkname = curl_easy_unescape(NULL, this_link->linkname,
                                                 0, NULL);
         strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
         curl_free(unescaped_linkname);
     }
     LinkTable_uninitialised_fill(linktbl);
-    curl_easy_cleanup(c);
 }
 
 /**
@@ -596,28 +594,40 @@ LinkTable *LinkTable_new(const char *url)
 
     int skip_fill = 0;
     char *unescaped_path;
-    CURL *c = curl_easy_init();
     unescaped_path =
-        curl_easy_unescape(c, url + ROOT_LINK_OFFSET, 0, NULL);
+        curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
     if (CACHE_SYSTEM_INIT) {
         CacheDir_create(unescaped_path);
         LinkTable *disk_linktbl;
-        /*
-         * TODO: Here we could be loading the old LinkTable again.
-         */
+
         disk_linktbl = LinkTable_disk_open(unescaped_path);
         if (disk_linktbl) {
             /*
-             * Check if we need to update the link table
+             * Check if the LinkTable needs to be refreshed based on timeout.
              */
-            lprintf(debug,
-                    "disk_linktbl->num: %d, linktbl->num: %d\n",
-                    disk_linktbl->num, linktbl->num);
+            time_t time_now = time(NULL);
+            if (time_now - disk_linktbl->index_time  > CONFIG.refresh_timeout) {
+                lprintf(info, "time_now: %d, index_time: %d\n", time_now,
+                        disk_linktbl->index_time);
+                lprintf(info, "diff: %d, limit: %d\n",
+                        time_now - disk_linktbl->index_time,
+                        CONFIG.refresh_timeout);
+                LinkTable_free(disk_linktbl);
+            }
+            /*
+             * Check if there are inconsistencies for the on-disk LinkTable
+             */
+
             if (disk_linktbl->num == linktbl->num) {
                 LinkTable_free(linktbl);
                 linktbl = disk_linktbl;
                 skip_fill = 1;
             } else {
+                lprintf(info,
+                        "disk_linktbl->num: %d, linktbl->num: %d\n",
+                        disk_linktbl->num, linktbl->num);
+                lprintf(info, "Refreshing LinkTable for %s\n",
+                        url + ROOT_LINK_OFFSET);
                 LinkTable_free(disk_linktbl);
             }
         }
@@ -644,9 +654,7 @@ LinkTable *LinkTable_new(const char *url)
             lprintf(error, "Failed to save the LinkTable!\n");
         }
     }
-
-    curl_free(unescaped_path);
-    curl_easy_cleanup(c);
+    free(unescaped_path);
 
 #ifdef DEBUG
     static int i = 0;
@@ -803,23 +811,7 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
     }
 
     if (next_table) {
-        time_t time_now = time(NULL);
-        if (time_now - next_table->index_time  > CONFIG.refresh_timeout) {
-            /* refresh directory contents */
-            /*
-             * TODO: Save the updated LinkTable
-             */
-            lprintf(info, "time_now: %d, index_time: %d\n", time_now,
-                    next_table->index_time);
-            lprintf(info, "diff: %d, limit: %d\n", time_now - next_table->index_time,
-                    CONFIG.refresh_timeout);
-            lprintf(info, "Refreshing LinkTable for %s\n", path);
-            LinkTable_free(next_table);
-            next_table = NULL;
-            if (link) {
-                link->next_table = NULL;
-            }
-        }
+
     }
     if (!next_table) {
         if (CONFIG.mode == NORMAL) {
