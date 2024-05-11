@@ -571,31 +571,14 @@ LinkTable *LinkTable_alloc(const char *url)
 
 LinkTable *LinkTable_new(const char *url)
 {
-    LinkTable *linktbl = LinkTable_alloc(url);
-    linktbl->index_time = time(NULL);
-    lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
-
-    /*
-     * start downloading the base URL
-     */
-    TransferStruct ts = Link_download_full(linktbl->links[0]);
-    if (ts.curr_size == 0) {
-        LinkTable_free(linktbl);
-        return NULL;
-    }
-
-    /*
-     * Otherwise parsed the received data
-     */
-    GumboOutput *output = gumbo_parse(ts.data);
-    HTML_to_LinkTable(url, output->root, linktbl);
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
-    FREE(ts.data);
-
-    int skip_fill = 0;
     char *unescaped_path;
     unescaped_path =
         curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
+    LinkTable *linktbl = NULL;
+
+    /*
+     * Attempt to load the LinkTable from the disk.
+     */
     if (CACHE_SYSTEM_INIT) {
         CacheDir_create(unescaped_path);
         LinkTable *disk_linktbl;
@@ -613,57 +596,56 @@ LinkTable *LinkTable_new(const char *url)
                         time_now - disk_linktbl->index_time,
                         CONFIG.refresh_timeout);
                 LinkTable_free(disk_linktbl);
-            }
-            /*
-             * Check if there are inconsistencies for the on-disk LinkTable
-             */
-
-            if (disk_linktbl->num == linktbl->num) {
-                LinkTable_free(linktbl);
-                linktbl = disk_linktbl;
-                skip_fill = 1;
             } else {
-                lprintf(info,
-                        "disk_linktbl->num: %d, linktbl->num: %d\n",
-                        disk_linktbl->num, linktbl->num);
-                lprintf(info, "Refreshing LinkTable for %s\n",
-                        url + ROOT_LINK_OFFSET);
-                LinkTable_free(disk_linktbl);
+                linktbl = disk_linktbl;
             }
         }
-    }
-
-    if (!skip_fill) {
-        /*
-         * Fill in the link table
-         */
-        LinkTable_fill(linktbl);
-    } else {
-        /*
-         * Fill in the holes in the link table
-         */
-        LinkTable_invalid_reset(linktbl);
-        LinkTable_uninitialised_fill(linktbl);
     }
 
     /*
-     * Save the link table
+     * Download a new LinkTable because we didn't manange to load it from the
+     * disk
      */
-    if (CACHE_SYSTEM_INIT) {
-        if (LinkTable_disk_save(linktbl, unescaped_path)) {
-            lprintf(error, "Failed to save the LinkTable!\n");
+    if (!linktbl) {
+        linktbl->index_time = time(NULL);
+        lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
+
+        /*
+        * start downloading the base URL
+        */
+        TransferStruct ts = Link_download_full(linktbl->links[0]);
+        if (ts.curr_size == 0) {
+            LinkTable_free(linktbl);
+            return NULL;
+        }
+
+        /*
+        * Otherwise parsed the received data
+        */
+        GumboOutput *output = gumbo_parse(ts.data);
+        HTML_to_LinkTable(url, output->root, linktbl);
+        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        FREE(ts.data);
+
+        LinkTable_fill(linktbl);
+
+        /*
+        * Save the link table
+        */
+        if (CACHE_SYSTEM_INIT) {
+            if (LinkTable_disk_save(linktbl, unescaped_path)) {
+                lprintf(error, "Failed to save the LinkTable!\n");
+            }
         }
     }
-    free(unescaped_path);
 
 #ifdef DEBUG
     static int i = 0;
     lprintf(debug, "!!!!Calling LinkTable_new for the %d time!!!!\n", i);
     i++;
 #endif
-
+    free(unescaped_path);
     LinkTable_print(linktbl);
-
     return linktbl;
 }
 
@@ -791,8 +773,9 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         lprintf(error,
                 "cannot close the file pointer, %s\n", strerror(errno));
     }
-    return linktbl;
+
     FREE(path);
+    return linktbl;
 }
 
 LinkTable *path_to_Link_LinkTable_new(const char *path)

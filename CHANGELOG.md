@@ -6,6 +6,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- The refreshed LinkTable is now saved
+(https://github.com/fangfufu/httpdirfs/issues/141).
+- Only one LinkTable of the same directory is created when the cache mode is
+enabled (https://github.com/fangfufu/httpdirfs/issues/140).
+- Cache mode noe works correctly witht escaped URL
+(https://github.com/fangfufu/httpdirfs/issues/138).
+
+## Changed
+- Improved LinkTable caching. LinkTable invalidation is now purely based on
+timeout.
+
 ## [1.2.5] - 2023-02-24
 
 ### Fixed
