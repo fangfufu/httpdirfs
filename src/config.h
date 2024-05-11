@@ -26,7 +26,7 @@
 /**
  * \brief The default refresh_timeout
  */
-#define DEFAULT_REFRESH_TIMEOUT  86400
+#define DEFAULT_REFRESH_TIMEOUT  3600
 
 /**
  * \brief Operation modes

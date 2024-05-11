@@ -375,7 +375,8 @@ HTTPDirFS options:\n\
                             to 1TB in size using the default segment size.\n\
         --max-conns         Set maximum number of network connections that\n\
                             libcurl is allowed to make. (default: 10)\n\
-        --refresh-timeout X Refresh directories after X seconds\n\
+        --refresh-timeout   The directories are refreshed after the specified\n\
+                            time, in seconds (default: 3600)\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: 5)\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
