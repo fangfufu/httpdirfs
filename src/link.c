@@ -607,6 +607,7 @@ LinkTable *LinkTable_new(const char *url)
      * disk
      */
     if (!linktbl) {
+        linktbl = LinkTable_alloc(url);
         linktbl->index_time = time(NULL);
         lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
 
