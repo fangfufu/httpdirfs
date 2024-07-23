@@ -49,6 +49,8 @@ void Config_init(void)
 
     CONFIG.http_wait_sec = DEFAULT_HTTP_WAIT_SEC;
 
+    CONFIG.http_headers = NULL;
+
     CONFIG.no_range_check = 0;
 
     CONFIG.insecure_tls = 0;

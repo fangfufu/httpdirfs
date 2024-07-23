@@ -89,7 +89,7 @@ int main(int argc, char **argv)
      */
     char *base_url = argv[argc - 2];
     if (strncmp(base_url, "http://", 7)
-            && strncmp(base_url, "https://", 8)) {
+        && strncmp(base_url, "https://", 8)) {
         fprintf(stderr, "Error: Please supply a valid URL.\n");
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
@@ -108,7 +108,7 @@ activate Sonic mode.\n");
         }
     }
 
-fuse_start:
+  fuse_start:
     fuse_local_init(fuse_argc, fuse_argv);
 
     return 0;
@@ -201,12 +201,13 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { "single-file-mode", required_argument, NULL, 'L' },   /* 22 */
         { "cacert", required_argument, NULL, 'L' },     /* 23 */
         { "proxy-cacert", required_argument, NULL, 'L' },       /* 24 */
-        { "refresh-timeout", required_argument, NULL, 'L' }, /* 25 */
+        { "refresh-timeout", required_argument, NULL, 'L' },    /* 25 */
+        { "http-header", required_argument, NULL, 'L' },        /* 26 */
         { 0, 0, 0, 0 }
     };
     while ((c =
-                getopt_long(argc, argv, short_opts, long_opts,
-                            &long_index)) != -1) {
+            getopt_long(argc, argv, short_opts, long_opts,
+                        &long_index)) != -1) {
         switch (c) {
         case 'o':
             add_arg(fuse_argv, fuse_argc, "-o");
@@ -309,6 +310,10 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 25:
                 CONFIG.refresh_timeout = atoi(optarg);
                 break;
+            case 26:
+                CONFIG.http_headers =
+                    curl_slist_append(CONFIG.http_headers, strdup(optarg));
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -368,6 +373,7 @@ HTTPDirFS options:\n\
         --dl-seg-size       Set cache download segment size, in MB (default: 8)\n\
                             Note: this setting is ignored if previously\n\
                             cached data is found for the requested file.\n\
+        --http-header       Set one or more HTTP headers\n\
         --max-seg-count     Set maximum number of download segments a file\n\
                             can have. (default: 128*1024)\n\
                             With the default setting, the maximum memory usage\n\

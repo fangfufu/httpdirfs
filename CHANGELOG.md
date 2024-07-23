@@ -14,6 +14,9 @@ enabled (https://github.com/fangfufu/httpdirfs/issues/140).
 - Cache mode noe works correctly witht escaped URL
 (https://github.com/fangfufu/httpdirfs/issues/138).
 
+### Added
+- Add ``--http-header`` option
+
 ## Changed
 - Improved LinkTable caching. LinkTable invalidation is now purely based on
 timeout.
