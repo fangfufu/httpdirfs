@@ -66,6 +66,8 @@ typedef struct {
     char *user_agent;
     /** \brief The waiting time after getting HTTP 429 (too many requests) */
     int http_wait_sec;
+    /** \brief Set HTTP headers */
+    struct curl_slist *http_headers;
     /** \brief Disable check for the server's support of HTTP range request */
     int no_range_check;
     /** \brief Disable TLS certificate verification */
