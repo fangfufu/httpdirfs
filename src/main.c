@@ -89,7 +89,7 @@ int main(int argc, char **argv)
      */
     char *base_url = argv[argc - 2];
     if (strncmp(base_url, "http://", 7)
-        && strncmp(base_url, "https://", 8)) {
+            && strncmp(base_url, "https://", 8)) {
         fprintf(stderr, "Error: Please supply a valid URL.\n");
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
@@ -108,7 +108,7 @@ activate Sonic mode.\n");
         }
     }
 
-  fuse_start:
+fuse_start:
     fuse_local_init(fuse_argc, fuse_argv);
 
     return 0;
@@ -206,8 +206,8 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { 0, 0, 0, 0 }
     };
     while ((c =
-            getopt_long(argc, argv, short_opts, long_opts,
-                        &long_index)) != -1) {
+                getopt_long(argc, argv, short_opts, long_opts,
+                            &long_index)) != -1) {
         switch (c) {
         case 'o':
             add_arg(fuse_argv, fuse_argc, "-o");
