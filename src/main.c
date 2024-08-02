@@ -198,7 +198,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { "sonic-insecure", no_argument, NULL, 'L' },   /* 19 */
         { "insecure-tls", no_argument, NULL, 'L' },     /* 20 */
         { "config", required_argument, NULL, 'L' },     /* 21 */
-        { "single-file-mode", required_argument, NULL, 'L' },   /* 22 */
+        { "single-file-mode", no_argument, NULL, 'L' },   /* 22 */
         { "cacert", required_argument, NULL, 'L' },     /* 23 */
         { "proxy-cacert", required_argument, NULL, 'L' },       /* 24 */
         { "refresh-timeout", required_argument, NULL, 'L' },    /* 25 */
