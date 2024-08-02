@@ -26,13 +26,13 @@ typedef enum {
 extern CURLSH *CURL_SHARE;
 
 /** \brief perform one transfer cycle */
-int curl_multi_perform_once(void);
+int curl_multi_perform_once(int *result);
 
 /** \brief initialise the network module */
 void NetworkSystem_init(void);
 
 /** \brief blocking file transfer */
-void transfer_blocking(CURL *curl);
+void transfer_blocking(CURL *curl, size_t start);
 
 /** \brief non blocking file transfer */
 void transfer_nonblocking(CURL *curl);
