@@ -55,7 +55,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install libgumbo-dev libfuse-dev libssl-dev \
           libcurl4-openssl-dev uuid-dev help2man libexpat1-dev pkg-config \
-          autoconf autoconf-archive
+          meson
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL

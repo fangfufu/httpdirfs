@@ -1,30 +1,7 @@
-# Binaries
-httpdirfs
-
-# Intermediates
-*.o
-.depend
-
 # Documentation
-doc/html
+doxygen
 
 # Editor related
-*.kate-swp
 .vscode
 *.c~
 *.h~
-
-# autotools
-autom4te.cache
-
-#Others
-mnt
-
-# Generated files
-Doxyfile
-Makefile
-config.log
-config.status
-doc
-src/.deps
-src/.dirstamp
