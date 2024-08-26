@@ -3492,13 +3492,13 @@ fi
 # Because we use $(fuse_LIBS) in $(CFLAGS); see comment in Makefile.in
 { printf "%s\n" "$as_me:${as_lineno-$LINENO}: checking whether C compiler accepts -Wunused-command-line-argument" >&5
 printf %s "checking whether C compiler accepts -Wunused-command-line-argument... " >&6; }
-if test ${ax_cv_check_cflags__Werror__Wunused_command_line_argument+y}
+if test ${ax_cv_check_cflags___Wunused_command_line_argument+y}
 then :
   printf %s "(cached) " >&6
 else $as_nop
 
   ax_check_save_flags=$CFLAGS
-  CFLAGS="$CFLAGS -Werror -Wunused-command-line-argument"
+  CFLAGS="$CFLAGS  -Wunused-command-line-argument"
   cat confdefs.h - <<_ACEOF >conftest.$ac_ext
 /* end confdefs.h.  */
 
@@ -3512,20 +3512,20 @@ main (void)
 _ACEOF
 if ac_fn_c_try_compile "$LINENO"
 then :
-  ax_cv_check_cflags__Werror__Wunused_command_line_argument=yes
+  ax_cv_check_cflags___Wunused_command_line_argument=yes
 else $as_nop
-  ax_cv_check_cflags__Werror__Wunused_command_line_argument=no
+  ax_cv_check_cflags___Wunused_command_line_argument=no
 fi
 rm -f core conftest.err conftest.$ac_objext conftest.beam conftest.$ac_ext
   CFLAGS=$ax_check_save_flags
 fi
-{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ax_cv_check_cflags__Werror__Wunused_command_line_argument" >&5
-printf "%s\n" "$ax_cv_check_cflags__Werror__Wunused_command_line_argument" >&6; }
-if test "x$ax_cv_check_cflags__Werror__Wunused_command_line_argument" = xyes
+{ printf "%s\n" "$as_me:${as_lineno-$LINENO}: result: $ax_cv_check_cflags___Wunused_command_line_argument" >&5
+printf "%s\n" "$ax_cv_check_cflags___Wunused_command_line_argument" >&6; }
+if test "x$ax_cv_check_cflags___Wunused_command_line_argument" = xyes
 then :
   NUCLA=-Wno-unused-command-line-argument
 else $as_nop
-  :
+  -Werror
 fi
 
 
