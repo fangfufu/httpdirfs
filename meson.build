@@ -30,7 +30,7 @@ c_args = [
 
 gumbo_dep = dependency('gumbo')
 libcurl_dep = dependency('libcurl')
-fuse_dep = dependency('fuse')
+fuse_dep = dependency('fuse3')
 uuid_dep = dependency('uuid')
 expat_dep = dependency('expat')
 openssl_dep = dependency('openssl')

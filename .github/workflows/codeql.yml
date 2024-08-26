@@ -53,7 +53,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install libgumbo-dev libfuse-dev libssl-dev \
+        sudo apt-get install libgumbo-dev libfuse3-dev libssl-dev \
           libcurl4-openssl-dev uuid-dev help2man libexpat1-dev pkg-config \
           meson
 

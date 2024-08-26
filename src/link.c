@@ -504,21 +504,21 @@ static void LinkTable_fill(LinkTable *linktbl)
     LinkTable_uninitialised_fill(linktbl);
 }
 
-/**
- * \brief Reset invalid links in the link table
- */
-static void LinkTable_invalid_reset(LinkTable *linktbl)
-{
-    int j = 0;
-    for (int i = 0; i < linktbl->num; i++) {
-        Link *this_link = linktbl->links[i];
-        if (this_link->type == LINK_INVALID) {
-            this_link->type = LINK_UNINITIALISED_FILE;
-            j++;
-        }
-    }
-    lprintf(debug, "%d invalid links\n", j);
-}
+// /**
+//  * \brief Reset invalid links in the link table
+//  */
+// static void LinkTable_invalid_reset(LinkTable *linktbl)
+// {
+//     int j = 0;
+//     for (int i = 0; i < linktbl->num; i++) {
+//         Link *this_link = linktbl->links[i];
+//         if (this_link->type == LINK_INVALID) {
+//             this_link->type = LINK_UNINITIALISED_FILE;
+//             j++;
+//         }
+//     }
+//     lprintf(debug, "%d invalid links\n", j);
+// }
 
 void LinkTable_free(LinkTable *linktbl)
 {

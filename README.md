@@ -54,7 +54,7 @@ For important development related documentation, please refer
 Under Debian 12 "Bookworm" and newer versions, you need the following
 dependencies:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
+    libgumbo-dev libfuse3-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
     libexpat1-dev pkg-config meson
 
 You can then compile the program similar to how you compile a typical program
@@ -71,6 +71,10 @@ To install the program, do the following:
 To uninstall the program, do the following:
 
     sudo ninja uninstall
+
+To clean the build directory, run:
+
+    ninja clean
 
 For more information, please refer to this
 [tutorial](https://mesonbuild.com/Tutorial.html).
