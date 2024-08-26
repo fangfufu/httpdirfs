@@ -7,19 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
-- The refreshed LinkTable is now saved
-(https://github.com/fangfufu/httpdirfs/issues/141).
+- The refreshed LinkTable is now saved.
+(https://github.com/fangfufu/httpdirfs/issues/141)
 - Only one LinkTable of the same directory is created when the cache mode is
-enabled (https://github.com/fangfufu/httpdirfs/issues/140).
-- Cache mode noe works correctly witht escaped URL
-(https://github.com/fangfufu/httpdirfs/issues/138).
+enabled.
+(https://github.com/fangfufu/httpdirfs/issues/140)
+- Cache mode noe works correctly witht escaped URL.
+(https://github.com/fangfufu/httpdirfs/issues/138)
+- Fixed ``--user-agent`` option
+(https://github.com/fangfufu/httpdirfs/issues/159)
 
 ### Added
 - Add ``--http-header`` option
+(https://github.com/fangfufu/httpdirfs/issues/157)
 
-## Changed
+### Changed
 - Improved LinkTable caching. LinkTable invalidation is now purely based on
 timeout.
+(https://github.com/fangfufu/httpdirfs/issues/147)
+- Replaced the GNU Autotools based build system with Meson.
+(https://github.com/fangfufu/httpdirfs/issues/149)
+- Transitioned from using libfuse 2.x to to 3.x.
+(https://github.com/fangfufu/httpdirfs/issues/116)
+- Updated OpenSSL MD5 checksum generation API usage.
+(https://github.com/fangfufu/httpdirfs/issues/143)
 
 ## [1.2.5] - 2023-02-24
 
