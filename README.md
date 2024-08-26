@@ -3,7 +3,7 @@
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/30af0a5b4d6f4a4d83ddb68f5193ad23)](https://app.codacy.com/gh/fangfufu/httpdirfs/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=fangfufu_httpdirfs&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=fangfufu_httpdirfs)
 
-# HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support!
+# HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support
 
 Have you ever wanted to mount those HTTP directory listings as if it was a
 partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
@@ -26,22 +26,27 @@ Single File Mode. This can be especially useful if the web server does not
 present a HTTP directory listing.
 
 ## Installation
+
 Please note if you install HTTDirFS from a repository, it can be outdated.
+
 ### Debian 12 "Bookworm"
+
 HTTPDirFS is available as a package in Debian 12 "Bookworm", If you are on
 Debian Bookworm, you can simply run the following
 command as ``root``:
 
-	apt install httpdirfs
+ apt install httpdirfs
 
 For more information on the status of HTTDirFS in Debian, please refer to
 [Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
 
 ### Arch Linux
+
 HTTPDirFS is available in the
 [Arch User Repository](https://aur.archlinux.org/packages/httpdirfs).
 
 ### FreeBSD
+
 HTTPDirFS is available in the
 [FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
 
@@ -51,6 +56,7 @@ For important development related documentation, please refer
 [src/README.md](src/README.md).
 
 ### Debian 12 "Bookworm"
+
 Under Debian 12 "Bookworm" and newer versions, you need the following
 dependencies:
 
@@ -80,6 +86,7 @@ For more information, please refer to this
 [tutorial](https://mesonbuild.com/Tutorial.html).
 
 ### Other operating systems
+
 I don't have the resources to test out compilation for Linux distributions
 other than Debian. I also do not have the resources to test out compilation for
 FreeBSD or macOS. Thereforce I have removed the instruction on how to compile
@@ -96,6 +103,7 @@ keeps the program in the foreground, which is useful for monitoring which URL
 the filesystem is visiting.
 
 ## Airsonic / Subsonic server support
+
 The Airsonic / Subsonic server support is dedicated the my Debian package
 maintainer Jerome Charaoui.You can mount the music collection on your
 Airsonic / Subsonic server (*sonic), and browse them using your favourite file
@@ -145,6 +153,7 @@ some or all of Subsonic API:
 [issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
 
 ## Single file mode
+
 If you just want to access a single file, you can specify
 ``--single-file-mode``. This effectively creates a virtual directory that
 contains one single file. This operating mode is similar to the unmaintained
@@ -159,6 +168,7 @@ This feature was implemented due to Github
 [issue #86](https://github.com/fangfufu/httpdirfs/issues/86)
 
 ## Permanent cache system
+
 You can cache the files you have accessed permanently on your hard drive by
 using the ``--cache`` flag. The file it caches persist across sessions.
 
@@ -184,6 +194,7 @@ please refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Configuration file support
+
 This program has basic support for using a configuration file. By default, the
 configuration file which the program reads is
 ``${XDG_CONFIG_HOME}/httpdirfs/config``, which by
@@ -199,6 +210,7 @@ Alternatively, you can specify your own configuration file by using the
 ``--config`` option.
 
 ### Log levels
+
 You can control how much log HTTPDirFS outputs by setting the
 ``HTTPDIRFS_LOG_LEVEL`` environmental variable. For details of the different
 types of log that are supported, please refer to
@@ -206,6 +218,7 @@ types of log that are supported, please refer to
 [log.c](https://github.com/fangfufu/httpdirfs/blob/master/src/log.c).
 
 ## The Technical Details
+
 For the normal HTTP directories, this program downloads the HTML web pages/files
 using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages
 using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
@@ -225,13 +238,16 @@ the header responses. HTTPDirFS by default checks for this header field. You can
 disable this check by using the ``--no-range-check`` flag.
 
 ## Other projects which incorporate HTTPDirFS
+
 - [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
 has a Python wrapper for mounting HTTPDirFS.
 
 ## Press Coverage
+
 - Linux Format - Issue [264](https://www.linuxformat.com/archives?issue=264), July 2020
 
 ## Acknowledgement
+
 - First of all, I would like to thank
 [Jerome Charaoui](https://github.com/jcharaoui) for being the Debian Maintainer
 for this piece of software. Thank you so much for packaging it!
