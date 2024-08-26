@@ -24,7 +24,6 @@ srcs = [
 c_args = [
     '-pthread',
     '-D_GNU_SOURCE',
-    '-D_FILE_OFFSET_BITS=64',
     '-DVERSION="' + meson.project_version() + '"'
 ]
 
