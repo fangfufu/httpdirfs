@@ -3,7 +3,7 @@
 #include "config.h"
 #include "log.h"
 
-#include <openssl/md5.h>
+#include <openssl/evp.h>
 #include <uuid/uuid.h>
 
 #include <errno.h>
@@ -114,17 +114,27 @@ char *generate_salt(void)
 
 char *generate_md5sum(const char *str)
 {
-    MD5_CTX c;
-    unsigned char md5[MD5_DIGEST_LENGTH];
     size_t len = strnlen(str, MAX_PATH_LEN);
     char *out = CALLOC(MD5_HASH_LEN + 1, sizeof(char));
 
-    MD5_Init(&c);
-    MD5_Update(&c, str, len);
-    MD5_Final(md5, &c);
+    EVP_MD_CTX *mdctx;
+    unsigned char *md5_digest;
+    unsigned int md5_digest_len = EVP_MD_size(EVP_md5());
 
-    for (int i = 0; i < MD5_DIGEST_LENGTH; i++) {
-        sprintf(out + 2 * i, "%02x", md5[i]);
+    // MD5_Init
+    mdctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(mdctx, EVP_md5(), NULL);
+
+    // MD5_Update
+    EVP_DigestUpdate(mdctx, str, len);
+
+    // MD5_Final
+    md5_digest = (unsigned char *)OPENSSL_malloc(md5_digest_len);
+    EVP_DigestFinal_ex(mdctx, md5_digest, &md5_digest_len);
+    EVP_MD_CTX_free(mdctx);
+
+    for (unsigned int i = 0; i < md5_digest_len; i++) {
+        sprintf(out + 2 * i, "%02x", md5_digest[i]);
     }
     return out;
 }
