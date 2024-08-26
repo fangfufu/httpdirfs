@@ -6,7 +6,7 @@
 # HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support
 
 Have you ever wanted to mount those HTTP directory listings as if it was a
-partition? Look no further, this is your solution.  HTTPDirFS stands for Hyper
+partition? Look no further, this is your solution. HTTPDirFS stands for Hyper
 Text Transfer Protocol Directory Filesystem.
 
 The performance of the program is excellent. HTTP connections are reused through
@@ -102,6 +102,17 @@ An example URL would be
 keeps the program in the foreground, which is useful for monitoring which URL
 the filesystem is visiting.
 
+For more usage related help, run
+
+    ./httpdirfs --help
+
+or
+
+    man httpdirfs
+
+Please note that the man page only works if you have installed HTTPDirFS
+properly.
+
 ## Airsonic / Subsonic server support
 
 The Airsonic / Subsonic server support is dedicated the my Debian package
@@ -147,7 +158,7 @@ some or all of Subsonic API:
 - [LMS](https://github.com/epoupon/lms) (requires ``--sonic-insecure`` and
 ``--no-range-check``, more information in
 [issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the
-[demo instance](https://lms.demo.poupon.io/), you might also need
+[demo instance](https://lms-demo.poupon.dev/), you might also need
 ``--insecure-tls``)
 - [Navidrome](https://github.com/navidrome/navidrome), more information in
 [issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
@@ -236,11 +247,6 @@ Note that HTTPDirFS requires the server to support HTTP Range Request, some
 servers support this features, but does not present ``"Accept-Ranges: bytes`` in
 the header responses. HTTPDirFS by default checks for this header field. You can
 disable this check by using the ``--no-range-check`` flag.
-
-## Other projects which incorporate HTTPDirFS
-
-- [Curious Container](https://www.curious-containers.cc/docs/red-connector-http#mount-dir)
-has a Python wrapper for mounting HTTPDirFS.
 
 ## Press Coverage
 
