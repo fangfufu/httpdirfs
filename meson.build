@@ -57,3 +57,9 @@ if (host_machine.system() == 'linux')
 			install_dir: get_option('mandir') / 'man1')
 	endif
 endif
+
+run_target('format',
+  command : 'scripts/format.sh')
+
+run_target('doxygen',
+  command : 'scripts/doxygen.sh')
