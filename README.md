@@ -46,60 +46,41 @@ HTTPDirFS is available in the
 [FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
 
 ## Compilation
-### Ubuntu
-Under Ubuntu 22.04 LTS, you need the following packages:
 
-    libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
-    libexpat1-dev pkg-config autoconf
+For important development related documentation, please refer
+[src/README.md](src/README.md).
 
 ### Debian 12 "Bookworm"
-Under Debian 12 "Bookworm" and newer versions, you need the following packages:
+Under Debian 12 "Bookworm" and newer versions, you need the following
+dependencies:
 
     libgumbo-dev libfuse-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
-    libexpat1-dev pkg-config autoconf
+    libexpat1-dev pkg-config meson
 
-### FreeBSD
-The following dependencies are required from either pkg or ports:
+You can then compile the program similar to how you compile a typical program
+that uses the Meson build system:
 
-Packages:
+    meson setup builddir
+    cd builddir
+    meson compile
 
-    gmake fusefs-libs gumbo e2fsprogs-libuuid curl expat pkgconf help2man
+To install the program, do the following:
 
-If you want to be ableto build the documentation ("gmake doc") you also need
-doxygen (devel/doxygen).
+    sudo meson install
 
-Ports:
+To uninstall the program, do the following:
 
-    devel/gmake sysutils/fusefs-libs devel/gumbo misc/e2fsprogs-libuuid ftp/curl textproc/expat2 devel/pkgconf devel/doxygen misc/help2man
+    sudo ninja uninstall
 
-**Note:** If you want brotli compression support, you will need to install curl
-from ports and enable the option.
+For more information, please refer to this
+[tutorial](https://mesonbuild.com/Tutorial.html).
 
-You can then build + install with:
-
-    ./configure
-    gmake
-    sudo gmake install
-
-Alternatively, you may use the FreeBSD [ports(7)](https://man.freebsd.org/ports/7)
-infrastructure to build HTTPDirFS from source with the modifications you need.
-
-### macOS
-You need to install some packages from Homebrew:
-
-    brew install macfuse curl gumbo-parser openssl pkg-config help2man
-
-If you want to be able to build the documentation ("make doc") you also need
-help2man, doxygen, and graphviz.
-
-Build and install:
-
-    ./configure
-    make
-    sudo make install
-
-Apple's command-line build tools are usually installed as part of setting up 
-Homebrew. HTTPDirFS will be installed in ``/usr/local``.
+### Other operating systems
+I don't have the resources to test out compilation for Linux distributions
+other than Debian. I also do not have the resources to test out compilation for
+FreeBSD or macOS. Thereforce I have removed the instruction on how to compile
+for these operating systems in the README for now. Please feel free to send me a
+pull request to add them back in.
 
 ## Usage
 
@@ -109,56 +90,6 @@ An example URL would be
 [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag
 keeps the program in the foreground, which is useful for monitoring which URL
 the filesystem is visiting.
-
-### Useful options
-
-HTTPDirFS options:
-
-    -u  --username          HTTP authentication username
-    -p  --password          HTTP authentication password
-    -P  --proxy             Proxy for libcurl, for more details refer to
-                            https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html
-        --proxy-username    Username for the proxy
-        --proxy-password    Password for the proxy
-        --cache             Enable cache (default: off)
-        --cache-location    Set a custom cache location
-                            (default: "${XDG_CACHE_HOME}/httpdirfs")
-        --dl-seg-size       Set cache download segment size, in MB (default: 8)
-                            Note: this setting is ignored if previously
-                            cached data is found for the requested file.
-        --max-seg-count     Set maximum number of download segments a file
-                            can have. (default: 128*1024)
-                            With the default setting, the maximum memory usage
-                            per file is 128KB. This allows caching files up
-                            to 1TB in size using the default segment size.
-        --max-conns         Set maximum number of network connections that
-                            libcurl is allowed to make. (default: 10)
-        --retry-wait        Set delay in seconds before retrying an HTTP request
-                            after encountering an error. (default: 5)
-        --user-agent        Set user agent string (default: "HTTPDirFS")
-        --no-range-check    Disable the built-in check for the server's support
-                            for HTTP range requests
-        --insecure-tls      Disable licurl TLS certificate verification by
-                            setting CURLOPT_SSL_VERIFYHOST to 0
-        --single-file-mode  Single file mode - rather than mounting a whole
-                            directory, present a single file inside a virtual
-                            directory.
-
-For mounting a Airsonic / Subsonic server:
-
-        --sonic-username    The username for your Airsonic / Subsonic server
-        --sonic-password    The password for your Airsonic / Subsonic server
-        --sonic-id3         Enable ID3 mode - this present the server content in
-                            Artist/Album/Song layout
-        --sonic-insecure    Authenticate against your Airsonic / Subsonic server
-                            using the insecure username / hex encoded password
-                            scheme
-
-Useful FUSE options:
-
-    -d   -o debug          enable debug output (implies -f)
-    -f                     foreground operation
-    -s                     disable multi-threaded operation
 
 ## Airsonic / Subsonic server support
 The Airsonic / Subsonic server support is dedicated the my Debian package
