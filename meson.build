@@ -1,6 +1,11 @@
 project('httpdirfs', 'c',
     version: '1.2.6',
-    license: ' GPL-3.0-or-later'
+    license: 'GPL-3.0-or-later',
+    default_options: [
+        'buildtype=release',
+        'werror=true',
+        'warning_level=3'
+        ]
 )
 
 srcs = [
@@ -17,14 +22,9 @@ srcs = [
 ]
 
 c_args = [
-    '-g',
-    '-O2',
-    '-Wall',
-    '-Wextra',
-    '-Wshadow',
-    '-rdynamic',
     '-pthread',
     '-D_GNU_SOURCE',
+    '-D_FILE_OFFSET_BITS=64',
     '-DVERSION="' + meson.project_version() + '"'
 ]
 
@@ -40,7 +40,7 @@ httpdirfs = executable('httpdirfs',
     dependencies : [gumbo_dep, libcurl_dep, fuse_dep, uuid_dep, expat_dep, openssl_dep],
     c_args: c_args,
     install: true,
-    install_dir: get_option('bindir')
+    install_dir: get_option('bindir'),
 )
 
 if (host_machine.system() == 'linux')

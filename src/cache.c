@@ -910,7 +910,7 @@ void Cache_close(Cache *cf)
     lprintf(cache_lock_debug,
             "thread %x: unlocking cf_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
-    return Cache_free(cf);
+    Cache_free(cf);
 }
 
 /**
