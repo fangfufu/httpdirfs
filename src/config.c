@@ -22,10 +22,6 @@
 
 ConfigStruct CONFIG;
 
-/**
- * \note The opening curly bracket should be at line 39, so the code lines up
- * with the definition code in util.h.
- */
 void Config_init(void)
 {
     CONFIG.mode = NORMAL;

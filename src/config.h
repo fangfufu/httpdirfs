@@ -37,11 +37,6 @@ typedef enum {
     SINGLE = 3,
 } OperationMode;
 
-/**
- * \brief configuration data structure
- * \note The opening curly bracket should be at line 39, so the code belong
- * lines up with the initialisation code in util.c
- */
 typedef struct {
     /** \brief Operation Mode */
     OperationMode mode;
