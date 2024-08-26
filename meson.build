@@ -35,10 +35,25 @@ uuid_dep = dependency('uuid')
 expat_dep = dependency('expat')
 openssl_dep = dependency('openssl')
 
-executable('httpdirfs',
+httpdirfs = executable('httpdirfs',
     srcs,
     dependencies : [gumbo_dep, libcurl_dep, fuse_dep, uuid_dep, expat_dep, openssl_dep],
     c_args: c_args,
     install: true,
     install_dir: get_option('bindir')
 )
+
+if (host_machine.system() == 'linux')
+    help2man = find_program('help2man', required: false)
+	if help2man.found()
+		help2man_opts = [
+			'--name="mount HTTP directory as a virtual filesystem"',
+			'--no-discard-stderr',
+			'--section=1']
+		manfile = custom_target('httpdirfs.1',
+			output: 'httpdirfs.1',
+			command: [help2man, help2man_opts, '--output=@OUTPUT@', httpdirfs],
+			install: true,
+			install_dir: get_option('mandir') / 'man1')
+	endif
+endif
