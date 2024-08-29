@@ -9,6 +9,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <ftw.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -34,23 +35,33 @@ static pthread_mutex_t cf_lock;
  */
 static char *DATA_DIR;
 
-/**
- * \brief Calculate cache system directory path
- */
-static char *CacheSystem_calc_dir(const char *url)
+static char *CacheSystem_get_cache_home()
 {
+    if (CONFIG.cache_dir) {
+        return CONFIG.cache_dir;
+    }
     char *xdg_cache_home = getenv("XDG_CACHE_HOME");
     if (!xdg_cache_home) {
         char *home = getenv("HOME");
         char *xdg_cache_home_default = "/.cache";
         xdg_cache_home = path_append(home, xdg_cache_home_default);
     }
+    return xdg_cache_home;
+}
+
+/**
+ * \brief Calculate cache system directory path
+ */
+static char *CacheSystem_calc_dir(const char *url)
+{
+    char *cache_home = CacheSystem_get_cache_home();
+
     if (mkdir
-            (xdg_cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+            (cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
             && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
-    char *cache_dir_root = path_append(xdg_cache_home, "/httpdirfs/");
+    char *cache_dir_root = path_append(cache_home, "/httpdirfs/");
     if (mkdir
             (cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
             && (errno != EEXIST)) {
@@ -142,6 +153,33 @@ void CacheSystem_init(const char *path, int url_supplied)
     }
 
     CACHE_SYSTEM_INIT = 1;
+}
+
+static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+{
+    (void) sb;
+    (void) typeflag;
+    (void) ftwbuf;
+    return remove(fpath);
+}
+
+void CacheSystem_clear(const char *path)
+{
+    char *cache_root_dir;
+    if (path) {
+        cache_root_dir = strdup(path);
+    } else {
+        char *cache_home = CacheSystem_get_cache_home();
+        cache_root_dir = path_append(cache_home, "/httpdirfs/");
+        FREE(cache_home);
+    }
+
+    lprintf(debug, "%s\n", path);
+
+    nftw(cache_root_dir, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
+    FREE(cache_root_dir);
+
+    exit(EXIT_SUCCESS);
 }
 
 /**
