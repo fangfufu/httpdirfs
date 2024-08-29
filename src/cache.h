@@ -93,6 +93,11 @@ extern char *META_DIR;
 void CacheSystem_init(const char *path, int url_supplied);
 
 /**
+ * \brief clear the content of the cache directory
+ */
+void CacheSystem_clear(const char *path);
+
+/**
  * \brief Create directories under the cache directory structure, if they do
  * not already exist
  * \return
