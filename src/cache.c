@@ -35,18 +35,38 @@ static pthread_mutex_t cf_lock;
  */
 static char *DATA_DIR;
 
-static char *CacheSystem_get_cache_home()
+
+char *CacheSystem_get_cache_dir()
 {
     if (CONFIG.cache_dir) {
         return CONFIG.cache_dir;
     }
-    char *xdg_cache_home = getenv("XDG_CACHE_HOME");
-    if (!xdg_cache_home) {
-        char *home = getenv("HOME");
-        char *xdg_cache_home_default = "/.cache";
-        xdg_cache_home = path_append(home, xdg_cache_home_default);
+
+    const char *default_cache_subdir = "/.cache";
+    char *cache_dir = NULL;
+
+    const char *xdg_cache_home = getenv("XDG_CACHE_HOME");
+    if (xdg_cache_home) {
+        cache_dir = strndup(xdg_cache_home, MAX_PATH_LEN);
+    } else {
+        const char *user_home = getenv("HOME");
+        if (user_home) {
+            cache_dir = path_append(user_home, default_cache_subdir);
+        } else {
+            lprintf(warning, "$HOME is unset\n");
+            /*
+             * XDG_CACHE_HOME and HOME already are full paths. Not relying
+             * on environment PWD since it too may be undefined.
+             */
+            const char *cur_dir = realpath("./", NULL);
+            if (cur_dir) {
+                cache_dir = path_append(cur_dir, default_cache_subdir);
+            } else {
+                lprintf(fatal, "Could not create cache directory\n");
+            }
+        }
     }
-    return xdg_cache_home;
+    return cache_dir;
 }
 
 /**
@@ -54,7 +74,7 @@ static char *CacheSystem_get_cache_home()
  */
 static char *CacheSystem_calc_dir(const char *url)
 {
-    char *cache_home = CacheSystem_get_cache_home();
+    char *cache_home = CacheSystem_get_cache_dir();
 
     if (mkdir
             (cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
@@ -92,6 +112,7 @@ static char *CacheSystem_calc_dir(const char *url)
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
     FREE(fn);
+    FREE(cache_home);
     FREE(cache_dir_root);
     curl_free(escaped_url);
     curl_easy_cleanup(c);
@@ -163,22 +184,18 @@ static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag, struc
     return remove(fpath);
 }
 
-void CacheSystem_clear(const char *path)
+void CacheSystem_clear()
 {
-    char *cache_root_dir;
-    if (path) {
-        cache_root_dir = strdup(path);
+    char *cache_home = CacheSystem_get_cache_dir();
+    const char *cache_del;
+    lprintf(debug, "%s\n", cache_home);
+    if (CONFIG.cache_dir) {
+        cache_del = cache_home;
     } else {
-        char *cache_home = CacheSystem_get_cache_home();
-        cache_root_dir = path_append(cache_home, "/httpdirfs/");
-        FREE(cache_home);
+        cache_del = path_append(cache_home, "/httpdirfs/");
     }
-
-    lprintf(debug, "%s\n", path);
-
-    nftw(cache_root_dir, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
-    FREE(cache_root_dir);
-
+    nftw(cache_del, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
+    FREE(cache_home);
     exit(EXIT_SUCCESS);
 }
 

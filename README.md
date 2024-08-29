@@ -181,10 +181,20 @@ This feature was implemented due to Github
 ## Permanent cache system
 
 You can cache the files you have accessed permanently on your hard drive by
-using the ``--cache`` flag. The file it caches persist across sessions.
+using the ``--cache`` flag. The file it caches persist across sessions, but
+can clear the cache using ``--cache-clear``
+
+> [!WARNING]
+> If ``--cache-location <dir>`` appears before ``--cache-clear``, the entire
+> directory  ``<dir>`` will be deleted instead. Take caution when specifying
+> non-empty directories to be used as cache.
 
 By default, the cache files are stored under ``${XDG_CACHE_HOME}/httpdirfs``,
-which by default is ``${HOME}/.cache/httpdirfs``. Each HTTP directory gets its
+``${HOME}/.cache/httpdirfs``, or the current working directory ``./.cache``,
+whichever is found first. By default, ``${XDG_CACHE_HOME}/httpdirfs`` is
+normally ``${HOME}/.cache/httpdirfs``.
+
+Each HTTP directory gets its
 own cache folder, they are named using the escaped URL of the HTTP directory.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
