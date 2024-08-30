@@ -95,7 +95,7 @@ pull request to add them back in.
 
 ## Usage
 
-	./httpdirfs -f --cache $URL $MOUNT_POINT
+ ./httpdirfs -f --cache $URL $MOUNT_POINT
 
 An example URL would be
 [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag
