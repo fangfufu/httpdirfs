@@ -20,6 +20,8 @@ enabled.
 ### Added
 - Add ``--http-header`` option
 (https://github.com/fangfufu/httpdirfs/issues/157)
+- Add ``--cache-clear`` option
+(https://github.com/fangfufu/httpdirfs/issues/111)
 
 ### Changed
 - Improved LinkTable caching. LinkTable invalidation is now purely based on
