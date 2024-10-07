@@ -6,22 +6,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.6] - 2024-10-07
+
 ### Fixed
 - The refreshed LinkTable is now saved.
 (https://github.com/fangfufu/httpdirfs/issues/141)
 - Only one LinkTable of the same directory is created when the cache mode is
 enabled.
 (https://github.com/fangfufu/httpdirfs/issues/140)
-- Cache mode noe works correctly witht escaped URL.
+- Cache mode now works correctly with escaped URL.
 (https://github.com/fangfufu/httpdirfs/issues/138)
 - Fixed ``--user-agent`` option
 (https://github.com/fangfufu/httpdirfs/issues/159)
+- Allow leading `./` segments in links
+(https://github.com/fangfufu/httpdirfs/pull/125)
+- Fix segfault due to missing LinkTable allocation
+(https://github.com/fangfufu/httpdirfs/pull/155)
+- Fix Segmentation fault if HOME not set
+(https://github.com/fangfufu/httpdirfs/pull/162)
+- Handle sites that use absolute links and sites that require the final slash 
+(https://github.com/fangfufu/httpdirfs/pull/121)
 
 ### Added
 - Add ``--http-header`` option
 (https://github.com/fangfufu/httpdirfs/issues/157)
 - Add ``--cache-clear`` option
 (https://github.com/fangfufu/httpdirfs/issues/111)
+- Add ``--refresh-timeout`` to set refresh timeout for directory contents 
+(https://github.com/fangfufu/httpdirfs/pull/114)
 
 ### Changed
 - Improved LinkTable caching. LinkTable invalidation is now purely based on
@@ -33,6 +45,7 @@ timeout.
 (https://github.com/fangfufu/httpdirfs/issues/116)
 - Updated OpenSSL MD5 checksum generation API usage.
 (https://github.com/fangfufu/httpdirfs/issues/143)
+
 
 ## [1.2.5] - 2023-02-24
 
@@ -246,7 +259,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.6...master
+[1.2.6]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...1.2.6
 [1.2.5]: https://github.com/fangfufu/httpdirfs/compare/1.2.4...1.2.5
 [1.2.4]: https://github.com/fangfufu/httpdirfs/compare/1.2.3...1.2.4
 [1.2.3]: https://github.com/fangfufu/httpdirfs/compare/1.2.2...1.2.3
