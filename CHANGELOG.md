@@ -6,6 +6,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.6] - 2024-10-07
+
 ### Fixed
 - The refreshed LinkTable is now saved.
 (https://github.com/fangfufu/httpdirfs/issues/141)
@@ -246,7 +248,8 @@ ${XDG_CONFIG_HOME}/httpdirfs, rather than ${HOME}/.httpdirfs
 ## [1.0] - 2018-08-22
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.6...master
+[1.2.6]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...master
 [1.2.5]: https://github.com/fangfufu/httpdirfs/compare/1.2.4...1.2.5
 [1.2.4]: https://github.com/fangfufu/httpdirfs/compare/1.2.3...1.2.4
 [1.2.3]: https://github.com/fangfufu/httpdirfs/compare/1.2.2...1.2.3
