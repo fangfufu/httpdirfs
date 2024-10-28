@@ -114,7 +114,7 @@ fuse_start:
     return 0;
 }
 
-static char *get_XDG_CONFIG_HOME()
+static char *get_XDG_CONFIG_HOME(void)
 {
     const char *default_config_subdir = "/.config";
     char *config_dir = NULL;
