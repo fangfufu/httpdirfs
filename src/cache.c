@@ -36,7 +36,7 @@ static pthread_mutex_t cf_lock;
 static char *DATA_DIR;
 
 
-char *CacheSystem_get_cache_dir()
+char *CacheSystem_get_cache_dir(void)
 {
     if (CONFIG.cache_dir) {
         return CONFIG.cache_dir;
@@ -184,7 +184,7 @@ static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag, struc
     return remove(fpath);
 }
 
-void CacheSystem_clear()
+void CacheSystem_clear(void)
 {
     char *cache_home = CacheSystem_get_cache_dir();
     const char *cache_del;

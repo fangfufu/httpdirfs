@@ -373,7 +373,7 @@ static void print_help(char *program_name, int long_help)
     }
 }
 
-static void print_long_help()
+static void print_long_help(void)
 {
     /* FUSE prints its help to stderr */
     fprintf(stderr, "\n\

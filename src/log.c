@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int log_level_init()
+int log_level_init(void)
 {
     char *env = getenv("HTTPDIRFS_LOG_LEVEL");
     if (env) {
@@ -64,7 +64,7 @@ print_actual_message: {
     }
 }
 
-void print_version()
+void print_version(void)
 {
     /* FUSE prints its help to stderr */
     fprintf(stderr, "HTTPDirFS version " VERSION "\n");
