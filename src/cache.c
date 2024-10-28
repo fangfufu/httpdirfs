@@ -519,7 +519,7 @@ int CacheDir_create(const char *dirn)
 /**
  * \brief Allocate a new cache data structure
  */
-static Cache *Cache_alloc()
+static Cache *Cache_alloc(void)
 {
     Cache *cf = CALLOC(1, sizeof(Cache));
 
