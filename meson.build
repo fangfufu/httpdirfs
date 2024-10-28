@@ -22,10 +22,13 @@ srcs = [
 ]
 
 c_args = [
+    '-Wstrict-prototypes',
     '-pthread',
     '-D_GNU_SOURCE',
     '-DVERSION="' + meson.project_version() + '"'
 ]
+
+cc = meson.get_compiler('c')
 
 gumbo_dep = dependency('gumbo')
 libcurl_dep = dependency('libcurl')
@@ -33,10 +36,11 @@ fuse_dep = dependency('fuse3')
 uuid_dep = dependency('uuid')
 expat_dep = dependency('expat')
 openssl_dep = dependency('openssl')
+execinfo_dep = cc.find_library('execinfo', required: false)
 
 httpdirfs = executable('httpdirfs',
     srcs,
-    dependencies : [gumbo_dep, libcurl_dep, fuse_dep, uuid_dep, expat_dep, openssl_dep],
+    dependencies : [gumbo_dep, libcurl_dep, fuse_dep, uuid_dep, expat_dep, openssl_dep, execinfo_dep],
     c_args: c_args,
     install: true,
     install_dir: get_option('bindir'),

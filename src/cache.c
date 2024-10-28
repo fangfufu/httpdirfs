@@ -36,7 +36,7 @@ static pthread_mutex_t cf_lock;
 static char *DATA_DIR;
 
 
-char *CacheSystem_get_cache_dir()
+char *CacheSystem_get_cache_dir(void)
 {
     if (CONFIG.cache_dir) {
         return CONFIG.cache_dir;
@@ -184,7 +184,7 @@ static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag, struc
     return remove(fpath);
 }
 
-void CacheSystem_clear()
+void CacheSystem_clear(void)
 {
     char *cache_home = CacheSystem_get_cache_dir();
     const char *cache_del;
@@ -519,7 +519,7 @@ int CacheDir_create(const char *dirn)
 /**
  * \brief Allocate a new cache data structure
  */
-static Cache *Cache_alloc()
+static Cache *Cache_alloc(void)
 {
     Cache *cf = CALLOC(1, sizeof(Cache));
 

@@ -25,7 +25,7 @@ typedef enum {
 /**
  * \brief Get the log level from the environment.
  */
-int log_level_init();
+int log_level_init(void);
 
 /**
  * \brief Log printf
@@ -44,6 +44,6 @@ void log_printf(LogType type, const char *file, const char *func, int line,
 /**
  * \brief Print the version information for HTTPDirFS
  */
-void print_version();
+void print_version(void);
 
 #endif
