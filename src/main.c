@@ -9,7 +9,7 @@
 
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);
-static void print_long_help();
+static void print_long_help(void);
 static int
 parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc);
 void parse_config_file(char ***argv, int *argc);

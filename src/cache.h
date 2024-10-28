@@ -95,12 +95,12 @@ void CacheSystem_init(const char *path, int url_supplied);
 /**
  * \brief clear the content of the cache directory
  */
-void CacheSystem_clear();
+void CacheSystem_clear(void);
 
 /**
  * \brief Return the fullpath to the cache directory
  */
-char *CacheSystem_get_cache_dir();
+char *CacheSystem_get_cache_dir(void);
 
 /**
  * \brief Create directories under the cache directory structure, if they do
