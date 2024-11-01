@@ -45,6 +45,10 @@ For more information on the status of HTTDirFS in Debian, please refer to
 HTTPDirFS is available in the
 [Arch User Repository](https://aur.archlinux.org/packages/httpdirfs).
 
+### NixOS
+
+HTTPDirFS is available as a [package](https://mynixos.com/nixpkgs/package/httpdirfs).
+
 ### FreeBSD
 
 HTTPDirFS is available in the
@@ -279,3 +283,15 @@ a whole bunch of code improvements and the improved build system.
 - I would like to thank [-Archivist](https://www.reddit.com/user/-Archivist/)
 for not providing FTP or WebDAV access to his server. This piece of software was
 written in direct response to his appalling behaviour.
+
+## License
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
