@@ -95,7 +95,8 @@ I don't have the resources to test out compilation for Linux distributions
 other than Debian. I also do not have the resources to test out compilation for
 FreeBSD or macOS. Thereforce I have removed the instruction on how to compile
 for these operating systems in the README for now. Please feel free to send me a
-pull request to add them back in.
+pull request to add them back in. It is known that HTTPDirFS 
+[does compile](https://github.com/fangfufu/httpdirfs/issues/165) on FreeBSD.
 
 ## Usage
 
