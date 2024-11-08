@@ -267,7 +267,14 @@ disable this check by using the ``--no-range-check`` flag.
 
 - Linux Format - Issue [264](https://www.linuxformat.com/archives?issue=264), July 2020
 
-## Acknowledgement
+## Contributors
+
+Thanks for your contribution to the project!
+
+[![Contributors Avatars](https://contributors-img.web.app/image?repo=fangfufu/httpdirfs)](https://github.com/fangfufu/httpdirfs/graphs/contributors)
+[![Contributors Count](https://img.shields.io/github/contributors-anon/fangfufu/httpdirfs?style=for-the-badge&logo=httpdirfs)](https://github.com/fangfufu/httpdirfs/graphs/contributors)
+
+## Special Acknowledgement
 
 - First of all, I would like to thank
 [Jerome Charaoui](https://github.com/jcharaoui) for being the Debian Maintainer
