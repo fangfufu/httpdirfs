@@ -65,6 +65,8 @@ typedef struct {
     struct curl_slist *http_headers;
     /** \brief Disable check for the server's support of HTTP range request */
     int no_range_check;
+    /** \brief Treat zero length file as directory */
+    int zero_len_is_dir;
     /** \brief Disable TLS certificate verification */
     int insecure_tls;
     /** \brief Server certificate file */

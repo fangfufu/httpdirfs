@@ -452,7 +452,12 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
         if (cl <= 0) {
-            this_link->type = LINK_INVALID;
+            if (CONFIG.zero_len_is_dir) {
+                this_link->type = LINK_DIR;
+            } else {
+                lprintf(info, "Zero length file: %s\n", this_link->f_url);
+                this_link->type = LINK_INVALID;
+            }
         } else {
             this_link->type = LINK_FILE;
             this_link->content_length = cl;
@@ -1074,7 +1079,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 
     if (offset + req_size > link->content_length) {
         lprintf(info,
-                "requested size too larger than remaining size, req_size: %lu, recv: %ld, content-length: %ld\n",
+                "requested size larger than remaining size, req_size: %lu, recv: %ld, content-length: %ld\n",
                 req_size, recv, link->content_length);
         req_size = link->content_length - offset;
     }
@@ -1088,8 +1093,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
     /* The extra 1 byte is probably for '\0' */
     if (recv - 1 == (long int) req_size) {
         recv--;
-    } else if (offset + req_size < link->content_length) {
-        lprintf(error, "req_size: %lu, recv: %ld\n", req_size, recv);
+    } else {
+        lprintf(error, "req_size != recv, req_size: %lu, recv: %ld\n",
+                req_size, recv);
     }
 
     memmove(output_buf, ts.data, recv);

@@ -49,6 +49,8 @@ void Config_init(void)
 
     CONFIG.no_range_check = 0;
 
+    CONFIG.zero_len_is_dir = 0;
+
     CONFIG.insecure_tls = 0;
 
     CONFIG.refresh_timeout = DEFAULT_REFRESH_TIMEOUT;

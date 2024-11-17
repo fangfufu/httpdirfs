@@ -225,6 +225,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { "refresh-timeout", required_argument, NULL, 'L' },    /* 25 */
         { "http-header", required_argument, NULL, 'L' },        /* 26 */
         { "cache-clear", no_argument, NULL, 'L' },     /* 27 */
+        { "zero-len-is-dir", no_argument, NULL, 'L' }, /* 28 */
         { 0, 0, 0, 0 }
     };
     while ((c =
@@ -339,6 +340,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 27:
                 CacheSystem_clear();
                 break;
+            case 28:
+                CONFIG.zero_len_is_dir = 1;
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -416,6 +420,7 @@ HTTPDirFS options:\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
         --no-range-check    Disable the built-in check for the server's support\n\
                             for HTTP range requests\n\
+        --zero-len-is-dir   If a file has a zero length, treat it as a directory\n\
         --insecure-tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
