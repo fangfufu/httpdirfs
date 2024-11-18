@@ -25,34 +25,28 @@ If you only want to access a single file, there is also a simplified
 Single File Mode. This can be especially useful if the web server does not
 present a HTTP directory listing.
 
-## Installation
+## Usage
+Basic usage:
 
-Please note if you install HTTDirFS from a repository, it can be outdated.
+    ./httpdirfs -f --cache $URL $MOUNT_POINT
 
-### Debian 12 "Bookworm"
+An example URL would be
+[Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag
+keeps the program in the foreground, which is useful for monitoring which URL
+the filesystem is visiting.
 
-HTTPDirFS is available as a package in Debian 12 "Bookworm", If you are on
-Debian Bookworm, you can simply run the following
-command as ``root``:
+For more usage related help, run
 
- apt install httpdirfs
+    ./httpdirfs --help
 
-For more information on the status of HTTDirFS in Debian, please refer to
-[Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
+or
 
-### Arch Linux
+    man httpdirfs
 
-HTTPDirFS is available in the
-[Arch User Repository](https://aur.archlinux.org/packages/httpdirfs).
+Please note that the man page only works if you have installed HTTPDirFS
+properly.
 
-### NixOS
-
-HTTPDirFS is available as a [package](https://mynixos.com/nixpkgs/package/httpdirfs).
-
-### FreeBSD
-
-HTTPDirFS is available in the
-[FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
+The full usage flags is also documented in the [usage](USAGE.md) page.
 
 ## Compilation
 
@@ -98,25 +92,34 @@ for these operating systems in the README for now. Please feel free to send me a
 pull request to add them back in. It is known that HTTPDirFS 
 [does compile](https://github.com/fangfufu/httpdirfs/issues/165) on FreeBSD.
 
-## Usage
+## Installation
 
- ./httpdirfs -f --cache $URL $MOUNT_POINT
+Please note if you install HTTDirFS from a repository, it can be outdated.
 
-An example URL would be
-[Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The ``-f`` flag
-keeps the program in the foreground, which is useful for monitoring which URL
-the filesystem is visiting.
+### Debian 12 "Bookworm"
 
-For more usage related help, run
+HTTPDirFS is available as a package in Debian 12 "Bookworm", If you are on
+Debian Bookworm, you can simply run the following
+command as ``root``:
 
-    ./httpdirfs --help
+ apt install httpdirfs
 
-or
+For more information on the status of HTTDirFS in Debian, please refer to
+[Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
 
-    man httpdirfs
+### Arch Linux
 
-Please note that the man page only works if you have installed HTTPDirFS
-properly.
+HTTPDirFS is available in the
+[Arch User Repository](https://aur.archlinux.org/packages/httpdirfs).
+
+### NixOS
+
+HTTPDirFS is available as a [package](https://mynixos.com/nixpkgs/package/httpdirfs).
+
+### FreeBSD
+
+HTTPDirFS is available in the
+[FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
 
 ## Airsonic / Subsonic server support
 
