@@ -553,19 +553,19 @@ static Cache *Cache_alloc(void)
 static void Cache_free(Cache *cf)
 {
     if (pthread_mutex_destroy(&cf->seek_lock)) {
-        lprintf(fatal, "could not destroy seek_lock!\n");
+        lprintf(fatal, "could not destroy seek_lock: %s!\n", strerror(errno));
     }
 
     if (pthread_mutex_destroy(&cf->w_lock)) {
-        lprintf(fatal, "could not destroy w_lock!\n");
+        lprintf(fatal, "could not destroy w_lock: %s!\n", strerror(errno));
     }
 
     if (pthread_mutex_destroy(&cf->bgt_lock)) {
-        lprintf(fatal, "could not destroy bgt_lock!\n");
+        lprintf(fatal, "could not destroy bgt_lock: %s!\n", strerror(errno));
     }
 
     if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
-        lprintf(fatal, "could not destroy bgt_lock_attr!\n");
+        lprintf(fatal, "could not destroy bgt_lock_attr: %s!\n", strerror(errno));
     }
 
     if (cf->path) {
