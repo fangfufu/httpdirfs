@@ -858,8 +858,8 @@ Cache *Cache_open(const char *fn)
     cf->link = link;
 
     if (Meta_open(cf)) {
-        Cache_free(cf);
         lprintf(error, "cannot open metadata file %s.\n", fn);
+        Cache_free(cf);
 
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock;\n", pthread_self());
@@ -871,8 +871,8 @@ Cache *Cache_open(const char *fn)
      * Corrupt metadata
      */
     if (Meta_read(cf)) {
-        Cache_free(cf);
         lprintf(error, "metadata error: %s.\n", fn);
+        Cache_free(cf);
 
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock;\n", pthread_self());
@@ -911,8 +911,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
     }
 
     if (Data_open(cf)) {
-        Cache_free(cf);
         lprintf(error, "cannot open data file %s.\n", fn);
+        Cache_free(cf);
 
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock;\n", pthread_self());
