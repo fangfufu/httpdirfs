@@ -552,20 +552,30 @@ static Cache *Cache_alloc(void)
  */
 static void Cache_free(Cache *cf)
 {
-    if (pthread_mutex_destroy(&cf->seek_lock)) {
-        lprintf(fatal, "could not destroy seek_lock: %s!\n", strerror(errno));
+    int err_code = 0;
+
+    err_code = pthread_mutex_destroy(&cf->seek_lock);
+    if (err_code) {
+        lprintf(fatal, "could not destroy seek_lock: %d, %s!\n", err_code, 
+        strerror(err_code));
     }
 
-    if (pthread_mutex_destroy(&cf->w_lock)) {
-        lprintf(fatal, "could not destroy w_lock: %s!\n", strerror(errno));
+    err_code = pthread_mutex_destroy(&cf->w_lock);
+    if (err_code) {
+        lprintf(fatal, "could not destroy w_lock: %d, %s!\n", err_code, 
+        strerror(err_code));
     }
 
-    if (pthread_mutex_destroy(&cf->bgt_lock)) {
-        lprintf(fatal, "could not destroy bgt_lock: %s!\n", strerror(errno));
+    err_code = pthread_mutex_destroy(&cf->bgt_lock);
+    if (err_code) {
+        lprintf(fatal, "could not destroy bgt_lock: %d, %s!\n", err_code, 
+        strerror(err_code));
     }
 
-    if (pthread_mutexattr_destroy(&cf->bgt_lock_attr)) {
-        lprintf(fatal, "could not destroy bgt_lock_attr: %s!\n", strerror(errno));
+    err_code = pthread_mutexattr_destroy(&cf->bgt_lock_attr);
+    if (err_code) {
+        lprintf(fatal, "could not destroy bgt_lock_attr: %d, %s!\n", err_code, 
+        strerror(err_code));
     }
 
     if (cf->path) {
