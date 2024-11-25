@@ -23,6 +23,7 @@ srcs = [
 
 c_args = [
     '-Wstrict-prototypes',
+    '-Wshadow',
     '-pthread',
     '-D_GNU_SOURCE',
     '-DVERSION="' + meson.project_version() + '"'

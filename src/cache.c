@@ -945,7 +945,7 @@ cf->content_length: %ld, Data_size(fn): %ld.\n", fn, cf->content_length,
 void Cache_close(Cache *cf)
 {
     lprintf(cache_lock_debug,
-            "thread %x: locking cf_lock;\n", pthread_self());
+            "thread %x: locking cf_lock: %s\n", pthread_self(), cf->path);
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
     cf->cache_opened--;
@@ -953,7 +953,8 @@ void Cache_close(Cache *cf)
     if (cf->cache_opened > 0) {
 
         lprintf(cache_lock_debug,
-                "thread %x: unlocking cf_lock;\n", pthread_self());
+                "thread %x: unlocking cf_lock: %s, cache_opened: %d\n",
+                pthread_self(), cf->path, cf->cache_opened);
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return;
     }
@@ -973,7 +974,8 @@ void Cache_close(Cache *cf)
     cf->link->cache_ptr = NULL;
 
     lprintf(cache_lock_debug,
-            "thread %x: unlocking cf_lock;\n", pthread_self());
+            "thread %x: unlocking cf_lock, cache closed: %s\n", pthread_self(),
+            cf->path);
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
     Cache_free(cf);
 }
