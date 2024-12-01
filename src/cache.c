@@ -760,8 +760,8 @@ int Cache_create(const char *path)
     Meta_create(cf);
 
     if (Meta_open(cf)) {
-        Cache_free(cf);
         lprintf(error, "cannot open metadata file, %s.\n", fn);
+        Cache_free(cf);
     }
 
     if (Meta_write(cf)) {
@@ -776,6 +776,7 @@ int Cache_create(const char *path)
 
     Data_create(cf);
 
+    lprintf(cache_lock_debug, "Flusing cache file for %s after creating.\n", fn);
     Cache_free(cf);
 
     int res = Cache_exist(fn);
