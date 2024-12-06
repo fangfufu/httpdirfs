@@ -554,18 +554,24 @@ static void Cache_free(Cache *cf)
 {
     int err_code = 0;
 
+    PTHREAD_MUTEX_LOCK(&cf->seek_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     err_code = pthread_mutex_destroy(&cf->seek_lock);
     if (err_code) {
         lprintf(fatal, "could not destroy seek_lock: %d, %s!\n", err_code, 
         strerror(err_code));
     }
 
+    PTHREAD_MUTEX_LOCK(&cf->w_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
     err_code = pthread_mutex_destroy(&cf->w_lock);
     if (err_code) {
         lprintf(fatal, "could not destroy w_lock: %d, %s!\n", err_code, 
         strerror(err_code));
     }
 
+    PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
     err_code = pthread_mutex_destroy(&cf->bgt_lock);
     if (err_code) {
         lprintf(fatal, "could not destroy bgt_lock: %d, %s!\n", err_code, 
@@ -977,8 +983,8 @@ void Cache_close(Cache *cf)
     lprintf(cache_lock_debug,
             "thread %x: unlocking cf_lock, cache closed: %s\n", pthread_self(),
             cf->path);
-    PTHREAD_MUTEX_UNLOCK(&cf_lock);
     Cache_free(cf);
+    PTHREAD_MUTEX_UNLOCK(&cf_lock);
 }
 
 /**
