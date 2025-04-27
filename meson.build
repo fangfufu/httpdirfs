@@ -22,6 +22,7 @@ srcs = [
 ]
 
 c_args = [
+    '-Wpedantic',
     '-Wstrict-prototypes',
     '-Wshadow',
     '-pthread',
