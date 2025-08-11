@@ -33,7 +33,7 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 
 /** \brief return the attributes for a single file indicated by path */
 static int fs_getattr(const char *path, struct stat *stbuf,
-    struct fuse_file_info *ffi_buf)
+                      struct fuse_file_info *ffi_buf)
 {
     (void) ffi_buf;
     int res = 0;

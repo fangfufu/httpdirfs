@@ -176,7 +176,8 @@ void CacheSystem_init(const char *path, int url_supplied)
     CACHE_SYSTEM_INIT = 1;
 }
 
-static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag, struct FTW *ftwbuf)
+static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
+                   struct FTW *ftwbuf)
 {
     (void) sb;
     (void) typeflag;
@@ -558,30 +559,30 @@ static void Cache_free(Cache *cf)
     PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     err_code = pthread_mutex_destroy(&cf->seek_lock);
     if (err_code) {
-        lprintf(fatal, "could not destroy seek_lock: %d, %s!\n", err_code, 
-        strerror(err_code));
+        lprintf(fatal, "could not destroy seek_lock: %d, %s!\n", err_code,
+                strerror(err_code));
     }
 
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
     err_code = pthread_mutex_destroy(&cf->w_lock);
     if (err_code) {
-        lprintf(fatal, "could not destroy w_lock: %d, %s!\n", err_code, 
-        strerror(err_code));
+        lprintf(fatal, "could not destroy w_lock: %d, %s!\n", err_code,
+                strerror(err_code));
     }
 
     PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
     PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
     err_code = pthread_mutex_destroy(&cf->bgt_lock);
     if (err_code) {
-        lprintf(fatal, "could not destroy bgt_lock: %d, %s!\n", err_code, 
-        strerror(err_code));
+        lprintf(fatal, "could not destroy bgt_lock: %d, %s!\n", err_code,
+                strerror(err_code));
     }
 
     err_code = pthread_mutexattr_destroy(&cf->bgt_lock_attr);
     if (err_code) {
-        lprintf(fatal, "could not destroy bgt_lock_attr: %d, %s!\n", err_code, 
-        strerror(err_code));
+        lprintf(fatal, "could not destroy bgt_lock_attr: %d, %s!\n", err_code,
+                strerror(err_code));
     }
 
     if (cf->path) {

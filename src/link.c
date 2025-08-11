@@ -197,7 +197,7 @@ static void Link_req_file_stat(Link *this_link)
 {
     lprintf(debug, "%s\n", this_link->f_url);
     CURL *curl = Link_to_curl(this_link);
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1);
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
@@ -467,7 +467,7 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
             this_link->content_length = cl;
         }
     } else {
-        lprintf(warning, "HTTP %ld", http_resp);
+        lprintf(warning, "HTTP %ld\n", http_resp);
         if (HTTP_temp_failure(http_resp)) {
             lprintf(warning, ", retrying later.\n");
         } else {
@@ -1095,8 +1095,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 
     curl_off_t recv_sz = Link_download_cleanup(curl, &header);
 
-    if (recv_sz != (long int) req_size)
-    {
+    if (recv_sz != (long int) req_size) {
         lprintf(error, "req_size != recv, req_size: %lu, recv: %ld\n",
                 req_size, recv_sz);
     }
