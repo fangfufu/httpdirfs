@@ -3,7 +3,6 @@ project('httpdirfs', 'c',
     license: 'GPL-3.0-or-later',
     default_options: [
         'buildtype=release',
-        'werror=true',
         'warning_level=3'
         ]
 )
