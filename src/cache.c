@@ -532,16 +532,7 @@ static Cache *Cache_alloc(void)
         lprintf(fatal, "w_lock initialisation failed!\n");
     }
 
-    if (pthread_mutexattr_init(&cf->bgt_lock_attr)) {
-        lprintf(fatal, "bgt_lock_attr initialisation failed!\n");
-    }
-
-    if (pthread_mutexattr_setpshared(&cf->bgt_lock_attr,
-                                     PTHREAD_PROCESS_SHARED)) {
-        lprintf(fatal, "could not set bgt_lock_attr!\n");
-    }
-
-    if (pthread_mutex_init(&cf->bgt_lock, &cf->bgt_lock_attr)) {
+    if (pthread_mutex_init(&cf->bgt_lock, NULL)) {
         lprintf(fatal, "bgt_lock initialisation failed!\n");
     }
 
@@ -576,12 +567,6 @@ static void Cache_free(Cache *cf)
     err_code = pthread_mutex_destroy(&cf->bgt_lock);
     if (err_code) {
         lprintf(fatal, "could not destroy bgt_lock: %d, %s!\n", err_code,
-                strerror(err_code));
-    }
-
-    err_code = pthread_mutexattr_destroy(&cf->bgt_lock_attr);
-    if (err_code) {
-        lprintf(fatal, "could not destroy bgt_lock_attr: %d, %s!\n", err_code,
                 strerror(err_code));
     }
 

@@ -63,7 +63,7 @@ struct Cache {
      */
     pthread_mutex_t bgt_lock;
     /** \brief mutex attributes for bgt_lock */
-    pthread_mutexattr_t bgt_lock_attr;
+
     /** \brief the offset of the next segment to be downloaded in background*/
     off_t next_dl_offset;
 
