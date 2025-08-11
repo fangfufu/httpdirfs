@@ -952,6 +952,17 @@ void Cache_close(Cache *cf)
         return;
     }
 
+    /*
+     * Wait for any background download to finish before closing. If we don't
+     * wait, Cache_free() might be called, while Cache_bgdl() is still
+     * running. This will cause a use-after-free error.
+     */
+    lprintf(cache_lock_debug,
+            "thread %x: waiting for background download to finish for %s\n",
+            pthread_self(), cf->path);
+    PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
+    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
+
     if (Meta_write(cf)) {
         lprintf(error, "Meta_write() error.");
     }
