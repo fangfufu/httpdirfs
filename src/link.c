@@ -342,7 +342,7 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
 
 static LinkType linkname_to_LinkType(const char *linkname)
 {
-    if (linkname[0] == '\0') {
+    if (linkname[0] == '\0' || linkname[0] == '/') {
         return LINK_INVALID;
     }
 
@@ -374,22 +374,13 @@ static LinkType linkname_to_LinkType(const char *linkname)
 /**
  * \brief check if two link names are equal, after taking the '/' into account.
  */
-static int linknames_equal(char *linkname, const char *linkname_new)
+static int linknames_equal(const char *str_a, const char *str_b)
 {
-    if (!strncmp(linkname, linkname_new, MAX_FILENAME_LEN)) {
+    size_t len_a = strnlen(str_a, MAX_FILENAME_LEN);
+    size_t len_b = strnlen(str_b, MAX_FILENAME_LEN);
+    size_t max_len = len_a > len_b? len_a : len_b;
+    if (!strncmp(str_a, str_b, max_len)) {
         return 1;
-    }
-
-    /*
-     * check if the link names differ by a single '/'
-     */
-    if (!strncmp
-            (linkname, linkname_new, strnlen(linkname, MAX_FILENAME_LEN))) {
-        size_t linkname_new_len = strnlen(linkname_new, MAX_FILENAME_LEN);
-        if ((linkname_new_len - strnlen(linkname, MAX_FILENAME_LEN) == 1)
-                && (linkname_new[linkname_new_len - 1] == '/')) {
-            return 1;
-        }
     }
     return 0;
 }
@@ -410,24 +401,28 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
                  gumbo_get_attribute(&node->v.element.attributes, "href"))) {
         char *link_url = (char *) href->value;
         make_link_relative(url, link_url);
-        /*
-         * if it is valid, copy the link onto the heap
-         */
+
+        /* if it is valid, copy the link onto the heap */
         LinkType type = linkname_to_LinkType(link_url);
-        /*
-         * We also check if the link being added is the same as the last link.
-         * This is to prevent duplicated link, if an Apache server has the
-         * IconsAreLinks option.
-         */
-        if (((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) &&
-                !linknames_equal(linktbl->links[linktbl->num - 1]->linkname,
-                                 link_url)) {
-            LinkTable_add(linktbl, Link_new(link_url, type));
+
+        /* Check if the new link is a duplicate */
+        if ((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) {
+            int identical_link_found = 0;
+            for (int i = 0; i < linktbl->num; i++) {
+                lprintf(debug, "linknames comparison: a: %s, b: %s\n", link_url,
+                        linktbl->links[i]->linkname);
+                if (linknames_equal(link_url, linktbl->links[i]->linkname)) {
+                    identical_link_found = 1;
+                    break;
+                }
+            }
+            if (!identical_link_found) {
+                LinkTable_add(linktbl, Link_new(link_url, type));
+            }
         }
     }
-    /*
-     * Note the recursive call, lol.
-     */
+
+    /* Note the recursive call */
     GumboVector *children = &node->v.element.children;
     for (size_t i = 0; i < children->length; ++i) {
         HTML_to_LinkTable(url, (GumboNode *) children->data[i], linktbl);
@@ -659,7 +654,7 @@ LinkTable *LinkTable_new(const char *url)
 
 #ifdef DEBUG
     static int i = 0;
-    lprintf(debug, "!!!!Calling LinkTable_new for the %d time!!!!\n", i);
+    lprintf(debug, "Calling LinkTable_new for the %d time!\n", i);
     i++;
 #endif
     free(unescaped_path);
@@ -796,12 +791,13 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     return linktbl;
 }
 
-LinkTable *path_to_Link_LinkTable_new(const char *path)
+LinkTable *path_to_LinkTable(const char *path)
 {
     Link *link = NULL;
     Link *tmp_link = NULL;
     Link link_cpy = { 0 };
     LinkTable *next_table = NULL;
+
     if (!strcmp(path, "/")) {
         next_table = ROOT_LINK_TBL;
         link_cpy = *next_table->links[0];
@@ -811,9 +807,6 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
         tmp_link = link;
     }
 
-    if (next_table) {
-
-    }
     if (!next_table) {
         if (CONFIG.mode == NORMAL) {
             next_table = LinkTable_new(tmp_link->f_url);
@@ -831,11 +824,18 @@ LinkTable *path_to_Link_LinkTable_new(const char *path)
             lprintf(fatal, "Invalid CONFIG.mode: %d\n", CONFIG.mode);
         }
     }
+
     if (link) {
         link->next_table = next_table;
     } else {
         ROOT_LINK_TBL = next_table;
     }
+
+#ifdef DEBUG
+    lprintf(debug, "next_table: %x\n", next_table);
+    LinkTable_print(next_table);
+#endif
+
     return next_table;
 }
 

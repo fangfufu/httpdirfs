@@ -228,7 +228,7 @@ static int Meta_read(Cache *cf)
         return EIO;
     }
 
-    /* These things really should not be zero!!! */
+    /* These things really should not be zero! */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
         lprintf(error,
                 "corruption: content_length: %ld, blksz: %d, segbc: %ld\n",
@@ -302,7 +302,7 @@ static int Meta_write(Cache *cf)
     }
 
     /*
-     * These things really should not be zero!!!
+     * These things really should not be zero!
      */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
         lprintf(error, "content_length: %ld, blksz: %d, segbc: %ld\n",

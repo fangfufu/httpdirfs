@@ -108,7 +108,7 @@ Link *path_to_Link(const char *path);
 /**
  * \brief return the link table for the associated path
  */
-LinkTable *path_to_Link_LinkTable_new(const char *path);
+LinkTable *path_to_LinkTable(const char *path);
 
 /**
  * \brief dump a link table to the disk.
