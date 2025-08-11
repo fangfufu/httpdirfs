@@ -342,16 +342,19 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
 
 static LinkType linkname_to_LinkType(const char *linkname)
 {
-    /*
-     * The link name has to start with alphanumerical character
-     */
-    if (!isalnum(linkname[0]) && (linkname[0] != '%') && (linkname[0) != '_')) {
+    if (linkname[0] == '\0') {
         return LINK_INVALID;
     }
 
-    /*
-     * Check for stray '/' - Linkname should not have '/'
-     */
+    /* Now allow all printable characters */
+    for (int i = 0; linkname[i] != '\0'; i++) {
+        char c = linkname[i];
+        if (!isprint(c)) {
+            return LINK_INVALID;
+        }
+    }
+
+    /* The linkname must not contain '/' in the middle. */
     char *slash = strchr(linkname, '/');
     if (slash) {
         int linkname_len = strnlen(linkname, MAX_FILENAME_LEN) - 1;
@@ -360,6 +363,7 @@ static LinkType linkname_to_LinkType(const char *linkname)
         }
     }
 
+    /* '/' must be at the end to be a valid directory name */
     if (linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/') {
         return LINK_DIR;
     }
