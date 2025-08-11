@@ -55,6 +55,8 @@ void Config_init(void)
 
     CONFIG.refresh_timeout = DEFAULT_REFRESH_TIMEOUT;
 
+    CONFIG.invalid_refresh = 0;
+
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 

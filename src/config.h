@@ -71,8 +71,10 @@ typedef struct {
     int insecure_tls;
     /** \brief Server certificate file */
     char *cafile;
-    /** \brief Refresh directory listing after refresh_timeout seconds*/
+    /** \brief Refresh directory listing after refresh_timeout seconds */
     int refresh_timeout;
+    /** \brief Try refreshing invalid links when reading a directory */
+    int invalid_refresh;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
     int cache_enabled;
