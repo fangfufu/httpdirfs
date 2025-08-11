@@ -53,9 +53,9 @@ The full usage flags is also documented in the [usage](USAGE.md) page.
 For important development related documentation, please refer
 [src/README.md](src/README.md).
 
-### Debian 12 "Bookworm"
+### Debian 13 "Trixie"
 
-Under Debian 12 "Bookworm" and newer versions, you need the following
+Under Debian 13 "Trixie" and newer versions, you need the following
 dependencies:
 
     libgumbo-dev libfuse3-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
@@ -96,10 +96,10 @@ pull request to add them back in. It is known that HTTPDirFS
 
 Please note if you install HTTDirFS from a repository, it can be outdated.
 
-### Debian 12 "Bookworm"
+### Debian 13 "Trixie"
 
-HTTPDirFS is available as a package in Debian 12 "Bookworm", If you are on
-Debian Bookworm, you can simply run the following
+HTTPDirFS is available as a package in Debian 13 "Trixie", If you are on
+Debian Trixie, you can simply run the following
 command as ``root``:
 
  apt install httpdirfs
