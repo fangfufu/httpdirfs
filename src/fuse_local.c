@@ -148,12 +148,6 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     (void) fr_flags;
     LinkTable *linktbl;
 
-#ifdef DEBUG
-    static int j = 0;
-    lprintf(debug, "Calling fs_readdir for the %d time!\n", j);
-    j++;
-#endif
-
     linktbl = path_to_LinkTable(path);
 
     if (!linktbl) {
@@ -171,7 +165,6 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     for (int i = 1; i < linktbl->num; i++) {
         Link *link = linktbl->links[i];
         if (link->type != LINK_INVALID) {
-            lprintf(debug, "Processing: %d, linkname: %s\n", i, link->linkname);
             dir_add(buf, link->linkname, NULL, 0, 0);
         }
     }

@@ -342,6 +342,7 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
 
 static LinkType linkname_to_LinkType(const char *linkname)
 {
+    lprintf(debug, "linkname: %s\n", linkname);
     if (linkname[0] == '\0' || linkname[0] == '/') {
         return LINK_INVALID;
     }
@@ -378,11 +379,15 @@ static int linknames_equal(const char *str_a, const char *str_b)
 {
     size_t len_a = strnlen(str_a, MAX_FILENAME_LEN);
     size_t len_b = strnlen(str_b, MAX_FILENAME_LEN);
-    size_t max_len = len_a > len_b? len_a : len_b;
-    if (!strncmp(str_a, str_b, max_len)) {
-        return 1;
+    /* Pick the shortest common string length */
+    int identical = 0;
+    size_t max_len = len_a > len_b? len_b : len_a;
+    if (max_len) {
+        identical = !strncmp(str_a, str_b, max_len);
     }
-    return 0;
+    lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n", 
+        str_a, str_b, max_len, identical ? ", identical!" : "");
+    return identical;
 }
 
 /**
@@ -399,25 +404,23 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     if (node->v.element.tag == GUMBO_TAG_A &&
             (href =
                  gumbo_get_attribute(&node->v.element.attributes, "href"))) {
-        char *link_url = (char *) href->value;
-        make_link_relative(url, link_url);
+        char *relative_url = (char *) href->value;
+        make_link_relative(url, relative_url);
 
         /* if it is valid, copy the link onto the heap */
-        LinkType type = linkname_to_LinkType(link_url);
+        LinkType type = linkname_to_LinkType(relative_url);
 
         /* Check if the new link is a duplicate */
         if ((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) {
             int identical_link_found = 0;
             for (int i = 0; i < linktbl->num; i++) {
-                lprintf(debug, "linknames comparison: a: %s, b: %s\n", link_url,
-                        linktbl->links[i]->linkname);
-                if (linknames_equal(link_url, linktbl->links[i]->linkname)) {
+                if (linknames_equal(relative_url, linktbl->links[i]->linkname)) {
                     identical_link_found = 1;
                     break;
                 }
             }
             if (!identical_link_found) {
-                LinkTable_add(linktbl, Link_new(link_url, type));
+                LinkTable_add(linktbl, Link_new(relative_url, type));
             }
         }
     }
@@ -830,11 +833,6 @@ LinkTable *path_to_LinkTable(const char *path)
     } else {
         ROOT_LINK_TBL = next_table;
     }
-
-#ifdef DEBUG
-    lprintf(debug, "next_table: %x\n", next_table);
-    LinkTable_print(next_table);
-#endif
 
     return next_table;
 }
