@@ -70,10 +70,7 @@ static void crypto_lock_init(void)
         (pthread_mutex_t *) OPENSSL_malloc(CRYPTO_num_locks() *
                                            sizeof(pthread_mutex_t));
     for (i = 0; i < CRYPTO_num_locks(); i++) {
-        if (PTHREAD_MUTEX_INIT(&(crypto_lockarray[i]), NULL)) {
-            lprintf(fatal, "crypto_lockarray[%d] initialisation \
-failed!\n", i);
-        };
+        PTHREAD_MUTEX_INIT(&(crypto_lockarray[i]), NULL);
     }
 
     CRYPTO_set_id_callback((unsigned long (*)()) thread_id);
@@ -239,9 +236,8 @@ void NetworkSystem_init(void)
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE,
                       CURL_LOCK_DATA_SSL_SESSION);
 
-    if (PTHREAD_MUTEX_INIT(&curl_lock, NULL)) {
-        lprintf(fatal, "curl_lock initialisation failed!\n");
-    }
+    PTHREAD_MUTEX_INIT(&curl_lock, NULL);
+
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_UNLOCKFUNC,
                       curl_callback_unlock);
@@ -261,9 +257,7 @@ void NetworkSystem_init(void)
     /*
      * ------------ Initialise locks ---------
      */
-    if (PTHREAD_MUTEX_INIT(&transfer_lock, NULL)) {
-        lprintf(fatal, "transfer_lock initialisation failed!\n");
-    }
+    PTHREAD_MUTEX_INIT(&transfer_lock, NULL);
 
     /*
      * cryptographic lock functions were shamelessly copied from

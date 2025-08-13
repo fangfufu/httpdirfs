@@ -22,20 +22,23 @@ char *path_append(const char *path, const char *filename);
  */
 int64_t round_div(int64_t a, int64_t b);
 
+void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr, const char *file, const char *func, int line);
 /**
  * \brief wrapper for pthread_mutex_init(), with error handling
  */
-int PTHREAD_MUTEX_INIT(pthread_mutex_t *x, const pthread_mutexattr_t *attr);
+#define PTHREAD_MUTEX_INIT(x, attr) _PTHREAD_MUTEX_INIT_(x, attr, __FILE__, __func__, __LINE__)
 
+void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line, pthread_mutex_t *x);
 /**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
-void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x);
+#define PTHREAD_MUTEX_LOCK(x) _PTHREAD_MUTEX_LOCK_(__FILE__, __func__, __LINE__, x)
 
+void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line, pthread_mutex_t *x);
 /**
  * \brief wrapper for pthread_mutex_unlock(), with error handling
  */
-void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x);
+#define PTHREAD_MUTEX_UNLOCK(x) _PTHREAD_MUTEX_UNLOCK_(__FILE__, __func__, __LINE__, x)
 
 /**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling

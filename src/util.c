@@ -54,7 +54,7 @@ int64_t round_div(int64_t a, int64_t b)
     return (a + (b / 2)) / b;
 }
 
-int PTHREAD_MUTEX_INIT(pthread_mutex_t *x, const pthread_mutexattr_t *attr)
+void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr, const char *file, const char *func, int line)
 {
     pthread_mutexattr_t mutex_attr;
     if (attr == NULL) {
@@ -63,29 +63,31 @@ int PTHREAD_MUTEX_INIT(pthread_mutex_t *x, const pthread_mutexattr_t *attr)
         attr = &mutex_attr;
     }
     int ret = pthread_mutex_init(x, attr);
-
+    if (ret) {
+        log_printf(fatal, file, func, line,
+                "pthread_mutex_init: %d, %s\n", ret, strerror(ret));
+    }
     if (attr == &mutex_attr) {
         pthread_mutexattr_destroy(&mutex_attr);
     }
-    return ret;
 }
 
-void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
+void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line, pthread_mutex_t *x)
 {
     int i;
     i = pthread_mutex_unlock(x);
     if (i) {
-        lprintf(fatal,
+        log_printf(fatal, file, func, line,
                 "thread %x: %d, %s\n", pthread_self(), i, strerror(i));
     }
 }
 
-void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x)
+void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line, pthread_mutex_t *x)
 {
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
-        lprintf(fatal,
+        log_printf(fatal, file, func, line,
                 "thread %x: %d, %s\n", pthread_self(), i, strerror(i));
     }
 }

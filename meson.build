@@ -26,6 +26,8 @@ c_args = [
     '-Wshadow',
     '-pthread',
     '-D_GNU_SOURCE',
+    '-fstack-protector-all',
+    '-D_FORTIFY_SOURCE=2',
     '-DVERSION="' + meson.project_version() + '"'
 ]
 
