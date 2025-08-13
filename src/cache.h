@@ -56,13 +56,10 @@ struct Cache {
 
     /** \brief background download pthread */
     pthread_t bgt;
-    /**
-     * \brief mutex lock for the background download thread
-     * \note This lock is locked by the foreground thread, but unlocked by the
-     * background thread!
-     */
+    /** \brief mutex lock for the background download thread */
     pthread_mutex_t bgt_lock;
-    /** \brief mutex attributes for bgt_lock */
+    /** \brief flag indicating if the background download thread is running */
+    int bgt_running;
 
     /** \brief the offset of the next segment to be downloaded in background*/
     off_t next_dl_offset;

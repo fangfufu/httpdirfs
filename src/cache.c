@@ -524,6 +524,7 @@ static Cache *Cache_alloc(void)
     PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->bgt_lock, NULL);
+    cf->bgt_running = 0;
 
     return cf;
 }
@@ -1032,16 +1033,13 @@ error.\n", recv, cf->blksz);
     FREE(recv_buf);
 
     lprintf(cache_lock_debug,
-            "thread %x: unlocking bgt_lock;\n", pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
-
-    lprintf(cache_lock_debug,
             "thread %x: unlocking w_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
     if (pthread_detach(pthread_self())) {
         lprintf(error, "%s\n", strerror(errno));
     };
+    cf->bgt_running = 0;
     pthread_exit(NULL);
 }
 
@@ -1136,9 +1134,11 @@ bgdl: {
                     "thread %x: trylocked bgt_lock;\n", pthread_self());
             cf->next_dl_offset = next_dl_offset;
             if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
-                lprintf(error,
+                lprintf(fatal,
                         "Error creating background download thread\n");
             }
+            cf->bgt_running = 1;
+            PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
         }
     }
 
