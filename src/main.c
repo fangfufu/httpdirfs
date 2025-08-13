@@ -226,6 +226,7 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
         { "http-header", required_argument, NULL, 'L' },        /* 26 */
         { "cache-clear", no_argument, NULL, 'L' },     /* 27 */
         { "zero-len-is-dir", no_argument, NULL, 'L' }, /* 28 */
+        { "invalid-refresh", no_argument, NULL, 'L' }, /* 29 */
         { 0, 0, 0, 0 }
     };
     while ((c =
@@ -343,6 +344,9 @@ parse_arg_list(int argc, char **argv, char ***fuse_argv, int *fuse_argc)
             case 28:
                 CONFIG.zero_len_is_dir = 1;
                 break;
+            case 29:
+                CONFIG.invalid_refresh = 1;
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -417,6 +421,7 @@ HTTPDirFS options:\n\
                             time, in seconds (default: 3600)\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: 5)\n\
+        --invalid-refresh   Try refreshing invalid links when reading a directory.\n\
         --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
         --no-range-check    Disable the built-in check for the server's support\n\
                             for HTTP range requests\n\

@@ -466,11 +466,10 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
         }
     } else {
         lprintf(warning, "HTTP %ld\n", http_resp);
-        if (HTTP_temp_failure(http_resp)) {
+        if (HTTP_temp_failure(http_resp) || CONFIG.invalid_refresh) {
             lprintf(warning, ", retrying later.\n");
         } else {
             this_link->type = LINK_INVALID;
-            lprintf(warning, ".\n");
         }
     }
 }
@@ -510,22 +509,6 @@ static void LinkTable_fill(LinkTable *linktbl)
     }
     LinkTable_uninitialised_fill(linktbl);
 }
-
-// /**
-//  * \brief Reset invalid links in the link table
-//  */
-// static void LinkTable_invalid_reset(LinkTable *linktbl)
-// {
-//     int j = 0;
-//     for (int i = 0; i < linktbl->num; i++) {
-//         Link *this_link = linktbl->links[i];
-//         if (this_link->type == LINK_INVALID) {
-//             this_link->type = LINK_UNINITIALISED_FILE;
-//             j++;
-//         }
-//     }
-//     lprintf(debug, "%d invalid links\n", j);
-// }
 
 void LinkTable_free(LinkTable *linktbl)
 {
@@ -832,6 +815,10 @@ LinkTable *path_to_LinkTable(const char *path)
         link->next_table = next_table;
     } else {
         ROOT_LINK_TBL = next_table;
+    }
+
+    if (CONFIG.invalid_refresh) {
+        LinkTable_uninitialised_fill(next_table);
     }
 
     return next_table;
