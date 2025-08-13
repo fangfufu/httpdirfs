@@ -284,7 +284,7 @@ static LinkTable *single_LinkTable_new(const char *url)
 
 LinkTable *LinkSystem_init(const char *url)
 {
-    if (pthread_mutex_init(&link_lock, NULL)) {
+    if (PTHREAD_MUTEX_INIT(&link_lock, NULL)) {
         lprintf(error, "link_lock initialisation failed!\n");
     }
     int url_len = strnlen(url, MAX_PATH_LEN) - 1;

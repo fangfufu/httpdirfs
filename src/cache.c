@@ -123,7 +123,7 @@ void CacheSystem_init(const char *path, int url_supplied)
 {
     lprintf(cache_lock_debug,
             "thread %x: initialise cf_lock;\n", pthread_self());
-    if (pthread_mutex_init(&cf_lock, NULL)) {
+    if (PTHREAD_MUTEX_INIT(&cf_lock, NULL)) {
         lprintf(fatal, "cf_lock initialisation failed!\n");
     }
 
@@ -524,15 +524,15 @@ static Cache *Cache_alloc(void)
 {
     Cache *cf = CALLOC(1, sizeof(Cache));
 
-    if (pthread_mutex_init(&cf->seek_lock, NULL)) {
+    if (PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL)) {
         lprintf(fatal, "seek_lock initialisation failed!\n");
     }
 
-    if (pthread_mutex_init(&cf->w_lock, NULL)) {
+    if (PTHREAD_MUTEX_INIT(&cf->w_lock, NULL)) {
         lprintf(fatal, "w_lock initialisation failed!\n");
     }
 
-    if (pthread_mutex_init(&cf->bgt_lock, NULL)) {
+    if (PTHREAD_MUTEX_INIT(&cf->bgt_lock, NULL)) {
         lprintf(fatal, "bgt_lock initialisation failed!\n");
     }
 

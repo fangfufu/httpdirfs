@@ -23,6 +23,11 @@ char *path_append(const char *path, const char *filename);
 int64_t round_div(int64_t a, int64_t b);
 
 /**
+ * \brief wrapper for pthread_mutex_init(), with error handling
+ */
+int PTHREAD_MUTEX_INIT(pthread_mutex_t *x, const pthread_mutexattr_t *attr);
+
+/**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
 void PTHREAD_MUTEX_LOCK(pthread_mutex_t *x);

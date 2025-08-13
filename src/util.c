@@ -54,6 +54,22 @@ int64_t round_div(int64_t a, int64_t b)
     return (a + (b / 2)) / b;
 }
 
+int PTHREAD_MUTEX_INIT(pthread_mutex_t *x, const pthread_mutexattr_t *attr)
+{
+    pthread_mutexattr_t mutex_attr;
+    if (attr == NULL) {
+        pthread_mutexattr_init(&mutex_attr);
+        pthread_mutexattr_settype(&mutex_attr, PTHREAD_MUTEX_ERRORCHECK);
+        attr = &mutex_attr;
+    }
+    int ret = pthread_mutex_init(x, attr);
+
+    if (attr == &mutex_attr) {
+        pthread_mutexattr_destroy(&mutex_attr);
+    }
+    return ret;
+}
+
 void PTHREAD_MUTEX_UNLOCK(pthread_mutex_t *x)
 {
     int i;
