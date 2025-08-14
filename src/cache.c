@@ -523,9 +523,7 @@ static Cache *Cache_alloc(void)
     Cache *cf = CALLOC(1, sizeof(Cache));
     PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
-    PTHREAD_MUTEX_INIT(&cf->bgt_lock, NULL);
-    cf->bgt_running = 0;
-
+    SEM_INIT(&cf->bgt_sem, 0, 1);
     return cf;
 }
 
@@ -536,29 +534,19 @@ static void Cache_free(Cache *cf)
 {
     int err_code = 0;
 
-    PTHREAD_MUTEX_LOCK(&cf->seek_lock);
-    PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     err_code = pthread_mutex_destroy(&cf->seek_lock);
     if (err_code) {
         lprintf(fatal, "could not destroy seek_lock: %d, %s!\n", err_code,
                 strerror(err_code));
     }
 
-    PTHREAD_MUTEX_LOCK(&cf->w_lock);
-    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
     err_code = pthread_mutex_destroy(&cf->w_lock);
     if (err_code) {
         lprintf(fatal, "could not destroy w_lock: %d, %s!\n", err_code,
                 strerror(err_code));
     }
 
-    PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
-    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
-    err_code = pthread_mutex_destroy(&cf->bgt_lock);
-    if (err_code) {
-        lprintf(fatal, "could not destroy bgt_lock: %d, %s!\n", err_code,
-                strerror(err_code));
-    }
+    SEM_DESTROY(&cf->bgt_sem);
 
     if (cf->path) {
         FREE(cf->path);
@@ -944,14 +932,13 @@ void Cache_close(Cache *cf)
 
     /*
      * Wait for any background download to finish before closing. If we don't
-     * wait, Cache_free() might be called, while Cache_bgdl() is still
+     * wait, Cache_free() might be called while Cache_bgdl() is still
      * running. This will cause a use-after-free error.
      */
     lprintf(cache_lock_debug,
             "thread %x: waiting for background download to finish for %s\n",
             pthread_self(), cf->path);
-    PTHREAD_MUTEX_LOCK(&cf->bgt_lock);
-    PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
+    SEM_WAIT(&cf->bgt_sem);
 
     if (Meta_write(cf)) {
         lprintf(error, "Meta_write() error.");
@@ -1035,12 +1022,33 @@ error.\n", recv, cf->blksz);
     lprintf(cache_lock_debug,
             "thread %x: unlocking w_lock;\n", pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+    SEM_POST(&cf->bgt_sem);
 
-    if (pthread_detach(pthread_self())) {
-        lprintf(error, "%s\n", strerror(errno));
-    };
-    cf->bgt_running = 0;
     pthread_exit(NULL);
+}
+
+static void Cache_bgdl_launcher(Cache *cf)
+{
+    pthread_t thread;
+    pthread_attr_t attr;
+
+    if (pthread_attr_init(&attr)) {
+        lprintf(fatal, "pthread_attr_init():%d, %s\n", errno, strerror(errno));
+    }
+
+    if (pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED)) {
+        lprintf(fatal, "pthread_attr_setdetachstate():%d, %s\n", errno,
+                strerror(errno));
+    }
+
+    if (pthread_create(&thread, &attr, Cache_bgdl, cf)) {
+        lprintf(fatal, "pthread_create(): %d, %s\n", errno, strerror(errno));
+    }
+
+    if (pthread_attr_destroy(&attr)) {
+        lprintf(fatal, "pthread_attr_destroy(): %d, %s\n", errno,
+                strerror(errno));
+    }
 }
 
 long
@@ -1129,18 +1137,17 @@ bgdl: {
         /*
          * Stop the spawning of multiple background pthreads
          */
-        if (!pthread_mutex_trylock(&cf->bgt_lock)) {
+        int ret = sem_trywait(&cf->bgt_sem);
+        if (!ret) {
             lprintf(cache_lock_debug,
-                    "thread %x: trylocked bgt_lock;\n", pthread_self());
+                    "parent thread %x: sem_trywait successful\n", pthread_self());
             cf->next_dl_offset = next_dl_offset;
-            if (pthread_create(&cf->bgt, NULL, Cache_bgdl, cf)) {
-                lprintf(fatal,
-                        "Error creating background download thread\n");
-            }
-            cf->bgt_running = 1;
-            PTHREAD_MUTEX_UNLOCK(&cf->bgt_lock);
+            Cache_bgdl_launcher(cf);
+        } else if (errno != EAGAIN) {
+            lprintf(fatal, "sem_trywait(): %d, %s\n", errno, strerror(errno));
         }
     }
 
     return send;
 }
+

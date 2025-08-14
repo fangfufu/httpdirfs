@@ -6,6 +6,7 @@
  */
 
 #include <pthread.h>
+#include <semaphore.h>
 #include <stdint.h>
 #include <stdio.h>
 
@@ -22,23 +23,51 @@ char *path_append(const char *path, const char *filename);
  */
 int64_t round_div(int64_t a, int64_t b);
 
-void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr, const char *file, const char *func, int line);
 /**
  * \brief wrapper for pthread_mutex_init(), with error handling
  */
+void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
+                          const char *file, const char *func, int line);
 #define PTHREAD_MUTEX_INIT(x, attr) _PTHREAD_MUTEX_INIT_(x, attr, __FILE__, __func__, __LINE__)
 
-void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line, pthread_mutex_t *x);
 /**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
+void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line,
+                          pthread_mutex_t *x);
 #define PTHREAD_MUTEX_LOCK(x) _PTHREAD_MUTEX_LOCK_(__FILE__, __func__, __LINE__, x)
 
-void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line, pthread_mutex_t *x);
 /**
  * \brief wrapper for pthread_mutex_unlock(), with error handling
  */
+void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line,
+                            pthread_mutex_t *x);
 #define PTHREAD_MUTEX_UNLOCK(x) _PTHREAD_MUTEX_UNLOCK_(__FILE__, __func__, __LINE__, x)
+
+/**
+ * \brief wrapper for sem_init(), with error handling
+ * */
+void _SEM_INIT_(sem_t *sem, int pshared, unsigned int value, const char *file,
+                const char *func, int line);
+#define SEM_INIT(sem, pshared, value) _SEM_INIT_(sem, pshared, value, __FILE__, __func__, __LINE__)
+
+/**
+ * \brief wrapper for sem_destroy(), with error handling
+ */
+void _SEM_DESTROY_(sem_t *sem, const char *file, const char *func, int line);
+#define SEM_DESTROY(sem) _SEM_DESTROY_(sem, __FILE__, __func__, __LINE__)
+
+/**
+ * \brief wrapper for sem_wait(), with error handling
+ */
+void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem);
+#define SEM_WAIT(sem) _SEM_WAIT_(__FILE__, __func__, __LINE__, sem)
+
+/**
+ * \brief wrapper for sem_post(), with error handling
+ */
+void _SEM_POST_(const char *file, const char *func, int line, sem_t *sem);
+#define SEM_POST(sem) _SEM_POST_(__FILE__, __func__, __LINE__, sem)
 
 /**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling

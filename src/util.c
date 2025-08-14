@@ -54,8 +54,11 @@ int64_t round_div(int64_t a, int64_t b)
     return (a + (b / 2)) / b;
 }
 
-void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr, const char *file, const char *func, int line)
+void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
+                          const char *file, const char *func, int line)
 {
+    log_printf(debug, file, func, line,
+               "%x pthread_mutex_init: %p, %p\n", pthread_self(), x, attr);
     pthread_mutexattr_t mutex_attr;
     if (attr == NULL) {
         pthread_mutexattr_init(&mutex_attr);
@@ -65,30 +68,85 @@ void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr, c
     int ret = pthread_mutex_init(x, attr);
     if (ret) {
         log_printf(fatal, file, func, line,
-                "pthread_mutex_init: %d, %s\n", ret, strerror(ret));
+                   "%x pthread_mutex_init: %d, %s\n", pthread_self(), ret, strerror(ret));
     }
     if (attr == &mutex_attr) {
         pthread_mutexattr_destroy(&mutex_attr);
     }
 }
 
-void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line, pthread_mutex_t *x)
+void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line,
+                            pthread_mutex_t *x)
 {
+    log_printf(debug, file, func, line,
+               "%x pthread_mutex_unlock: %p\n", pthread_self(), x);
     int i;
     i = pthread_mutex_unlock(x);
     if (i) {
         log_printf(fatal, file, func, line,
-                "thread %x: %d, %s\n", pthread_self(), i, strerror(i));
+                   "%x pthread_mutex_unlock: %d, %s\n", pthread_self(), i, strerror(i));
     }
 }
 
-void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line, pthread_mutex_t *x)
+void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line,
+                          pthread_mutex_t *x)
 {
+    log_printf(debug, file, func, line,
+               "%x pthread_mutex_lock: %p\n", pthread_self(), x);
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
         log_printf(fatal, file, func, line,
-                "thread %x: %d, %s\n", pthread_self(), i, strerror(i));
+                   "%x pthread_mutex_unlock: %d, %s\n", pthread_self(), i, strerror(i));
+    }
+}
+
+void _SEM_INIT_(sem_t *sem, int pshared, unsigned int value, const char *file,
+                const char *func, int line)
+{
+    log_printf(debug, file, func, line,
+               "%x sem_init: %p, %d, %u\n", pthread_self(), sem, pshared, value);
+    int i;
+    i = sem_init(sem, pshared, value);
+    if (i) {
+        log_printf(fatal, file, func, line,
+                   "%x sem_init: %d, %s\n", pthread_self(), i, strerror(i));
+    }
+}
+
+void _SEM_DESTROY_(sem_t *sem, const char *file, const char *func, int line)
+{
+    log_printf(debug, file, func, line,
+               "%x sem_destroy: %p\n", pthread_self(), sem);
+    int i;
+    i = sem_destroy(sem);
+    if (i) {
+        log_printf(fatal, file, func, line,
+                   "%x sem_destroy: %d, %s\n", pthread_self(), i, strerror(i));
+    }
+}
+
+void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem)
+{
+    log_printf(debug, file, func, line,
+               "%x sem_wait: %p\n", pthread_self(), sem);
+    int i;
+    i = sem_wait(sem);
+    if (i) {
+        log_printf(fatal, file, func, line,
+                   "%x sem_wait: %d, %s\n", pthread_self(), i, strerror(i));
+    }
+}
+
+void _SEM_POST_(const char *file, const char *func, int line, sem_t *sem)
+{
+    log_printf(debug, file, func, line,
+               "%x sem_post: %p\n", pthread_self(), sem);
+    int i;
+    i = sem_post(sem);
+    if (i) {
+        log_printf(fatal, file, func, line,
+                   "%x sem_post: %d, %s\n", pthread_self(), i, strerror(i));
     }
 }
 

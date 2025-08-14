@@ -383,8 +383,8 @@ static int linknames_equal(const char *str_a, const char *str_b)
     if (max_len) {
         identical = !strncmp(str_a, str_b, max_len);
     }
-    lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n", 
-        str_a, str_b, max_len, identical ? ", identical!" : "");
+    lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n",
+            str_a, str_b, max_len, identical ? ", identical!" : "");
     return identical;
 }
 
