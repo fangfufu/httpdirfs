@@ -636,11 +636,10 @@ LinkTable *LinkTable_new(const char *url)
         }
     }
 
-#ifdef DEBUG
-    static int i = 0;
+    static unsigned long long i = 0;
     lprintf(debug, "Calling LinkTable_new for the %d time!\n", i);
     i++;
-#endif
+
     free(unescaped_path);
     LinkTable_print(linktbl);
     return linktbl;
