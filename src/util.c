@@ -75,6 +75,19 @@ void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
     }
 }
 
+void _PTHREAD_MUTEX_DESTROY_(pthread_mutex_t *x, const char *file,
+                             const char *func, int line, const char *x_name)
+{
+    log_printf(debug, file, func, line,
+               "%x pthread_mutex_destroy: %p, %s\n", pthread_self(), x, x_name);
+    int ret;
+    ret = pthread_mutex_destroy(x);
+    if (ret) {
+        log_printf(fatal, file, func, line,
+                   "%x pthread_mutex_destroy: %d, %s\n", pthread_self(), ret, strerror(ret));
+    }
+}
+
 void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line,
                             pthread_mutex_t *x, const char *x_name)
 {

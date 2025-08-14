@@ -533,20 +533,8 @@ static Cache *Cache_alloc(void)
  */
 static void Cache_free(Cache *cf)
 {
-    int err_code = 0;
-
-    err_code = pthread_mutex_destroy(&cf->seek_lock);
-    if (err_code) {
-        lprintf(fatal, "could not destroy seek_lock: %d, %s!\n", err_code,
-                strerror(err_code));
-    }
-
-    err_code = pthread_mutex_destroy(&cf->w_lock);
-    if (err_code) {
-        lprintf(fatal, "could not destroy w_lock: %d, %s!\n", err_code,
-                strerror(err_code));
-    }
-
+    PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
+    PTHREAD_MUTEX_DESTROY(&cf->w_lock);
     SEM_DESTROY(&cf->cache_opened);
     SEM_DESTROY(&cf->bgt_sem);
 

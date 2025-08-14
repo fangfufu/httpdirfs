@@ -31,6 +31,13 @@ void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
 #define PTHREAD_MUTEX_INIT(x, attr) _PTHREAD_MUTEX_INIT_(x, attr, __FILE__, __func__, __LINE__, #x)
 
 /**
+ * \brief wrapper for pthread_mutex_destroy(), with error handling
+ */
+void _PTHREAD_MUTEX_DESTROY_(pthread_mutex_t *x, const char *file,
+                             const char *func, int line, const char *x_name);
+#define PTHREAD_MUTEX_DESTROY(x) _PTHREAD_MUTEX_DESTROY_(x, __FILE__, __func__, __LINE__, #x)
+
+/**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
 void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line,
