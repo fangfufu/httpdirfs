@@ -143,7 +143,6 @@ void _SEM_DESTROY_(sem_t *sem, const char *file, const char *func, int line,
 void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem,
                 const char *sem_name)
 {
-#ifdef DEBUG
     int j;
     if (sem_getvalue(sem, &j)) {
         log_printf(fatal, file, func, line,
@@ -151,7 +150,6 @@ void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem,
     }
     log_printf(debug, file, func, line,
                "%x sem_wait: %p, %s, value: %d\n", pthread_self(), sem, sem_name, j);
-#endif
     int i;
     i = sem_wait(sem);
     if (i) {

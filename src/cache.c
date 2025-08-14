@@ -523,7 +523,7 @@ static Cache *Cache_alloc(void)
     Cache *cf = CALLOC(1, sizeof(Cache));
     PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
-    SEM_INIT(&cf->cache_opened, 0, 1);
+    cf->cache_opened = 1;
     SEM_INIT(&cf->bgt_sem, 0, 1);
     return cf;
 }
@@ -535,7 +535,6 @@ static void Cache_free(Cache *cf)
 {
     PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
     PTHREAD_MUTEX_DESTROY(&cf->w_lock);
-    SEM_DESTROY(&cf->cache_opened);
     SEM_DESTROY(&cf->bgt_sem);
 
     if (cf->path) {
@@ -772,7 +771,7 @@ Cache *Cache_open(const char *fn)
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
     if (link->cache_ptr) {
-        SEM_POST(&link->cache_ptr->cache_opened);
+        link->cache_ptr->cache_opened++;
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock;\n", pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
@@ -907,16 +906,12 @@ void Cache_close(Cache *cf)
             "thread %x: locking cf_lock: %s\n", pthread_self(), cf->path);
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
-    SEM_WAIT(&cf->cache_opened);
+    cf->cache_opened--;
 
-    int i = 0;
-    if (sem_getvalue(&cf->cache_opened, &i)) {
-        lprintf(fatal, "sem_getvalue() failed: %s\n", strerror(errno));
-    }
-    if (i) {
+    if (cf->cache_opened > 0) {
         lprintf(cache_lock_debug,
                 "thread %x: unlocking cf_lock: %s, cache_opened: %d\n",
-                pthread_self(), cf->path, i);
+                pthread_self(), cf->path, cf->cache_opened);
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return;
     }
