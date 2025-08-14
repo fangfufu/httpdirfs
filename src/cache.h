@@ -29,7 +29,7 @@ typedef uint8_t Seg;
  */
 struct Cache {
     /** \brief How many times the cache has been opened */
-    int cache_opened;
+    sem_t cache_opened;
 
     /** \brief the FILE pointer for the data file*/
     FILE *dfp;
