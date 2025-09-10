@@ -1037,9 +1037,11 @@ static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
      * Check for range seek support
      */
     if (!CONFIG.no_range_check) {
-        if (!strcasestr((header->data), "Accept-Ranges: bytes")) {
-            fprintf(stderr, "This web server does not support HTTP \
-range requests\n");
+        if (!strcasestr((header->data), "Accept-Ranges: bytes") &&
+                !strcasestr((header->data), "Content-Range: bytes")) {
+            fprintf(stderr, "This web server does not support HTTP range \
+requests. If you do not believe that is the case, please include the HTTP \
+header information if you plan to file a bug report:\n%s\n", header->data);
             exit(EXIT_FAILURE);
         }
     }
