@@ -266,6 +266,18 @@ servers support this features, but does not present ``"Accept-Ranges: bytes`` in
 the header responses. HTTPDirFS by default checks for this header field. You can
 disable this check by using the ``--no-range-check`` flag.
 
+### Allowed characters in filenames
+The intended allowed character in filenames is the following: 
+
+Filenames must:
+- Consists of printable characters
+- Must not contain '/' in the middle of the filename.
+
+'/' must be at the end to be a valid directory name.
+
+The exact change that set these rules was done in commit
+[647657169574bf7be29f858ff3d1a3a70d27d661](https://github.com/fangfufu/httpdirfs/commit/647657169574bf7be29f858ff3d1a3a70d27d661).
+
 ## Press Coverage
 
 - Linux Format - Issue [264](https://www.linuxformat.com/archives?issue=264), July 2020
