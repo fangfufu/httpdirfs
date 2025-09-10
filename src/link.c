@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/param.h>
 
 #define STATUS_LEN 64
 
@@ -379,6 +380,9 @@ static int linknames_equal(const char *str_a, const char *str_b)
     size_t len_b = strnlen(str_b, MAX_FILENAME_LEN);
     /* Pick the shortest common string length */
     int identical = 0;
+    if (MAX(len_a, len_b) - MIN(len_a, len_b) > 1) {
+        return 0;
+    }
     size_t max_len = len_a > len_b? len_b : len_a;
     if (max_len) {
         identical = !strncmp(str_a, str_b, max_len);
