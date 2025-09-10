@@ -378,17 +378,33 @@ static int linknames_equal(const char *str_a, const char *str_b)
 {
     size_t len_a = strnlen(str_a, MAX_FILENAME_LEN);
     size_t len_b = strnlen(str_b, MAX_FILENAME_LEN);
-    /* Pick the shortest common string length */
+    size_t max_len = MAX(len_a, len_b);
+    size_t comp_len = MIN(len_a, len_b);
     int identical = 0;
-    if (MAX(len_a, len_b) - MIN(len_a, len_b) > 1) {
-        return 0;
+
+    /* The length of the strings differ by more than 1 character. */
+    if (max_len - comp_len > 1) {
+        goto end;
     }
-    size_t max_len = len_a > len_b? len_b : len_a;
-    if (max_len) {
-        identical = !strncmp(str_a, str_b, max_len);
+
+    /* Assuming that the shorter string has a non-zero length */
+    if (comp_len) {
+        /* Assuming that the common parts of the strings are the same */
+        if(!strncmp(str_a, str_b, comp_len)) {
+            /* If the lengths are equal, they are identical */
+            if (len_a == len_b) {
+                identical = 1;
+            } else {
+                /* Otherwise the last character of the longer string should be '/' */
+                const char *longer_str = len_a > len_b ? str_a : str_b;
+                identical = (longer_str[comp_len] == '/');
+            }
+        }
     }
+
+    end:
     lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n",
-            str_a, str_b, max_len, identical ? ", identical!" : "");
+            str_a, str_b, comp_len, identical ? ", identical!" : "");
     return identical;
 }
 
