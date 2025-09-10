@@ -24,7 +24,8 @@ typedef enum {
     LINK_DIR = 'D',
     LINK_FILE = 'F',
     LINK_INVALID = 'I',
-    LINK_UNINITIALISED_FILE = 'U'
+    LINK_UNINITIALISED_FILE = 'U',
+    LINK_UNINITIALISED_DIR = 'V',
 } LinkType;
 
 /**

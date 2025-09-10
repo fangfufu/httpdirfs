@@ -239,7 +239,8 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
         u = 0;
         for (int i = 0; i < linktbl->num; i++) {
             Link *this_link = linktbl->links[i];
-            if (this_link->type == LINK_UNINITIALISED_FILE) {
+            if (this_link->type == LINK_UNINITIALISED_FILE ||
+                    this_link->type == LINK_UNINITIALISED_DIR) {
                 Link_req_file_stat(linktbl->links[i]);
                 u++;
             }
@@ -365,7 +366,7 @@ static LinkType linkname_to_LinkType(const char *linkname)
 
     /* '/' must be at the end to be a valid directory name */
     if (linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/') {
-        return LINK_DIR;
+        return LINK_UNINITIALISED_DIR;
     }
 
     return LINK_UNINITIALISED_FILE;
@@ -429,7 +430,7 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
         LinkType type = linkname_to_LinkType(relative_url);
 
         /* Check if the new link is a duplicate */
-        if ((type == LINK_DIR) || (type == LINK_UNINITIALISED_FILE)) {
+        if ((type == LINK_UNINITIALISED_DIR) || (type == LINK_UNINITIALISED_FILE)) {
             int identical_link_found = 0;
             for (int i = 0; i < linktbl->num; i++) {
                 if (linknames_equal(relative_url, linktbl->links[i]->linkname)) {
@@ -471,16 +472,22 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
-        if (cl < 0) {
-            this_link->type = LINK_INVALID;
-        } else if (cl == 0 && CONFIG.zero_len_is_dir) {
+
+        if (this_link->type == LINK_UNINITIALISED_FILE) {
+            if (cl < 0) {
+                this_link->type = LINK_INVALID;
+            } else if (cl == 0 && CONFIG.zero_len_is_dir) {
+                this_link->type = LINK_DIR;
+            } else {
+                this_link->type = LINK_FILE;
+                this_link->content_length = cl;
+            }
+        } else if (this_link->type == LINK_UNINITIALISED_DIR) {
             this_link->type = LINK_DIR;
-        } else {
-            this_link->type = LINK_FILE;
-            this_link->content_length = cl;
         }
+
     } else {
-        lprintf(warning, "HTTP %ld\n", http_resp);
+        lprintf(warning, "%s: HTTP %ld\n", this_link->f_url, http_resp);
         if (HTTP_temp_failure(http_resp) || CONFIG.invalid_refresh) {
             lprintf(warning, ", retrying later.\n");
         } else {
