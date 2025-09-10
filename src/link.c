@@ -402,7 +402,7 @@ static int linknames_equal(const char *str_a, const char *str_b)
         }
     }
 
-    end:
+end:
     lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n",
             str_a, str_b, comp_len, identical ? ", identical!" : "");
     return identical;
@@ -471,13 +471,10 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
-        if (cl <= 0) {
-            if (CONFIG.zero_len_is_dir) {
-                this_link->type = LINK_DIR;
-            } else {
-                lprintf(info, "Zero length file: %s\n", this_link->f_url);
-                this_link->type = LINK_INVALID;
-            }
+        if (cl < 0) {
+            this_link->type = LINK_INVALID;
+        } else if (cl == 0 && CONFIG.zero_len_is_dir) {
+            this_link->type = LINK_DIR;
         } else {
             this_link->type = LINK_FILE;
             this_link->content_length = cl;
@@ -1040,8 +1037,9 @@ static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
         if (!strcasestr((header->data), "Accept-Ranges: bytes") &&
                 !strcasestr((header->data), "Content-Range: bytes")) {
             fprintf(stderr, "This web server does not support HTTP range \
-requests. If you do not believe that is the case, please include the HTTP \
-header information if you plan to file a bug report:\n%s\n", header->data);
+requests. If you do not believe that is the case, and if you plan to file a \
+bug report, please include the following HTTP header information:\n%s\n",
+                    header->data);
             exit(EXIT_FAILURE);
         }
     }
