@@ -13,6 +13,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <sys/param.h>
+#include <stdbool.h>
 
 #define STATUS_LEN 64
 
@@ -377,36 +378,22 @@ static LinkType linkname_to_LinkType(const char *linkname)
  */
 static int linknames_equal(const char *str_a, const char *str_b)
 {
-    size_t len_a = strnlen(str_a, MAX_FILENAME_LEN);
-    size_t len_b = strnlen(str_b, MAX_FILENAME_LEN);
-    size_t max_len = MAX(len_a, len_b);
-    size_t comp_len = MIN(len_a, len_b);
-    int identical = 0;
-
-    /* The length of the strings differ by more than 1 character. */
-    if (max_len - comp_len > 1) {
-        goto end;
-    }
-
-    /* Assuming that the shorter string has a non-zero length */
-    if (comp_len) {
-        /* Assuming that the common parts of the strings are the same */
-        if(!strncmp(str_a, str_b, comp_len)) {
-            /* If the lengths are equal, they are identical */
-            if (len_a == len_b) {
-                identical = 1;
-            } else {
-                /* Otherwise the last character of the longer string should be '/' */
-                const char *longer_str = len_a > len_b ? str_a : str_b;
-                identical = (longer_str[comp_len] == '/');
-            }
+    for (int i = 0; i < MAX_FILENAME_LEN; i++) {
+        const char char_a = str_a[i];
+        const char char_b = str_b[i];
+        if (
+            (char_a == '\0' && char_b == '\0') || // a == a
+            (char_a == '\0' && char_b == '/') || // a == b/
+            (char_a == '/' && char_b == '\0') || // a/ == b
+            (char_a == '/' && char_b == '/') // a/ == b/
+        ) {
+            return true;
+        }
+        if (char_a != char_b) {
+            return false;
         }
     }
-
-end:
-    lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n",
-            str_a, str_b, comp_len, identical ? ", identical!" : "");
-    return identical;
+    return true;
 }
 
 /**
