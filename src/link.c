@@ -247,11 +247,13 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
         }
         /*
          * Block until the gaps are filled
+         * result is an invalid variable
          */
-        int n = curl_multi_perform_once();
+        int result = 0;
+        int n = curl_multi_perform_once(&result);
         int i = 0;
         int j = 0;
-        while ((i = curl_multi_perform_once())) {
+        while ((i = curl_multi_perform_once(&result))) {
             if (CONFIG.log_type & debug) {
                 if (j) {
                     erase_string(stderr, STATUS_LEN, s);
@@ -970,7 +972,7 @@ TransferStruct Link_download_full(Link *link)
      */
     long http_resp = 0;
     do {
-        transfer_blocking(curl);
+        transfer_blocking(curl, ts.curr_size);
         ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
@@ -1100,7 +1102,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 
     CURL *curl = Link_download_curl_setup(link, req_size, offset, &header, &ts);
 
-    transfer_blocking(curl);
+    transfer_blocking(curl, offset);
 
     curl_off_t recv_sz = Link_download_cleanup(curl, &header);
 
