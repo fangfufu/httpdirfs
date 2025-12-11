@@ -55,6 +55,7 @@ if (host_machine.system() == 'linux')
 		help2man_opts = [
 			'--name="mount HTTP directory as a virtual filesystem"',
 			'--no-discard-stderr',
+			'--no-info',
 			'--section=1']
 		manfile = custom_target('httpdirfs.1',
 			output: 'httpdirfs.1',
