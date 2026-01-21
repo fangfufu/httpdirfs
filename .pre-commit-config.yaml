@@ -25,3 +25,12 @@ repos:
         args: ["-p=builddir", "--warnings-as-errors=*"]
     -   id: clang-format
         args: [-i]
+
+-   repo: local
+    hooks:
+    -   id: meson-test
+        name: Meson Test
+        entry: meson test -C build
+        language: system
+        pass_filenames: false
+        always_run: true

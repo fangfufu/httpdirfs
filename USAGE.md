@@ -1,5 +1,4 @@
 ## HTTPDirFS Usage
-
 As of commit
 [75d31293c791a4249e4bdd93cfa0c43bc1332479](https://github.com/fangfufu/httpdirfs/commit/75d31293c791a4249e4bdd93cfa0c43bc1332479),
 HTTPDirFS supports the following usage flags:
