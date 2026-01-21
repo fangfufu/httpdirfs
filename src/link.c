@@ -27,7 +27,7 @@ int ROOT_LINK_OFFSET = 0;
  * \details This allows LinkTable generation to be run exclusively. This
  * effectively gives LinkTable generation priority over file transfer.
  */
-static pthread_mutex_t link_lock;
+static pthread_rwlock_t link_lock;
 static void make_link_relative(const char *page_url, char *link_url);
 
 /**
@@ -286,7 +286,7 @@ static LinkTable *single_LinkTable_new(const char *url)
 
 LinkTable *LinkSystem_init(const char *url)
 {
-    PTHREAD_MUTEX_INIT(&link_lock, NULL);
+    pthread_rwlock_init(&link_lock, NULL);
     int url_len = strnlen(url, MAX_PATH_LEN) - 1;
     /*
      * --------- Set the length of the root link -----------
@@ -899,27 +899,40 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                  */
                 LinkTable *next_table = linktbl->links[i]->next_table;
                 if (!next_table) {
-                    if (CONFIG.mode == NORMAL) {
-                        next_table =
-                            LinkTable_new(linktbl->links[i]->f_url);
-                    } else if (CONFIG.mode == SONIC) {
-                        if (!CONFIG.sonic_id3) {
+                    pthread_rwlock_unlock(&link_lock);
+                    pthread_rwlock_wrlock(&link_lock);
+                    next_table = linktbl->links[i]->next_table;
+
+                    if (!next_table) {
+                        if (CONFIG.mode == NORMAL) {
                             next_table =
-                                sonic_LinkTable_new_index
-                                (linktbl->links[i]->sonic.id);
+                                LinkTable_new(linktbl->links[i]->f_url);
+                        } else if (CONFIG.mode == SONIC) {
+                            if (!CONFIG.sonic_id3) {
+                                next_table =
+                                    sonic_LinkTable_new_index
+                                    (linktbl->links[i]->sonic.id);
+                            } else {
+                                next_table =
+                                    sonic_LinkTable_new_id3
+                                    (linktbl->links
+                                     [i]->sonic.depth,
+                                     linktbl->links[i]->sonic.id);
+                            }
                         } else {
-                            next_table =
-                                sonic_LinkTable_new_id3
-                                (linktbl->links
-                                 [i]->sonic.depth,
-                                 linktbl->links[i]->sonic.id);
+                            lprintf(fatal, "Invalid CONFIG.mode\n");
                         }
-                    } else {
-                        lprintf(fatal, "Invalid CONFIG.mode\n");
+                        linktbl->links[i]->next_table = next_table;
                     }
+                    pthread_rwlock_unlock(&link_lock);
+                    pthread_rwlock_rdlock(&link_lock);
+                    next_table = linktbl->links[i]->next_table;
                 }
-                linktbl->links[i]->next_table = next_table;
-                return path_to_Link_recursive(next_path, next_table);
+                if (next_table) {
+                    return path_to_Link_recursive(next_path, next_table);
+                } else {
+                    return NULL;
+                }
             }
         }
     }
@@ -931,7 +944,7 @@ Link *path_to_Link(const char *path)
     lprintf(link_lock_debug,
             "thread %x: locking link_lock;\n", pthread_self());
 
-    PTHREAD_MUTEX_LOCK(&link_lock);
+    pthread_rwlock_rdlock(&link_lock);
     char *new_path = strndup(path, MAX_PATH_LEN);
     if (!new_path) {
         lprintf(fatal, "cannot allocate memory\n");
@@ -941,7 +954,7 @@ Link *path_to_Link(const char *path)
 
     lprintf(link_lock_debug,
             "thread %x: unlocking link_lock;\n", pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&link_lock);
+    pthread_rwlock_unlock(&link_lock);
     return link;
 }
 
