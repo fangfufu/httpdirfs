@@ -70,3 +70,5 @@ run_target('format',
 
 run_target('doxygen',
   command : 'scripts/doxygen.sh')
+
+subdir('tests')
