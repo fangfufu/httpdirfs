@@ -383,57 +383,32 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         return -EINVAL;
     }
 
-    lprintf(cache_lock_debug,
-            "thread %x: locking seek_lock;\n", pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf->seek_lock);
-
-    long byte_read = 0;
-
-    /*
-     * Seek to the right location
-     */
-    if (fseeko(cf->dfp, offset, SEEK_SET)) {
-        /*
-         * fseeko failed
-         */
-        lprintf(error, "fseeko(): %s\n", strerror(errno));
-        byte_read = -EIO;
-        goto end;
-    }
-
     /*
      * Calculate how much to read
      */
     if (offset + len > cf->content_length) {
         len -= offset + len - cf->content_length;
         if (len < 0) {
-            goto end;
+            return 0;
         }
     }
 
-    byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
+    long byte_read = pread(fileno(cf->dfp), buf, len, offset);
     if (byte_read != len) {
+        if (byte_read < 0) {
+            lprintf(error, "pread(): %s\n", strerror(errno));
+            return -errno;
+        }
         lprintf(debug,
-                "fread(): requested %ld, returned %ld!\n", len, byte_read);
-        if (feof(cf->dfp)) {
+                "pread(): requested %ld, returned %ld!\n", len, byte_read);
+        if (byte_read == 0) {
             /*
              * reached EOF
              */
-            lprintf(error, "fread(): reached the end of the file!\n");
-        }
-        if (ferror(cf->dfp)) {
-            /*
-             * filesystem error
-             */
-            lprintf(error, "fread(): encountered error!\n");
+            lprintf(error, "pread(): reached the end of the file!\n");
         }
     }
 
-end:
-
-    lprintf(cache_lock_debug,
-            "thread %x: unlocking seek_lock;\n", pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     return byte_read;
 }
 
@@ -457,40 +432,18 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
         return 0;
     }
 
-    lprintf(cache_lock_debug,
-            "thread %x: locking seek_lock;\n", pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf->seek_lock);
-
-    long byte_written = 0;
-
-    if (fseeko(cf->dfp, offset, SEEK_SET)) {
-        /*
-         * fseeko failed
-         */
-        lprintf(error, "fseeko(): %s\n", strerror(errno));
-        byte_written = -EIO;
-        goto end;
-    }
-
-    byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
+    long byte_written = pwrite(fileno(cf->dfp), buf, len, offset);
 
     if (byte_written != len) {
+        if (byte_written < 0) {
+            lprintf(error, "pwrite(): %s\n", strerror(errno));
+            return -errno;
+        }
         lprintf(error,
-                "fwrite(): requested %ld, returned %ld!\n",
+                "pwrite(): requested %ld, returned %ld!\n",
                 len, byte_written);
     }
 
-    if (ferror(cf->dfp)) {
-        /*
-         * filesystem error
-         */
-        lprintf(error, "fwrite(): encountered error!\n");
-    }
-
-end:
-    lprintf(cache_lock_debug,
-            "thread %x: unlocking seek_lock;\n", pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     return byte_written;
 }
 
@@ -521,7 +474,6 @@ int CacheDir_create(const char *dirn)
 static Cache *Cache_alloc(void)
 {
     Cache *cf = CALLOC(1, sizeof(Cache));
-    PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
     cf->cache_opened = 1;
     SEM_INIT(&cf->bgt_sem, 0, 1);
@@ -533,7 +485,6 @@ static Cache *Cache_alloc(void)
  */
 static void Cache_free(Cache *cf)
 {
-    PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
     PTHREAD_MUTEX_DESTROY(&cf->w_lock);
     SEM_DESTROY(&cf->bgt_sem);
 

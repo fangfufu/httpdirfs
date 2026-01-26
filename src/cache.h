@@ -50,8 +50,6 @@ struct Cache {
     /** \brief the detail of each segment */
     Seg *seg;
 
-    /** \brief mutex lock for seek operation */
-    pthread_mutex_t seek_lock;
     /** \brief mutex lock for write operation */
     pthread_mutex_t w_lock;
 
