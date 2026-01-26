@@ -332,7 +332,8 @@ static void sanitise_LinkTable(LinkTable *linktbl)
             strcpy(linktbl->links[i]->linkname, "__FORWARD-SLASH__");
         }
 
-        for (size_t j = 0; j < strlen(linktbl->links[i]->linkname); j++) {
+        size_t len = strlen(linktbl->links[i]->linkname);
+        for (size_t j = 0; j < len; j++) {
             if (linktbl->links[i]->linkname[j] == '/') {
                 linktbl->links[i]->linkname[j] = '-';
             }
