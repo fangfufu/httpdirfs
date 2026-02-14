@@ -235,7 +235,7 @@ XML_parser_general(void *data, const char *elem, const char **attr)
             /*
              * Skip to the last '/' if it exists
              */
-            char *s = strrchr(attr[i + 1], '/');
+            const char *s = strrchr(attr[i + 1], '/');
             if (s) {
                 strncpy(link->linkname, s + 1, MAX_FILENAME_LEN);
             } else {
