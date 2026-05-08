@@ -996,8 +996,9 @@ which doesn't make sense\n", pthread_self(), recv);
     if ((recv == cf->blksz) ||
             (cf->next_dl_offset ==
              (cf->content_length / cf->blksz * cf->blksz))) {
-        Data_write(cf, recv_buf, recv, cf->next_dl_offset);
-        Seg_set(cf, cf->next_dl_offset, 1);
+        if (Data_write(cf, recv_buf, recv, cf->next_dl_offset) == recv) {
+            Seg_set(cf, cf->next_dl_offset, 1);
+        }
     } else {
         lprintf(error, "received %ld rather than %ld, possible network \
 error.\n", recv, cf->blksz);
@@ -1038,7 +1039,7 @@ static void Cache_bgdl_launcher(Cache *cf)
 }
 
 long
-Cache_read(Cache *cf, char *const output_buf, const off_t len,
+Cache_read1(Cache *cf, char *const output_buf, const off_t len,
            const off_t offset_start)
 {
     long send;
@@ -1046,7 +1047,7 @@ Cache_read(Cache *cf, char *const output_buf, const off_t len,
     /*
      * The offset of the segment to be downloaded
      */
-    off_t dl_offset = (offset_start + len) / cf->blksz * cf->blksz;
+    off_t dl_offset = offset_start / cf->blksz * cf->blksz;
 
     /*
      * ------------- Check if the segment already exists --------------
@@ -1099,14 +1100,16 @@ which doesn't make sense\n", pthread_self(), recv);
      */
     if ((recv == cf->blksz) ||
             (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
-        Data_write(cf, recv_buf, recv, dl_offset);
-        Seg_set(cf, dl_offset, 1);
+        if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
+            Seg_set(cf, dl_offset, 1);
+        }
     } else {
         lprintf(error, "received %ld rather than %ld, possible network \
 error.\n", recv, cf->blksz);
     }
+    send = len;
+    memcpy(output_buf, recv_buf + (offset_start - dl_offset), send);
     FREE(recv_buf);
-    send = Data_read(cf, (uint8_t *) output_buf, len, offset_start);
 
     lprintf(cache_lock_debug,
             "thread %x: unlocking w_lock;\n", pthread_self());
@@ -1117,8 +1120,8 @@ error.\n", recv, cf->blksz);
      */
 bgdl: {
     }
-    off_t next_dl_offset = round_div(offset_start, cf->blksz) * cf->blksz;
-    if ((next_dl_offset > dl_offset) && !Seg_exist(cf, next_dl_offset)
+    off_t next_dl_offset = dl_offset + cf->blksz;
+    if (!Seg_exist(cf, next_dl_offset)
             && next_dl_offset < cf->content_length) {
         /*
          * Stop the spawning of multiple background pthreads
@@ -1137,3 +1140,15 @@ bgdl: {
     return send;
 }
 
+long
+Cache_read(Cache *cf, char *const output_buf, off_t len,
+           const off_t offset_start)
+{
+    off_t send = 0;
+    for (off_t start = offset_start, end; len > 0; len -= end-start, start = end) {
+        end = start / cf->blksz * cf->blksz + cf->blksz;
+        if (end > start + len) end = start + len;
+        send += Cache_read1(cf, output_buf + (start - offset_start), end - start, start);
+    }
+    return send;
+}
