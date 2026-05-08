@@ -187,15 +187,17 @@ int curl_multi_perform_once(void)
     /*
      * Get curl multi interface to perform pending tasks
      */
-    int n_running_curl;
+    int n_running_curl = 1;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
     if (mc) {
         lprintf(error, "%s\n", curl_multi_strerror(mc));
     }
 
-    mc = curl_multi_poll(curl_multi, NULL, 0, 100, NULL);
-    if (mc) {
-        lprintf(error, "%s\n", curl_multi_strerror(mc));
+    if (n_running_curl) {
+        mc = curl_multi_poll(curl_multi, NULL, 0, 100, NULL);
+        if (mc) {
+            lprintf(error, "%s\n", curl_multi_strerror(mc));
+        }
     }
 
     /*
