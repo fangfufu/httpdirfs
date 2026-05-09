@@ -10,7 +10,7 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp)
 {
     size_t recv_size = size * nmemb;
-    TransferStruct *ts = (TransferStruct *) userp;
+    TransferStruct *ts = (TransferStruct *)userp;
 
     char *tmp = realloc(ts->data, ts->curr_size + recv_size + 1);
     if (!tmp) {

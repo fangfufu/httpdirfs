@@ -26,9 +26,8 @@ static SonicConfigStruct SONIC_CONFIG;
 /**
  * \brief initialise Sonic configuration struct
  */
-void
-sonic_config_init(const char *server, const char *username,
-                  const char *password)
+void sonic_config_init(const char *server, const char *username,
+                       const char *password)
 {
     SONIC_CONFIG.server = strndup(server, MAX_PATH_LEN);
     /*
@@ -70,20 +69,18 @@ static char *sonic_gen_auth_str(void)
         strncat(pwd_salt + pwd_len, salt, MAX_FILENAME_LEN);
         char *token = generate_md5sum(pwd_salt);
         char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-        snprintf(auth_str, MAX_PATH_LEN,
-                 ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
-                 SONIC_CONFIG.username, token, salt,
-                 SONIC_CONFIG.api_version, SONIC_CONFIG.client);
+        snprintf(auth_str, MAX_PATH_LEN, ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
+                 SONIC_CONFIG.username, token, salt, SONIC_CONFIG.api_version,
+                 SONIC_CONFIG.client);
         FREE(salt);
         FREE(token);
         return auth_str;
     } else {
         char *pwd_hex = str_to_hex(SONIC_CONFIG.password);
         char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-        snprintf(auth_str, MAX_PATH_LEN,
-                 ".view?u=%s&p=enc:%s&v=%s&c=%s",
-                 SONIC_CONFIG.username, pwd_hex,
-                 SONIC_CONFIG.api_version, SONIC_CONFIG.client);
+        snprintf(auth_str, MAX_PATH_LEN, ".view?u=%s&p=enc:%s&v=%s&c=%s",
+                 SONIC_CONFIG.username, pwd_hex, SONIC_CONFIG.api_version,
+                 SONIC_CONFIG.client);
         FREE(pwd_hex);
         return auth_str;
     }
@@ -96,8 +93,8 @@ static char *sonic_gen_url_first_part(char *method)
 {
     char *auth_str = sonic_gen_auth_str();
     char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s/rest/%s%s", SONIC_CONFIG.server,
-             method, auth_str);
+    snprintf(url, MAX_PATH_LEN, "%s/rest/%s%s", SONIC_CONFIG.server, method,
+             auth_str);
     FREE(auth_str);
     return url;
 }
@@ -164,8 +161,8 @@ static char *sonic_stream_link(const char *id)
  * parser terminates the strings properly, which is a fair assumption,
  * considering how mature expat is.
  */
-static void XMLCALL
-XML_parser_general(void *data, const char *elem, const char **attr)
+static void XMLCALL XML_parser_general(void *data, const char *elem,
+                                       const char **attr)
 {
     /*
      * Error checking
@@ -177,27 +174,25 @@ XML_parser_general(void *data, const char *elem, const char **attr)
         }
     }
 
-    LinkTable *linktbl = (LinkTable *) data;
+    LinkTable *linktbl = (LinkTable *)data;
     Link *link;
 
     /*
      * Please refer to the documentation at the function prototype of
      * sonic_LinkTable_new_id3()
      */
-    if (!strcmp(elem, "child") || (!strcmp(elem, "artist")
-                                   && linktbl->links[0]->sonic.depth != 3)) {
+    if (!strcmp(elem, "child")
+        || (!strcmp(elem, "artist") && linktbl->links[0]->sonic.depth != 3)) {
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_DIR;
-    } else if (!strcmp(elem, "album")
-               && linktbl->links[0]->sonic.depth == 3) {
+    } else if (!strcmp(elem, "album") && linktbl->links[0]->sonic.depth == 3) {
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_DIR;
         /*
          * The new table should be a level 4 song table
          */
         link->sonic.depth = 4;
-    } else if (!strcmp(elem, "song")
-               && linktbl->links[0]->sonic.depth == 4) {
+    } else if (!strcmp(elem, "song") && linktbl->links[0]->sonic.depth == 4) {
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_FILE;
     } else {
@@ -242,8 +237,7 @@ XML_parser_general(void *data, const char *elem, const char **attr)
          * N.B. "path" attribute is given the preference
          */
         if (!linkname_set) {
-            if (!strcmp("title", attr[i])
-                    || !strcmp("name", attr[i])) {
+            if (!strcmp("title", attr[i]) || !strcmp("name", attr[i])) {
                 strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
                 linkname_set = 1;
                 continue;
@@ -271,25 +265,25 @@ XML_parser_general(void *data, const char *elem, const char **attr)
         }
 
         if (!strcmp("track", attr[i])) {
-            track = (int) strtol(attr[i + 1], NULL, 10);
+            track = (int)strtol(attr[i + 1], NULL, 10);
             continue;
         }
 
         if (!strcmp("title", attr[i])) {
-            title = (char *) attr[i + 1];
+            title = (char *)attr[i + 1];
             continue;
         }
 
         if (!strcmp("suffix", attr[i])) {
-            suffix = (char *) attr[i + 1];
+            suffix = (char *)attr[i + 1];
             continue;
         }
     }
 
-    if (!linkname_set && strnlen(title, MAX_PATH_LEN) > 0 &&
-            strnlen(suffix, MAX_PATH_LEN) > 0) {
-        snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s",
-                 track, title, suffix);
+    if (!linkname_set && strnlen(title, MAX_PATH_LEN) > 0
+        && strnlen(suffix, MAX_PATH_LEN) > 0) {
+        snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s", track, title,
+                 suffix);
         linkname_set = 1;
     }
 
@@ -339,7 +333,8 @@ static void sanitise_LinkTable(LinkTable *linktbl)
  * \brief parse a XML string in order to fill in the LinkTable
  */
 static LinkTable *sonic_url_to_LinkTable(const char *url,
-        XML_StartElementHandler handler, int depth)
+                                         XML_StartElementHandler handler,
+                                         int depth)
 {
     LinkTable *linktbl = LinkTable_alloc(url);
     linktbl->links[0]->sonic.depth = depth;
@@ -359,8 +354,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     XML_SetStartElementHandler(parser, handler);
 
     if (XML_Parse(parser, xml.data, xml.curr_size, 1) == XML_STATUS_ERROR) {
-        lprintf(error,
-                "Parse error at line %lu: %s\n",
+        lprintf(error, "Parse error at line %lu: %s\n",
                 XML_GetCurrentLineNumber(parser),
                 XML_ErrorString(XML_GetErrorCode(parser)));
     }
@@ -374,7 +368,6 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     sanitise_LinkTable(linktbl);
 
     return linktbl;
-
 }
 
 LinkTable *sonic_LinkTable_new_index(const char *id)
@@ -385,14 +378,13 @@ LinkTable *sonic_LinkTable_new_index(const char *id)
     } else {
         url = sonic_gen_url_first_part("getIndexes");
     }
-    LinkTable *linktbl =
-        sonic_url_to_LinkTable(url, XML_parser_general, 0);
+    LinkTable *linktbl = sonic_url_to_LinkTable(url, XML_parser_general, 0);
     FREE(url);
     return linktbl;
 }
 
-static void XMLCALL
-XML_parser_id3_root(void *data, const char *elem, const char **attr)
+static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
+                                        const char **attr)
 {
     if (!strcmp(elem, "error")) {
         lprintf(error, "\n");
@@ -401,15 +393,14 @@ XML_parser_id3_root(void *data, const char *elem, const char **attr)
         }
     }
 
-    LinkTable *root_linktbl = (LinkTable *) data;
+    LinkTable *root_linktbl = (LinkTable *)data;
     LinkTable *this_linktbl = NULL;
 
     /*
      * Set the current linktbl, if we have more than head link.
      */
     if (root_linktbl->num > 1) {
-        this_linktbl =
-            root_linktbl->links[root_linktbl->num - 1]->next_table;
+        this_linktbl = root_linktbl->links[root_linktbl->num - 1]->next_table;
     }
 
     int id_set = 0;
@@ -455,8 +446,7 @@ XML_parser_id3_root(void *data, const char *elem, const char **attr)
             }
 
             if (!strcmp("id", attr[i])) {
-                link->sonic.id =
-                    CALLOC(MAX_FILENAME_LEN + 1, sizeof(char));
+                link->sonic.id = CALLOC(MAX_FILENAME_LEN + 1, sizeof(char));
                 strncpy(link->sonic.id, attr[i + 1], MAX_FILENAME_LEN);
                 id_set = 1;
                 continue;

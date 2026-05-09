@@ -5,13 +5,13 @@
  * \brief the maximum length of a path and a URL.
  * \details This corresponds the maximum path length under Ext4.
  */
-#define MAX_PATH_LEN        4096
+#define MAX_PATH_LEN 4096
 
 /**
  * \brief the maximum length of a filename.
  * \details This corresponds the filename length under Ext4.
  */
-#define MAX_FILENAME_LEN    255
+#define MAX_FILENAME_LEN 255
 
 /**
  * \brief the default user agent string
@@ -21,12 +21,12 @@
 /**
  * \brief The default maximum number of network connections
  */
-#define DEFAULT_NETWORK_MAX_CONNS   10
+#define DEFAULT_NETWORK_MAX_CONNS 10
 
 /**
  * \brief The default refresh_timeout
  */
-#define DEFAULT_REFRESH_TIMEOUT  3600
+#define DEFAULT_REFRESH_TIMEOUT 3600
 
 /**
  * \brief Operation modes

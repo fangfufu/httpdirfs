@@ -19,8 +19,8 @@
 
 static void *fs_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
-    (void) conn;
-    (void) cfg;
+    (void)conn;
+    (void)cfg;
     return NULL;
 }
 
@@ -28,9 +28,9 @@ static void *fs_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {
     lprintf(info, "%s\n", path);
-    (void) path;
+    (void)path;
     if (CACHE_SYSTEM_INIT) {
-        Cache_close((Cache *) fi->fh);
+        Cache_close((Cache *)fi->fh);
     }
     return 0;
 }
@@ -39,7 +39,7 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 static int fs_getattr(const char *path, struct stat *stbuf,
                       struct fuse_file_info *ffi_buf)
 {
-    (void) ffi_buf;
+    (void)ffi_buf;
     int res = 0;
     memset(stbuf, 0, sizeof(struct stat));
 
@@ -51,7 +51,7 @@ static int fs_getattr(const char *path, struct stat *stbuf,
         if (!link) {
             return -ENOENT;
         }
-        struct timespec spec = { 0 };
+        struct timespec spec = {0};
         spec.tv_sec = link->time;
 #if defined(__APPLE__) && defined(__MACH__)
         stbuf->st_mtime = spec.tv_sec;
@@ -83,13 +83,12 @@ static int fs_getattr(const char *path, struct stat *stbuf,
 }
 
 /** \brief read a file */
-static int
-fs_read(const char *path, char *buf, size_t size, off_t offset,
-        struct fuse_file_info *fi)
+static int fs_read(const char *path, char *buf, size_t size, off_t offset,
+                   struct fuse_file_info *fi)
 {
     long received;
     if (CACHE_SYSTEM_INIT) {
-        received = Cache_read((Cache *) fi->fh, buf, size, offset);
+        received = Cache_read((Cache *)fi->fh, buf, size, offset);
     } else {
         received = path_download(path, buf, size, offset);
     }
@@ -110,7 +109,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     }
     if (CACHE_SYSTEM_INIT) {
         lprintf(debug, "Cache_open(%s);\n", path);
-        fi->fh = (uint64_t) Cache_open(path);
+        fi->fh = (uint64_t)Cache_open(path);
         if (!fi->fh) {
             /*
              * The link clearly exists, the cache cannot be opened, attempt
@@ -121,7 +120,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
             lprintf(debug, "Cache_create(%s);\n", path);
             Cache_create(path);
             lprintf(debug, "Cache_open(%s);\n", path);
-            fi->fh = (uint64_t) Cache_open(path);
+            fi->fh = (uint64_t)Cache_open(path);
             /*
              * The cache definitely cannot be opened for some reason.
              */
@@ -145,13 +144,13 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
  * generate the LinkTables for previous level directories. We might
  * as well maintain our own tree structure.
  */
-static int
-fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
-           off_t offset, struct fuse_file_info *fi, enum fuse_readdir_flags fr_flags)
+static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
+                      off_t offset, struct fuse_file_info *fi,
+                      enum fuse_readdir_flags fr_flags)
 {
-    (void) offset;
-    (void) fi;
-    (void) fr_flags;
+    (void)offset;
+    (void)fi;
+    (void)fr_flags;
     LinkTable *linktbl;
 
     linktbl = path_to_LinkTable(path);
@@ -178,14 +177,12 @@ fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     return 0;
 }
 
-static struct fuse_operations fs_oper = {
-    .getattr = fs_getattr,
-    .readdir = fs_readdir,
-    .open = fs_open,
-    .read = fs_read,
-    .init = fs_init,
-    .release = fs_release
-};
+static struct fuse_operations fs_oper = {.getattr = fs_getattr,
+                                         .readdir = fs_readdir,
+                                         .open = fs_open,
+                                         .read = fs_read,
+                                         .init = fs_init,
+                                         .release = fs_release};
 
 int fuse_local_init(int argc, char **argv)
 {

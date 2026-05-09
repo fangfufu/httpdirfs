@@ -5,10 +5,7 @@
 /**
  * \brief specify the type of data transfer
  */
-typedef enum {
-    FILESTAT = 's',
-    DATA = 'd'
-} TransferType;
+typedef enum { FILESTAT = 's', DATA = 'd' } TransferType;
 
 /**
  * \brief For storing transfer data and metadata
