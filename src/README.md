@@ -68,8 +68,10 @@ files:
 pre-commit run --all-files
 ```
 
-> [!IMPORTANT] The `clang-tidy` hook requires `compile_commands.json` to be
-> present in the `builddir`. If you haven't configured the project yet, run:
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> The `clang-tidy` hook requires `compile_commands.json` to be present in the
+> `builddir`. If you haven't configured the project yet, run:
 >
 > ```bash
 > meson setup builddir

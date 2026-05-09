@@ -193,8 +193,10 @@ You can cache the files you have accessed permanently on your hard drive by
 using the `--cache` flag. The file it caches persist across sessions, but can
 clear the cache using `--cache-clear`
 
-> [!WARNING] If `--cache-location <dir>` appears before `--cache-clear`, the
-> entire directory `<dir>` will be deleted instead. Take caution when specifying
+<!-- prettier-ignore -->
+> [!WARNING]
+> If `--cache-location <dir>` appears before `--cache-clear`, the entire
+> directory `<dir>` will be deleted instead. Take caution when specifying
 > non-empty directories to be used as cache.
 
 By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
