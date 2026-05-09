@@ -232,6 +232,9 @@ static void Link_req_file_stat(Link *this_link)
  */
 static void LinkTable_uninitialised_fill(LinkTable *linktbl)
 {
+    if (!linktbl) {
+        return;
+    }
     int u;
     char s[STATUS_LEN];
     lprintf(debug, " ... ");
@@ -332,11 +335,12 @@ LinkTable *LinkSystem_init(const char *url)
 void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
-    linktbl->links =
-        realloc(linktbl->links, linktbl->num * sizeof(Link *));
-    if (!linktbl->links) {
+    Link **tmp = (Link **)realloc((void *)linktbl->links,
+                                  linktbl->num * sizeof(Link *));
+    if (!tmp) {
         lprintf(fatal, "realloc() failure!\n");
     }
+    linktbl->links = tmp;
     linktbl->links[linktbl->num - 1] = link;
 }
 
@@ -420,9 +424,8 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
         return;
     }
     GumboAttribute *href;
-    if (node->v.element.tag == GUMBO_TAG_A &&
-            (href =
-                 gumbo_get_attribute(&node->v.element.attributes, "href"))) {
+    href = gumbo_get_attribute(&node->v.element.attributes, "href");
+    if (node->v.element.tag == GUMBO_TAG_A && href) {
         char *relative_url = (char *) href->value;
         make_link_relative(url, relative_url);
 
@@ -449,7 +452,6 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     for (size_t i = 0; i < children->length; ++i) {
         HTML_to_LinkTable(url, (GumboNode *) children->data[i], linktbl);
     }
-    return;
 }
 
 void Link_set_file_stat(Link *this_link, CURL *curl)
@@ -517,8 +519,10 @@ static void LinkTable_fill(LinkTable *linktbl)
            replaced with %2F, which curl_easy_escape does, God bless it, so if
            it did that then let's put it back. */
         int escaped_len = strlen(escaped_path);
-        if (escaped_len >= 3 && !strcmp(escaped_path + escaped_len - 3, "%2F"))
-            strcpy(escaped_path + escaped_len - 3, "/");
+        if (escaped_len >= 3 && !strcmp(escaped_path + escaped_len - 3, "%2F")) {
+            escaped_path[escaped_len - 3] = '/';
+            escaped_path[escaped_len - 2] = '\0';
+        }
         char *url = path_append(head_link->f_url, escaped_path);
         curl_free(escaped_path);
         strncpy(this_link->f_url, url, MAX_PATH_LEN);
@@ -539,7 +543,7 @@ void LinkTable_free(LinkTable *linktbl)
             LinkTable_free(linktbl->links[i]->next_table);
             FREE(linktbl->links[i]);
         }
-        FREE(linktbl->links);
+        FREE((void *)linktbl->links);
         FREE(linktbl);
     }
 }
@@ -756,6 +760,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     if (fread(&linktbl->num, sizeof(int), 1, fp) != 1 ||
             fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to read the header of %s!\n", path);
+        fclose(fp);
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
         FREE(path);
@@ -763,29 +768,22 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     }
     lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
 
-    linktbl->links = CALLOC(linktbl->num, sizeof(Link *));
+    linktbl->links = (Link **)CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
-        /* The return values are safe to ignore here since we check them
-           immediately afterwards with feof() and ferror(). */
-        ignore_value(fread(linktbl->links[i]->linkname, sizeof(char),
-                           MAX_FILENAME_LEN, fp));
-        ignore_value(fread(linktbl->links[i]->f_url, sizeof(char),
-                           MAX_PATH_LEN, fp));
-        ignore_value(fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
-        ignore_value(fread(&linktbl->links[i]->content_length,
-                           sizeof(size_t), 1, fp));
-        ignore_value(fread(&linktbl->links[i]->time, sizeof(long), 1, fp));
-        if (feof(fp)) {
-            lprintf(error, "Corrupted LinkTable!\n");
+        if (fread(linktbl->links[i]->linkname, sizeof(char),
+                  MAX_FILENAME_LEN, fp) != MAX_FILENAME_LEN ||
+                fread(linktbl->links[i]->f_url, sizeof(char),
+                      MAX_PATH_LEN, fp) != MAX_PATH_LEN ||
+                fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp) != 1 ||
+                fread(&linktbl->links[i]->content_length,
+                      sizeof(size_t), 1, fp) != 1 ||
+                fread(&linktbl->links[i]->time, sizeof(long), 1, fp) != 1) {
+            lprintf(error, "Corrupted LinkTable at index %d!\n", i);
+            fclose(fp);
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
-            return NULL;
-        }
-        if (ferror(fp)) {
-            lprintf(error, "Encountered ferror!\n");
-            LinkTable_free(linktbl);
-            LinkTable_disk_delete(dirn);
+            FREE(path);
             return NULL;
         }
     }
@@ -1000,7 +998,7 @@ TransferStruct Link_download_full(Link *link)
 
 static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
                                       TransferStruct *header,
-                                      TransferStruct *ts)
+                                      TransferStruct *ts) // NOLINT(bugprone-easily-swappable-parameters)
 {
     if (!link) {
         lprintf(fatal, "Invalid supplied\n");
@@ -1167,32 +1165,36 @@ static void make_link_relative(const char *page_url, char *link_url)
     /* Find the slash after the host name. */
     int slashes_left_to_find = 3;
     while (*page_url) {
-        if (*page_url == '/' && ! --slashes_left_to_find)
+        if (*page_url == '/' && !--slashes_left_to_find) {
             break;
+        }
         /* N.B. This is here, rather than doing `while (*page_url++)`, because
            when we're done we want the pointer to point at the final slash. */
         page_url++;
     }
     if (slashes_left_to_find) {
-        if (slashes_left_to_find == 1 && ! *page_url)
+        if (slashes_left_to_find == 1 && !*page_url) {
             /* We're at the top level of the web site and the user entered the URL
                without a trailing slash. */
             page_url = "/";
-        else
+        } else {
             /* Well, that's odd. Let's return rather than trying to dig ourselves
                deeper into whatever hole we're in. */
             return;
+        }
     }
     /* The page URL is no longer the full page_url, it's just the part after
        the host name. */
     /* The link URL should start with the page URL. */
-    if (strstr(link_url, page_url) != link_url)
+    if (strstr(link_url, page_url) != link_url) {
         return;
+    }
     int skip_len = strlen(page_url);
     if (page_url[skip_len-1] != '/') {
-        if (page_url[skip_len] != '/')
+        if (page_url[skip_len] != '/') {
             /* Um, I'm not sure what to do here, so give up. */
             return;
+        }
         skip_len++;
     }
     /* Move the part of the link URL after the parent page's pat to

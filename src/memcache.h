@@ -1,5 +1,5 @@
-#ifndef memcache_H
-#define memcache_H
+#ifndef MEMCACHE_H
+#define MEMCACHE_H
 #include "link.h"
 
 /**
@@ -29,7 +29,7 @@ struct TransferStruct {
 /**
  * \brief Callback function for file transfer
  */
-size_t write_memory_callback(void *contents, size_t size, size_t nmemb,
+size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp);
 
 #endif

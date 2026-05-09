@@ -54,8 +54,9 @@ int64_t round_div(int64_t a, int64_t b)
     return (a + (b / 2)) / b;
 }
 
-void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
-                          const char *file, const char *func, int line, const char *x_name)
+void pthread_mutex_init_wrapper(pthread_mutex_t *x,
+                                const pthread_mutexattr_t *attr,
+                                const char *file, const char *func, int line, const char *x_name)
 {
     log_printf(debug, file, func, line,
                "%x pthread_mutex_init: %p, %p, %s\n", pthread_self(), x, attr, x_name);
@@ -75,8 +76,8 @@ void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
     }
 }
 
-void _PTHREAD_MUTEX_DESTROY_(pthread_mutex_t *x, const char *file,
-                             const char *func, int line, const char *x_name)
+void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
+                                   const char *func, int line, const char *x_name)
 {
     log_printf(debug, file, func, line,
                "%x pthread_mutex_destroy: %p, %s\n", pthread_self(), x, x_name);
@@ -88,8 +89,8 @@ void _PTHREAD_MUTEX_DESTROY_(pthread_mutex_t *x, const char *file,
     }
 }
 
-void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line,
-                            pthread_mutex_t *x, const char *x_name)
+void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
+                                  pthread_mutex_t *x, const char *x_name)
 {
     log_printf(debug, file, func, line,
                "%x pthread_mutex_unlock: %p, %s\n", pthread_self(), x, x_name);
@@ -101,8 +102,8 @@ void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line,
     }
 }
 
-void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line,
-                          pthread_mutex_t *x, const char *x_name)
+void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
+                                pthread_mutex_t *x, const char *x_name)
 {
     log_printf(debug, file, func, line,
                "%x pthread_mutex_lock: %p, %s\n", pthread_self(), x, x_name);
@@ -114,8 +115,9 @@ void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line,
     }
 }
 
-void _SEM_INIT_(sem_t *sem, int pshared, unsigned int value, const char *file,
-                const char *func, int line, const char *sem_name)
+void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
+                      const char *file,
+                      const char *func, int line, const char *sem_name)
 {
     log_printf(debug, file, func, line,
                "%x sem_init: %p, %d, %u, %s\n", pthread_self(), sem, pshared, value, sem_name);
@@ -127,8 +129,9 @@ void _SEM_INIT_(sem_t *sem, int pshared, unsigned int value, const char *file,
     }
 }
 
-void _SEM_DESTROY_(sem_t *sem, const char *file, const char *func, int line,
-                   const char *sem_name)
+void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
+                         int line,
+                         const char *sem_name)
 {
     log_printf(debug, file, func, line,
                "%x sem_destroy: %p, %s\n", pthread_self(), sem, sem_name);
@@ -140,8 +143,8 @@ void _SEM_DESTROY_(sem_t *sem, const char *file, const char *func, int line,
     }
 }
 
-void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem,
-                const char *sem_name)
+void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
+                      const char *sem_name)
 {
     int j;
     if (sem_getvalue(sem, &j)) {
@@ -158,8 +161,8 @@ void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem,
     }
 }
 
-void _SEM_POST_(const char *file, const char *func, int line, sem_t *sem,
-                const char *sem_name)
+void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
+                      const char *sem_name)
 {
     log_printf(debug, file, func, line,
                "%x sem_post: %p, %s\n", pthread_self(), sem, sem_name);
@@ -231,7 +234,7 @@ char *generate_md5sum(const char *str)
     EVP_MD_CTX_free(mdctx);
 
     for (unsigned int i = 0; i < md5_digest_len; i++) {
-        sprintf(out + 2 * i, "%02x", md5_digest[i]);
+        sprintf(out + (2 * (size_t)i), "%02x", md5_digest[i]);
     }
     return out;
 }
@@ -256,7 +259,7 @@ void FREE(void *ptr)
 
 char *str_to_hex(char *s)
 {
-    char *hex = CALLOC(strnlen(s, MAX_PATH_LEN) * 2 + 1, sizeof(char));
+    char *hex = CALLOC((strnlen(s, MAX_PATH_LEN) * 2) + 1, sizeof(char));
     for (char *c = s, *h = hex; *c; c++, h += 2) {
         sprintf(h, "%x", *c);
     }

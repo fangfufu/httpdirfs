@@ -37,7 +37,7 @@ static pthread_mutex_t curl_lock;
  * \brief OpenSSL 1.02 cryptography callback function
  * \details Required for OpenSSL 1.02, but not OpenSSL 1.1
  */
-static void crypto_lock_callback(int mode, int type, char *file, int line)
+static void crypto_lock_callback(int mode, int type, const char *file, int line)
 {
     (void) file;
     (void) line;

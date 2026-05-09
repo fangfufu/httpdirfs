@@ -26,63 +26,66 @@ int64_t round_div(int64_t a, int64_t b);
 /**
  * \brief wrapper for pthread_mutex_init(), with error handling
  */
-void _PTHREAD_MUTEX_INIT_(pthread_mutex_t *x, const pthread_mutexattr_t *attr,
-                          const char *file, const char *func, int line, const char *x_name);
-#define PTHREAD_MUTEX_INIT(x, attr) _PTHREAD_MUTEX_INIT_(x, attr, __FILE__, __func__, __LINE__, #x)
+void pthread_mutex_init_wrapper(pthread_mutex_t *x,
+                                const pthread_mutexattr_t *attr,
+                                const char *file, const char *func, int line, const char *x_name);
+#define PTHREAD_MUTEX_INIT(x, attr) pthread_mutex_init_wrapper(x, attr, __FILE__, __func__, __LINE__, #x)
 
 /**
  * \brief wrapper for pthread_mutex_destroy(), with error handling
  */
-void _PTHREAD_MUTEX_DESTROY_(pthread_mutex_t *x, const char *file,
-                             const char *func, int line, const char *x_name);
-#define PTHREAD_MUTEX_DESTROY(x) _PTHREAD_MUTEX_DESTROY_(x, __FILE__, __func__, __LINE__, #x)
+void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
+                                   const char *func, int line, const char *x_name);
+#define PTHREAD_MUTEX_DESTROY(x) pthread_mutex_destroy_wrapper(x, __FILE__, __func__, __LINE__, #x)
 
 /**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
-void _PTHREAD_MUTEX_LOCK_(const char *file, const char *func, int line,
-                          pthread_mutex_t *x, const char *x_name);
-#define PTHREAD_MUTEX_LOCK(x) _PTHREAD_MUTEX_LOCK_(__FILE__, __func__, __LINE__, x, #x)
+void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
+                                pthread_mutex_t *x, const char *x_name);
+#define PTHREAD_MUTEX_LOCK(x) pthread_mutex_lock_wrapper(__FILE__, __func__, __LINE__, x, #x)
 
 /**
  * \brief wrapper for pthread_mutex_unlock(), with error handling
  */
-void _PTHREAD_MUTEX_UNLOCK_(const char *file, const char *func, int line,
-                            pthread_mutex_t *x, const char *x_name);
-#define PTHREAD_MUTEX_UNLOCK(x) _PTHREAD_MUTEX_UNLOCK_(__FILE__, __func__, __LINE__, x, #x)
+void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
+                                  pthread_mutex_t *x, const char *x_name);
+#define PTHREAD_MUTEX_UNLOCK(x) pthread_mutex_unlock_wrapper(__FILE__, __func__, __LINE__, x, #x)
 
 /**
  * \brief wrapper for sem_init(), with error handling
  * */
-void _SEM_INIT_(sem_t *sem, int pshared, unsigned int value, const char *file,
-                const char *func, int line, const char *sem_name);
-#define SEM_INIT(sem, pshared, value) _SEM_INIT_(sem, pshared, value, __FILE__, __func__, __LINE__, #sem)
+void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
+                      const char *file,
+                      const char *func, int line, const char *sem_name);
+#define SEM_INIT(sem, pshared, value) sem_init_wrapper(sem, pshared, value, __FILE__, __func__, __LINE__, #sem)
 
 /**
  * \brief wrapper for sem_destroy(), with error handling
  */
-void _SEM_DESTROY_(sem_t *sem, const char *file, const char *func, int line,
-                   const char *sem_name);
-#define SEM_DESTROY(sem) _SEM_DESTROY_(sem, __FILE__, __func__, __LINE__, #sem)
+void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
+                         int line,
+                         const char *sem_name);
+#define SEM_DESTROY(sem) sem_destroy_wrapper(sem, __FILE__, __func__, __LINE__, #sem)
 
 /**
  * \brief wrapper for sem_wait(), with error handling
  */
-void _SEM_WAIT_(const char *file, const char *func, int line, sem_t *sem,
-                const char *sem_name);
-#define SEM_WAIT(sem) _SEM_WAIT_(__FILE__, __func__, __LINE__, sem, #sem)
+void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
+                      const char *sem_name);
+#define SEM_WAIT(sem) sem_wait_wrapper(__FILE__, __func__, __LINE__, sem, #sem)
 
 /**
  * \brief wrapper for sem_post(), with error handling
  */
-void _SEM_POST_(const char *file, const char *func, int line, sem_t *sem,
-                const char *sem_name);
-#define SEM_POST(sem) _SEM_POST_(__FILE__, __func__, __LINE__, sem, #sem)
+void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
+                      const char *sem_name);
+#define SEM_POST(sem) sem_post_wrapper(__FILE__, __func__, __LINE__, sem, #sem)
 
 /**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling
  */
-void exit_failure(void);
+void exit_failure(void) __attribute__((noreturn));
 
 /**
  * \brief erase a string from the terminal

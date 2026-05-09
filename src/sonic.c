@@ -184,17 +184,8 @@ XML_parser_general(void *data, const char *elem, const char **attr)
      * Please refer to the documentation at the function prototype of
      * sonic_LinkTable_new_id3()
      */
-    if (!strcmp(elem, "child")) {
-        link = CALLOC(1, sizeof(Link));
-        /*
-         * Initialise to LINK_DIR, as the LINK_FILE is set later.
-         */
-        link->type = LINK_DIR;
-    } else if (!strcmp(elem, "artist")
-               && linktbl->links[0]->sonic.depth != 3) {
-        /*
-         * We want to skip the first "artist" element in the album table
-         */
+    if (!strcmp(elem, "child") || (!strcmp(elem, "artist")
+                                   && linktbl->links[0]->sonic.depth != 3)) {
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_DIR;
     } else if (!strcmp(elem, "album")
@@ -275,12 +266,12 @@ XML_parser_general(void *data, const char *elem, const char **attr)
         }
 
         if (!strcmp("size", attr[i])) {
-            link->content_length = atoll(attr[i + 1]);
+            link->content_length = strtoll(attr[i + 1], NULL, 10);
             continue;
         }
 
         if (!strcmp("track", attr[i])) {
-            track = atoi(attr[i + 1]);
+            track = (int) strtol(attr[i + 1], NULL, 10);
             continue;
         }
 
@@ -389,7 +380,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
 LinkTable *sonic_LinkTable_new_index(const char *id)
 {
     char *url;
-    if (strcmp(id, "0")) {
+    if (strcmp(id, "0") != 0) {
         url = sonic_getMusicDirectory_link(id);
     } else {
         url = sonic_gen_url_first_part("getIndexes");
@@ -491,7 +482,7 @@ XML_parser_id3_root(void *data, const char *elem, const char **attr)
 LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
 {
     char *url;
-    LinkTable *linktbl = ROOT_LINK_TBL;
+    LinkTable *linktbl;
     switch (depth) {
     /*
      * Root table

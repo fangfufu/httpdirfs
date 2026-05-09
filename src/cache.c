@@ -205,9 +205,6 @@ void CacheSystem_clear(void)
 static int Meta_read(Cache *cf)
 {
     FILE *fp = cf->mfp;
-    rewind(fp);
-
-    int nmemb = 0;
 
     if (!fp) {
         /*
@@ -216,6 +213,13 @@ static int Meta_read(Cache *cf)
         lprintf(error, "fopen(): %s\n", strerror(errno));
         return EIO;
     }
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        lprintf(error, "fseek(): %s\n", strerror(errno));
+        return EIO;
+    }
+
+    int nmemb = 0;
 
     if (    1 != fread(&cf->time, sizeof(long), 1, fp) ||
             1 != fread(&cf->content_length, sizeof(off_t), 1, fp) ||
@@ -289,13 +293,17 @@ file!\n");
 static int Meta_write(Cache *cf)
 {
     FILE *fp = cf->mfp;
-    rewind(fp);
 
     if (!fp) {
         /*
          * Cannot create the metadata file
          */
         lprintf(error, "fopen(): %s\n", strerror(errno));
+        return -1;
+    }
+
+    if (fseek(fp, 0, SEEK_SET) != 0) {
+        lprintf(error, "fseek(): %s\n", strerror(errno));
         return -1;
     }
 
@@ -448,7 +456,7 @@ end:
  *  - otherwise, the number of bytes written.
  */
 static long Data_write(Cache *cf, const uint8_t *buf, off_t len,
-                       off_t offset)
+                       off_t offset) // NOLINT(bugprone-easily-swappable-parameters)
 {
     if (len == 0) {
         /*
@@ -498,21 +506,24 @@ int CacheDir_create(const char *dirn)
 {
     char *metadirn = path_append(META_DIR, dirn);
     char *datadirn = path_append(DATA_DIR, dirn);
-    int i;
+    int res = 0;
 
-    i = -mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
-    if (i && (errno != EEXIST)) {
-        lprintf(fatal, "mkdir(): %s\n", strerror(errno));
+    if (mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0) {
+        if (errno != EEXIST) {
+            lprintf(fatal, "mkdir(%s): %s\n", metadirn, strerror(errno));
+            res |= 1;
+        }
     }
 
-    i |= -mkdir(datadirn,
-                S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) << 1;
-    if (i && (errno != EEXIST)) {
-        lprintf(fatal, "mkdir(): %s\n", strerror(errno));
+    if (mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0) {
+        if (errno != EEXIST) {
+            lprintf(fatal, "mkdir(%s): %s\n", datadirn, strerror(errno));
+            res |= 2;
+        }
     }
     FREE(datadirn);
     FREE(metadirn);
-    return -i;
+    return res;
 }
 
 /**
@@ -693,7 +704,7 @@ int Cache_create(const char *path)
 {
     Link *this_link = path_to_Link(path);
 
-    char *fn = "__UNINITIALISED__";
+    char *fn;
 
     if (CONFIG.mode == NORMAL) {
         fn = curl_easy_unescape(NULL,
@@ -744,9 +755,7 @@ int Cache_create(const char *path)
         lprintf(fatal, "Cache file creation failed for %s\n", path);
     }
 
-    if (CONFIG.mode == NORMAL) {
-        curl_free(fn);
-    } else if (CONFIG.mode == SONIC) {
+    if (CONFIG.mode == NORMAL || CONFIG.mode == SONIC) {
         curl_free(fn);
     }
 
@@ -964,7 +973,8 @@ static int Seg_exist(Cache *cf, off_t offset)
  * \param[in] i 1 for exist, 0 for doesn't exist
  * \note Call this after downloading a segment.
  */
-static void Seg_set(Cache *cf, off_t offset, int i)
+static void Seg_set(Cache *cf, off_t offset,
+                    int i) // NOLINT(bugprone-easily-swappable-parameters)
 {
     off_t byte = offset / cf->blksz;
     cf->seg[byte] = i;

@@ -104,7 +104,7 @@ char *CacheSystem_get_cache_dir(void);
  *  -   -3 failed to create both metadata and data directory.
  * \note Called by LinkTable_new()
  */
-int CacheDir_create(const char *fn);
+int CacheDir_create(const char *dirn);
 
 /**
  * \brief open a cache file set
@@ -144,6 +144,6 @@ void Cache_delete(const char *fn);
  * \return the length of the segment the cache system managed to obtain.
  * \note Called by fs_read(), verified to be working
  */
-long Cache_read(Cache *cf, char *const output_buf, const off_t len,
-                const off_t offset_start);
+long Cache_read(Cache *cf, char *output_buf, off_t len,
+                off_t offset_start);
 #endif

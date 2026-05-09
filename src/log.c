@@ -13,7 +13,7 @@ int log_level_init(void)
 {
     char *env = getenv("HTTPDIRFS_LOG_LEVEL");
     if (env) {
-        return atoi(env);
+        return (int) strtol(env, NULL, 10);
     }
 #ifdef DEBUG
     return DEFAULT_LOG_LEVEL | debug;

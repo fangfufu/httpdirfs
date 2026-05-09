@@ -1,6 +1,8 @@
 #ifndef LOG_H
 #define LOG_H
 
+#include "util.h"
+
 /**
  * \brief Log types
  */
@@ -19,7 +21,7 @@ typedef enum {
 /**
  * \brief The default log level
  */
-#define DEFAULT_LOG_LEVEL fatal | error | warning | info
+#define DEFAULT_LOG_LEVEL (fatal | error | warning | info)
 
 /**
  * \brief Get the log level from the environment.
@@ -31,14 +33,18 @@ int log_level_init(void);
  * \details This is for printing nice log messages
  */
 void log_printf(LogType type, const char *file, const char *func, int line,
-                const char *format, ...);
+                const char *format, ...); // NOLINT(bugprone-easily-swappable-parameters)
 
 /**
  * \brief Log type printf
  * \details This macro automatically prints out the filename and line number
  */
-#define lprintf(type, ...) \
-    log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__)
+#define lprintf(type, ...)                                                     \
+    do {                                                                       \
+        log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__);           \
+        if ((type) == fatal)                                                   \
+            exit_failure();                                                    \
+    } while (0)
 
 /**
  * \brief Print the version information for HTTPDirFS
