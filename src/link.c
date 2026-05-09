@@ -627,7 +627,7 @@ LinkTable *LinkTable_new(const char *url)
     }
 
     /*
-     * Download a new LinkTable because we didn't manange to load it from the
+     * Download a new LinkTable because we didn't manage to load it from the
      * disk
      */
     if (!linktbl) {

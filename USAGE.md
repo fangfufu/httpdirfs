@@ -24,7 +24,7 @@ HTTPDirFS supports the following usage flags:
             --cache-location    Set a custom cache location
                                 (default: "${XDG_CACHE_HOME}/httpdirfs")
             --cache-clear       Delete the cache directory or the custom location
-                                specifid with `--cache-location`, if the option is
+                                specified with `--cache-location`, if the option is
                                 seen first. Then exit in either case.
             --cacert            Certificate authority for the server
             --dl-seg-size       Set cache download segment size, in MB (default: 8)

@@ -746,7 +746,7 @@ int Cache_create(const char *path)
 
     Data_create(cf);
 
-    lprintf(cache_lock_debug, "Flusing cache file for %s after creating.\n", fn);
+    lprintf(cache_lock_debug, "Flushing cache file for %s after creating.\n", fn);
     Cache_free(cf);
 
     int res = Cache_exist(fn);

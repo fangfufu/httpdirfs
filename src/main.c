@@ -416,7 +416,7 @@ HTTPDirFS options:\n\
         --cache-location    Set a custom cache location\n\
                             (default: \"${XDG_CACHE_HOME}/httpdirfs\")\n\
         --cache-clear       Delete the cache directory or the custom location\n\
-                            specifid with `--cache-location`, if the option is\n\
+                            specified with `--cache-location`, if the option is\n\
                             seen first. Then exit in either case.\n\
         --cacert            Certificate authority for the server\n\
         --dl-seg-size       Set cache download segment size, in MB (default: 8)\n\
