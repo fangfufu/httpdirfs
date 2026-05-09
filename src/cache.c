@@ -1038,9 +1038,9 @@ static void Cache_bgdl_launcher(Cache *cf)
     }
 }
 
-long
-Cache_read1(Cache *cf, char *const output_buf, const off_t len,
-           const off_t offset_start)
+static long
+Cache_read_segment(Cache *cf, char *const output_buf, const off_t len,
+                   const off_t offset_start)
 {
     long send;
 
@@ -1147,8 +1147,11 @@ Cache_read(Cache *cf, char *const output_buf, off_t len,
     off_t send = 0;
     for (off_t start = offset_start, end; len > 0; len -= end-start, start = end) {
         end = start / cf->blksz * cf->blksz + cf->blksz;
-        if (end > start + len) end = start + len;
-        send += Cache_read1(cf, output_buf + (start - offset_start), end - start, start);
+        if (end > start + len) {
+            end = start + len;
+        }
+        send += Cache_read_segment(cf, output_buf + (start - offset_start), end - start,
+                                   start);
     }
     return send;
 }
