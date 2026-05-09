@@ -819,7 +819,7 @@ Cache *Cache_open(const char *fn)
      * Fill in the fs_path
      */
     cf->fs_path = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    strncpy(cf->fs_path, fn, MAX_PATH_LEN);
+    snprintf(cf->fs_path, MAX_PATH_LEN + 1, "%s", fn);
 
     /*
      * Set the path for the local cache file, if we are in sonic mode
@@ -1118,7 +1118,13 @@ which doesn't make sense\n", pthread_self(), recv);
 error.\n", recv, cf->blksz);
     }
     send = len;
-    memcpy(output_buf, recv_buf + (offset_start - dl_offset), send);
+    if (offset_start < dl_offset ||
+            (size_t)(offset_start - dl_offset) + (size_t)send > (size_t)cf->blksz) {
+        lprintf(error, "invalid offset or length for memcpy, aborting copy\n");
+        send = 0;
+    } else {
+        memcpy(output_buf, recv_buf + (offset_start - dl_offset), send);
+    }
     FREE(recv_buf);
 
     lprintf(cache_lock_debug,
