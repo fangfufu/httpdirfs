@@ -10,37 +10,58 @@ and this project adheres to
 
 ### Added
 
-- Added macOS build support and automated CI pipeline.
+- Added macOS build support and automated CI pipeline
+  ([200f70e](https://github.com/fangfufu/httpdirfs/commit/200f70e)).
 - Added `--invalid-refresh` flag to refresh invalid links during directory reads
+  ([68c305c](https://github.com/fangfufu/httpdirfs/commit/68c305c))
   (https://github.com/fangfufu/httpdirfs/issues/175).
-- Added `--zero-len-is-dir` flag to treat zero-length files as directories.
-- Added support for directory modified times and zero-length files.
+- Added `--zero-len-is-dir` flag to treat zero-length files as directories
+  ([9e750b9](https://github.com/fangfufu/httpdirfs/commit/9e750b9)).
+- Added support for directory modified times and zero-length files
+  ([2fde399](https://github.com/fangfufu/httpdirfs/commit/2fde399),
+  [00a6b35](https://github.com/fangfufu/httpdirfs/commit/00a6b35)).
 - Added `pre-commit` framework integration with Prettier and Clang-Tidy for code
-  quality and formatting.
-- Added `USAGE.md` for detailed command-line flag documentation.
+  quality and formatting
+  ([f557a2d](https://github.com/fangfufu/httpdirfs/commit/f557a2d)).
+- Added `USAGE.md` for detailed command-line flag documentation
+  ([c85c065](https://github.com/fangfufu/httpdirfs/commit/c85c065)).
 
 ### Changed
 
 - Transitioned background thread synchronization from mutexes to semaphores for
-  better reliability (https://github.com/fangfufu/httpdirfs/issues/91).
-- Improved error messages and debug output throughout the application.
-- Enhanced static analysis enforcement with comprehensive Clang-Tidy checks.
-- Updated documentation and build requirements for Debian 13 "Trixie".
+  better reliability
+  ([4ee7476](https://github.com/fangfufu/httpdirfs/commit/4ee7476))
+  (https://github.com/fangfufu/httpdirfs/issues/91).
+- Improved error messages and debug output throughout the application
+  ([405d097](https://github.com/fangfufu/httpdirfs/commit/405d097)).
+- Enhanced static analysis enforcement with comprehensive Clang-Tidy checks
+  ([9ae4f89](https://github.com/fangfufu/httpdirfs/commit/9ae4f89)).
+- Updated documentation and build requirements for Debian 13 "Trixie"
+  ([f44d040](https://github.com/fangfufu/httpdirfs/commit/f44d040)).
 - Refined filename character restrictions for improved compatibility
+  ([6476571](https://github.com/fangfufu/httpdirfs/commit/6476571))
   (https://github.com/fangfufu/httpdirfs/issues/178).
-- Updated `help2man` options to exclude info pages.
+- Updated `help2man` options to exclude info pages
+  ([2ebd190](https://github.com/fangfufu/httpdirfs/commit/2ebd190)).
 
 ### Fixed
 
-- Resolved macOS FUSE API compatibility issues and compilation errors.
+- Resolved macOS FUSE API compatibility issues and compilation errors
+  ([200f70e](https://github.com/fangfufu/httpdirfs/commit/200f70e)).
 - Fixed various race conditions and potential deadlocks in thread management
+  ([42dd71e](https://github.com/fangfufu/httpdirfs/commit/42dd71e))
   (https://github.com/fangfufu/httpdirfs/issues/174).
 - Fixed issues with duplicated file entries in certain directory listings
+  ([9424389](https://github.com/fangfufu/httpdirfs/commit/9424389))
   (https://github.com/fangfufu/httpdirfs/issues/176).
-- Fixed cache corruption occurring on write errors.
-- Fixed Nginx-specific directory listing parsing issues.
-- Fixed `const`-correctness for `strchr`/`strrchr` wrappers.
-- Fixed link name comparison logic (`linknames_equal`).
+- Fixed cache corruption occurring on write errors
+  ([fe1cce4](https://github.com/fangfufu/httpdirfs/commit/fe1cce4)).
+- Fixed Nginx-specific directory listing parsing issues
+  ([3527f52](https://github.com/fangfufu/httpdirfs/commit/3527f52)).
+- Fixed `const`-correctness for `strchr`/`strrchr` wrappers
+  ([92622fc](https://github.com/fangfufu/httpdirfs/commit/92622fc)).
+- Fixed link name comparison logic (`linknames_equal`)
+  ([4c1a285](https://github.com/fangfufu/httpdirfs/commit/4c1a285)).
 
 ## [1.2.7] - 2024-11-11
 
