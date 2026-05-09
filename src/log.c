@@ -13,7 +13,7 @@ int log_level_init(void)
 {
     char *env = getenv("HTTPDIRFS_LOG_LEVEL");
     if (env) {
-        return (int) strtol(env, NULL, 10);
+        return (int)strtol(env, NULL, 10);
     }
 #ifdef DEBUG
     return DEFAULT_LOG_LEVEL | debug;
@@ -22,9 +22,8 @@ int log_level_init(void)
 #endif
 }
 
-void
-log_printf(LogType type, const char *file, const char *func, int line,
-           const char *format, ...)
+void log_printf(LogType type, const char *file, const char *func, int line,
+                const char *format, ...)
 {
     if (type & CONFIG.log_type) {
         switch (type) {
@@ -50,8 +49,8 @@ log_printf(LogType type, const char *file, const char *func, int line,
 
         fprintf(stderr, "%s:%d:", file, line);
 
-print_actual_message: {
-        }
+    print_actual_message: {
+    }
         fprintf(stderr, "%s: ", func);
         va_list args;
         va_start(args, format);

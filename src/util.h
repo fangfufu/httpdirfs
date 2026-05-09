@@ -28,45 +28,52 @@ int64_t round_div(int64_t a, int64_t b);
  */
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
                                 const pthread_mutexattr_t *attr,
-                                const char *file, const char *func, int line, const char *x_name);
-#define PTHREAD_MUTEX_INIT(x, attr) pthread_mutex_init_wrapper(x, attr, __FILE__, __func__, __LINE__, #x)
+                                const char *file, const char *func, int line,
+                                const char *x_name);
+#define PTHREAD_MUTEX_INIT(x, attr)                                            \
+    pthread_mutex_init_wrapper(x, attr, __FILE__, __func__, __LINE__, #x)
 
 /**
  * \brief wrapper for pthread_mutex_destroy(), with error handling
  */
 void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
-                                   const char *func, int line, const char *x_name);
-#define PTHREAD_MUTEX_DESTROY(x) pthread_mutex_destroy_wrapper(x, __FILE__, __func__, __LINE__, #x)
+                                   const char *func, int line,
+                                   const char *x_name);
+#define PTHREAD_MUTEX_DESTROY(x)                                               \
+    pthread_mutex_destroy_wrapper(x, __FILE__, __func__, __LINE__, #x)
 
 /**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
 void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
                                 pthread_mutex_t *x, const char *x_name);
-#define PTHREAD_MUTEX_LOCK(x) pthread_mutex_lock_wrapper(__FILE__, __func__, __LINE__, x, #x)
+#define PTHREAD_MUTEX_LOCK(x)                                                  \
+    pthread_mutex_lock_wrapper(__FILE__, __func__, __LINE__, x, #x)
 
 /**
  * \brief wrapper for pthread_mutex_unlock(), with error handling
  */
 void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
                                   pthread_mutex_t *x, const char *x_name);
-#define PTHREAD_MUTEX_UNLOCK(x) pthread_mutex_unlock_wrapper(__FILE__, __func__, __LINE__, x, #x)
+#define PTHREAD_MUTEX_UNLOCK(x)                                                \
+    pthread_mutex_unlock_wrapper(__FILE__, __func__, __LINE__, x, #x)
 
 /**
  * \brief wrapper for sem_init(), with error handling
  * */
 void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
-                      const char *file,
-                      const char *func, int line, const char *sem_name);
-#define SEM_INIT(sem, pshared, value) sem_init_wrapper(sem, pshared, value, __FILE__, __func__, __LINE__, #sem)
+                      const char *file, const char *func, int line,
+                      const char *sem_name);
+#define SEM_INIT(sem, pshared, value)                                          \
+    sem_init_wrapper(sem, pshared, value, __FILE__, __func__, __LINE__, #sem)
 
 /**
  * \brief wrapper for sem_destroy(), with error handling
  */
 void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
-                         int line,
-                         const char *sem_name);
-#define SEM_DESTROY(sem) sem_destroy_wrapper(sem, __FILE__, __func__, __LINE__, #sem)
+                         int line, const char *sem_name);
+#define SEM_DESTROY(sem)                                                       \
+    sem_destroy_wrapper(sem, __FILE__, __func__, __LINE__, #sem)
 
 /**
  * \brief wrapper for sem_wait(), with error handling
