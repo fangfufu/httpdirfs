@@ -30,7 +30,7 @@ enabled.
 (https://github.com/fangfufu/httpdirfs/pull/155)
 - Fix Segmentation fault if HOME not set
 (https://github.com/fangfufu/httpdirfs/pull/162)
-- Handle sites that use absolute links and sites that require the final slash 
+- Handle sites that use absolute links and sites that require the final slash
 (https://github.com/fangfufu/httpdirfs/pull/121)
 
 ### Added
@@ -38,7 +38,7 @@ enabled.
 (https://github.com/fangfufu/httpdirfs/issues/157)
 - Add ``--cache-clear`` option
 (https://github.com/fangfufu/httpdirfs/issues/111)
-- Add ``--refresh-timeout`` to set refresh timeout for directory contents 
+- Add ``--refresh-timeout`` to set refresh timeout for directory contents
 (https://github.com/fangfufu/httpdirfs/pull/114)
 
 ### Changed

@@ -1,0 +1,17 @@
+repos:
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+    -   id: trailing-whitespace
+    -   id: end-of-file-fixer
+    -   id: check-yaml
+    -   id: check-added-large-files
+    -   id: check-merge-conflict
+-   repo: local
+    hooks:
+    -   id: format
+        name: format
+        entry: ./scripts/format.sh
+        language: script
+        pass_filenames: false
+        files: \.(c|h)$

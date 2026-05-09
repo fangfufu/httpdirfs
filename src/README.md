@@ -10,7 +10,12 @@
 ## Indentation style
 
 Before submitting your pull request, you need to run your code through the
-formatter. You need to enter your ``builddir``, then run:
+formatter. You can use `pre-commit` to automatically format your code:
+
+    pip install pre-commit
+    pre-commit install
+
+Alternatively, you can run it manually through Meson:
 
     meson compile format
 
