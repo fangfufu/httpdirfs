@@ -100,6 +100,10 @@ To compile the program, you might need to set the `PKG_CONFIG_PATH` so that
     cd builddir
     meson compile
 
+Please note that while macOS build instructions are provided, macOS build
+testing is primarily done via GitHub Actions CI, as I do not have regular access
+to a physical Mac.
+
 ### Other operating systems
 
 I don't have the resources to test out compilation for Linux distributions other
@@ -109,38 +113,24 @@ in the README for now. Please feel free to send me a pull request to add them
 back in. It is known that HTTPDirFS
 [does compile](https://github.com/fangfufu/httpdirfs/issues/165) on FreeBSD.
 
-Please note that while macOS build instructions are provided, macOS build
-testing is primarily done via GitHub Actions CI, as I do not have regular access
-to a physical Mac.
-
 ## Installation
-
-Please note if you install HTTDirFS from a repository, it can be outdated.
 
 ### Debian 13 "Trixie"
 
-HTTPDirFS is available as a package in Debian 13 "Trixie", If you are on Debian
-Trixie, you can simply run the following command as `root`:
+HTTPDirFS is developed on Debian, and it is available as a package in Debian 13
+"Trixie". If you are on Debian Trixie, you can simply run the following command
+as `root`:
 
-apt install httpdirfs
+    apt install httpdirfs
 
 For more information on the status of HTTDirFS in Debian, please refer to
 [Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
 
-### Arch Linux
+### Other distributions
 
-HTTPDirFS is available in the
-[Arch User Repository](https://aur.archlinux.org/packages/httpdirfs).
+Please note if you install HTTDirFS from a repository, it may be outdated.
 
-### NixOS
-
-HTTPDirFS is available as a
-[package](https://mynixos.com/nixpkgs/package/httpdirfs).
-
-### FreeBSD
-
-HTTPDirFS is available in the
-[FreeBSD Ports Collection](https://www.freshports.org/sysutils/fusefs-httpdirfs/).
+[![Packaging status](https://repology.org/badge/vertical-allrepos/fusefs%3Ahttpdirfs.svg)](https://repology.org/project/fusefs%3Ahttpdirfs/versions)
 
 ## Airsonic / Subsonic server support
 
