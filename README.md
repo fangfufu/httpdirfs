@@ -84,14 +84,34 @@ To clean the build directory, run:
 For more information, please refer to this
 [tutorial](https://mesonbuild.com/Tutorial.html).
 
+### macOS
+
+Under macOS, you can use [Homebrew](https://brew.sh/) to install the
+dependencies:
+
+    brew install gumbo-parser openssl curl expat meson pkg-config ossp-uuid
+    brew install --cask macfuse
+
+To compile the program, you might need to set the `PKG_CONFIG_PATH` so that
+`meson` can find `openssl`:
+
+    export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
+    meson setup builddir
+    cd builddir
+    meson compile
+
 ### Other operating systems
 
 I don't have the resources to test out compilation for Linux distributions other
 than Debian. I also do not have the resources to test out compilation for
-FreeBSD or macOS. Thereforce I have removed the instruction on how to compile
-for these operating systems in the README for now. Please feel free to send me a
-pull request to add them back in. It is known that HTTPDirFS
+FreeBSD. Therefore, I have removed the instruction on how to compile for FreeBSD
+in the README for now. Please feel free to send me a pull request to add them
+back in. It is known that HTTPDirFS
 [does compile](https://github.com/fangfufu/httpdirfs/issues/165) on FreeBSD.
+
+Please note that while macOS build instructions are provided, macOS build
+testing is primarily done via GitHub Actions CI, as I do not have regular access
+to a physical Mac.
 
 ## Installation
 
@@ -276,8 +296,13 @@ Filenames must:
 
 - Consists of printable characters
 - Must not contain '/' in the middle of the filename.
+- Must not end with '/'.
 
-'/' must be at the end to be a valid directory name.
+Directories must:
+
+- Consists of printable characters
+- Must not contain '/' in the middle of the directory name.
+- Must end with '/'.
 
 The exact change that set these rules was done in commit
 [647657169574bf7be29f858ff3d1a3a70d27d661](https://github.com/fangfufu/httpdirfs/commit/647657169574bf7be29f858ff3d1a3a70d27d661).
