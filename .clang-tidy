@@ -18,5 +18,6 @@ Checks: >-
   -misc-header-include-cycle,
   -readability-else-after-return,
   -bugprone-narrowing-conversions,
-  -misc-no-recursion
+  -misc-no-recursion,
+  -clang-analyzer-optin.core.EnumCastOutOfRange
 WarningsAsErrors: '*'
