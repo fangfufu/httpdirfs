@@ -1,0 +1,68 @@
+name: Build
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+
+jobs:
+  build-mac:
+    name: Build (macOS)
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        brew update
+        brew install \
+          gumbo-parser \
+          openssl \
+          curl \
+          expat \
+          meson \
+          pkg-config \
+          ossp-uuid
+        brew install --cask macfuse
+
+    - name: Setup Meson
+      run: |
+        OPENSSL_PREFIX=$(brew --prefix openssl@3)
+        BREW_PREFIX=$(brew --prefix)
+        export PKG_CONFIG_PATH="$OPENSSL_PREFIX/lib/pkgconfig:$BREW_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+        meson setup builddir
+
+    - name: Compile
+      run: meson compile -C builddir
+
+  build-ubuntu:
+    name: Build (Ubuntu, ${{ matrix.compiler }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        compiler: [gcc, clang]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          libgumbo-dev \
+          libcurl4-openssl-dev \
+          libfuse3-dev \
+          uuid-dev \
+          libexpat1-dev \
+          libssl-dev \
+          meson \
+          ninja-build \
+          help2man
+
+    - name: Setup Meson
+      run: |
+        export CC=${{ matrix.compiler }}
+        meson setup builddir
+
+    - name: Compile
+      run: meson compile -C builddir

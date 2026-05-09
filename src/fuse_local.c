@@ -6,6 +6,10 @@
 /*
  * must be included before including <fuse.h>
  */
+#if defined(__APPLE__) && defined(__MACH__)
+#define FUSE_DARWIN_ENABLE_EXTENSIONS 0
+#endif
+
 #define FUSE_USE_VERSION 30
 #include <fuse.h>
 
@@ -50,7 +54,9 @@ static int fs_getattr(const char *path, struct stat *stbuf,
         struct timespec spec = { 0 };
         spec.tv_sec = link->time;
 #if defined(__APPLE__) && defined(__MACH__)
-        stbuf->st_mtimespec = spec;
+        stbuf->st_mtime = spec.tv_sec;
+        stbuf->st_atime = spec.tv_sec;
+        stbuf->st_ctime = spec.tv_sec;
 #else
         stbuf->st_mtim = spec;
 #endif
