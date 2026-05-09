@@ -112,7 +112,6 @@ curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
 {
     (void) n_running_curl;
     (void) n_mesgs;
-    static volatile int slept = 0;
     if (curl_msg->msg == CURLMSG_DONE) {
         TransferStruct *ts;
         CURL *curl = curl_msg->easy_handle;
@@ -127,26 +126,6 @@ curl_process_msgs(CURLMsg *curl_msg, int n_running_curl, int n_mesgs)
         ret = curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
-        }
-
-        /*
-         * Wait for 5 seconds if we get HTTP 429
-         */
-        long http_resp = 0;
-        ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-        if (ret) {
-            lprintf(error, "%s", curl_easy_strerror(ret));
-        }
-        if (HTTP_temp_failure(http_resp)) {
-            if (!slept) {
-                lprintf(warning,
-                        "HTTP %ld, sleeping for %d sec\n",
-                        http_resp, CONFIG.http_wait_sec);
-                sleep(CONFIG.http_wait_sec);
-                slept = 1;
-            }
-        } else {
-            slept = 0;
         }
 
         if (!curl_msg->data.result) {
