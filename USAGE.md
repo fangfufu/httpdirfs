@@ -1,7 +1,7 @@
 ## HTTPDirFS Usage
 
 As of commit
-[200f70e7ec2cf7e9ce6a51556735d5c030e5f260](https://github.com/fangfufu/httpdirfs/commit/200f70e7ec2cf7e9ce6a51556735d5c030e5f260),
+[a134774a823a684828589c9db78cfd0b80bdcbb5](https://github.com/fangfufu/httpdirfs/commit/a134774a823a684828589c9db78cfd0b80bdcbb5),
 HTTPDirFS supports the following usage flags:
 
     usage: ./httpdirfs [options] URL mountpoint
@@ -11,6 +11,9 @@ HTTPDirFS supports the following usage flags:
         -o opt,[opt...]         Mount options
         -h  --help              Print help
         -V  --version           Print version
+        -f                      Foreground operation
+        -s                      Disable multi-threaded operation
+        -d  --debug             Enable debug output (implies -f)
 
     HTTPDirFS options:
         -u  --username          HTTP authentication username

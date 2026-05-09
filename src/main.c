@@ -401,6 +401,9 @@ general options:\n\
     -o opt,[opt...]         Mount options\n\
     -h  --help              Print help\n\
     -V  --version           Print version\n\
+    -f                      Foreground operation\n\
+    -s                      Disable multi-threaded operation\n\
+    -d  --debug             Enable debug output (implies -f)\n\
 \n\
 HTTPDirFS options:\n\
     -u  --username          HTTP authentication username\n\
