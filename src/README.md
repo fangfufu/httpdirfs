@@ -22,9 +22,9 @@ Alternatively, you can run it manually through Meson:
 ## Doxygen documentation
 
 To generate Doxygen documentation (which can be very helpful for development),
-you need to enter your ``builddir``, then run:
+you need to enter your `builddir`, then run:
 
     meson compile doxygen
 
-The Doxygen documentation will be generated in the ``doxygen`` under the root
-of the repository.
+The Doxygen documentation will be generated in the `doxygen` under the root of
+the repository.
