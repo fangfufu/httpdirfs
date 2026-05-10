@@ -11,7 +11,7 @@ jobs:
     name: Build (macOS)
     runs-on: macos-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Install dependencies
       run: |
@@ -43,7 +43,7 @@ jobs:
       matrix:
         compiler: [gcc, clang]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
 
     - name: Install dependencies
       run: |
