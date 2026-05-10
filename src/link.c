@@ -284,7 +284,7 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
              * If no handles are running but u > 0, we have an error
              * and we must break to avoid infinite loop.
              */
-            if (n_running == 0 && u > 0) {
+            if (n_running == 0) {
                 lprintf(error, "Some links failed to initialize.\n");
                 for (int i = 0; i < linktbl->num; i++) {
                     Link *this_link = linktbl->links[i];
