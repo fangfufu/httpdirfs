@@ -234,33 +234,70 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
     int u;
     char s[STATUS_LEN];
     lprintf(debug, " ... ");
+
+    /*
+     * Start all uninitialized requests once
+     */
+    int total_uninitialized = 0;
+    for (int i = 0; i < linktbl->num; i++) {
+        Link *this_link = linktbl->links[i];
+        if (this_link->type == LINK_UNINITIALISED_FILE
+            || this_link->type == LINK_UNINITIALISED_DIR) {
+            Link_req_file_stat(linktbl->links[i]);
+            total_uninitialized++;
+        }
+    }
+
+    if (total_uninitialized == 0) {
+        lprintf(debug, "Done!\n");
+        return;
+    }
+
+    int n = total_uninitialized;
+    int j = 0;
     do {
         u = 0;
         for (int i = 0; i < linktbl->num; i++) {
             Link *this_link = linktbl->links[i];
             if (this_link->type == LINK_UNINITIALISED_FILE
                 || this_link->type == LINK_UNINITIALISED_DIR) {
-                Link_req_file_stat(linktbl->links[i]);
                 u++;
             }
         }
-        /*
-         * Block until the gaps are filled
-         */
-        int n = curl_multi_perform_once();
-        int i = 0;
-        int j = 0;
-        while ((i = curl_multi_perform_once())) {
+
+        if (u > 0) {
             if (CONFIG.log_type & debug) {
                 if (j) {
                     erase_string(stderr, STATUS_LEN, s);
                 }
-                snprintf(s, STATUS_LEN, "%d / %d", n - i, n);
+                snprintf(s, STATUS_LEN, "%d / %d", n - u, n);
                 fprintf(stderr, "%s", s);
                 j++;
             }
+
+            /*
+             * Block until some handles are processed
+             */
+            int n_running = curl_multi_perform_once();
+
+            /*
+             * If no handles are running but u > 0, we have an error
+             * and we must break to avoid infinite loop.
+             */
+            if (n_running == 0 && u > 0) {
+                lprintf(error, "Some links failed to initialize.\n");
+                for (int i = 0; i < linktbl->num; i++) {
+                    Link *this_link = linktbl->links[i];
+                    if (this_link->type == LINK_UNINITIALISED_FILE
+                        || this_link->type == LINK_UNINITIALISED_DIR) {
+                        this_link->type = LINK_INVALID;
+                    }
+                }
+                break;
+            }
         }
-    } while (u);
+    } while (u > 0);
+
     if (CONFIG.log_type & debug) {
         erase_string(stderr, STATUS_LEN, s);
         fprintf(stderr, "... Done!\n");
@@ -802,6 +839,9 @@ LinkTable *path_to_LinkTable(const char *path)
         tmp_link = &link_cpy;
     } else {
         link = path_to_Link(path);
+        if (!link) {
+            return NULL;
+        }
         tmp_link = link;
     }
 
@@ -837,6 +877,10 @@ LinkTable *path_to_LinkTable(const char *path)
 
 static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 {
+    if (!linktbl || !path || path[0] == '\0') {
+        return NULL;
+    }
+
     /*
      * skip the leading '/' if it exists
      */
@@ -847,12 +891,15 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     /*
      * remove the last '/' if it exists
      */
-    char *slash = &(path[strnlen(path, MAX_PATH_LEN) - 1]);
-    if (*slash == '/') {
-        *slash = '\0';
+    size_t path_len = strnlen(path, MAX_PATH_LEN);
+    if (path_len > 0) {
+        char *slash = &(path[path_len - 1]);
+        if (*slash == '/') {
+            *slash = '\0';
+        }
     }
 
-    slash = strchr(path, '/');
+    char *slash = strchr(path, '/');
     if (slash == NULL) {
         /*
          * We cannot find another '/', we have reached the last level

@@ -135,6 +135,14 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
         } else {
             lprintf(error, "%d - %s <%s>\n", curl_msg->data.result,
                     curl_easy_strerror(curl_msg->data.result), url);
+            /*
+             * If the transfer failed, and we are querying the file size,
+             * we must mark the link as invalid so that the link table
+             * fill function can proceed.
+             */
+            if (ts->type == FILESTAT) {
+                ts->link->type = LINK_INVALID;
+            }
         }
         curl_multi_remove_handle(curl_multi, curl);
         /*
