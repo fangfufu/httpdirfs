@@ -254,8 +254,6 @@ void FREE(void *ptr)
 {
     if (ptr) {
         free(ptr);
-    } else {
-        lprintf(fatal, "attempted to free NULL ptr!\n");
     }
 }
 
