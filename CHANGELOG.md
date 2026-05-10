@@ -97,6 +97,10 @@ and this project adheres to
   (https://github.com/fangfufu/httpdirfs/pull/203).
 - Fixed issue #193: Support parsing links to intermediate subdirectories
   (https://github.com/fangfufu/httpdirfs/issues/193).
+- Fixed issues #100 and #102: Fixed argument parsing to support options passed
+  after the mountpoint, enabling compatibility with `fstab` and `mount`.
+  (https://github.com/fangfufu/httpdirfs/issues/100,
+  https://github.com/fangfufu/httpdirfs/issues/102).
 - Fixed security vulnerability V-001
   ([4584847](https://github.com/fangfufu/httpdirfs/commit/4584847)).
 
