@@ -236,12 +236,11 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
          * "name" is for top level directories
          * N.B. "path" attribute is given the preference
          */
-        if (!linkname_set) {
-            if (!strcmp("title", attr[i]) || !strcmp("name", attr[i])) {
-                strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
-                linkname_set = 1;
-                continue;
-            }
+        if (!linkname_set
+            && (!strcmp("title", attr[i]) || !strcmp("name", attr[i]))) {
+            strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
+            linkname_set = 1;
+            continue;
         }
 
         if (!strcmp("isDir", attr[i])) {

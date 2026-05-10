@@ -503,18 +503,16 @@ int CacheDir_create(const char *dirn)
     char *datadirn = path_append(DATA_DIR, dirn);
     int res = 0;
 
-    if (mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0) {
-        if (errno != EEXIST) {
-            lprintf(fatal, "mkdir(%s): %s\n", metadirn, strerror(errno));
-            res |= 1;
-        }
+    if (mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0
+        && errno != EEXIST) {
+        lprintf(fatal, "mkdir(%s): %s\n", metadirn, strerror(errno));
+        res |= 1;
     }
 
-    if (mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0) {
-        if (errno != EEXIST) {
-            lprintf(fatal, "mkdir(%s): %s\n", datadirn, strerror(errno));
-            res |= 2;
-        }
+    if (mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0
+        && errno != EEXIST) {
+        lprintf(fatal, "mkdir(%s): %s\n", datadirn, strerror(errno));
+        res |= 2;
     }
     FREE(datadirn);
     FREE(metadirn);
@@ -614,16 +612,12 @@ void Cache_delete(const char *fn)
 
     char *metafn = path_append(META_DIR, fn);
     char *datafn = path_append(DATA_DIR, fn);
-    if (!access(metafn, F_OK)) {
-        if (unlink(metafn)) {
-            lprintf(error, "unlink(): %s\n", strerror(errno));
-        }
+    if (!access(metafn, F_OK) && unlink(metafn)) {
+        lprintf(error, "unlink(): %s\n", strerror(errno));
     }
 
-    if (!access(datafn, F_OK)) {
-        if (unlink(datafn)) {
-            lprintf(error, "unlink(): %s\n", strerror(errno));
-        }
+    if (!access(datafn, F_OK) && unlink(datafn)) {
+        lprintf(error, "unlink(): %s\n", strerror(errno));
     }
     FREE(metafn);
     FREE(datafn);

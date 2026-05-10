@@ -686,10 +686,8 @@ LinkTable *LinkTable_new(const char *url)
         /*
          * Save the link table
          */
-        if (CACHE_SYSTEM_INIT) {
-            if (LinkTable_disk_save(linktbl, unescaped_path)) {
-                lprintf(error, "Failed to save the LinkTable!\n");
-            }
+        if (CACHE_SYSTEM_INIT && LinkTable_disk_save(linktbl, unescaped_path)) {
+            lprintf(error, "Failed to save the LinkTable!\n");
         }
     }
 
