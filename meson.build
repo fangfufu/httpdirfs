@@ -7,8 +7,7 @@ project('httpdirfs', 'c',
         ]
 )
 
-srcs = [
-    'src/main.c',
+lib_srcs = [
     'src/network.c',
     'src/fuse_local.c',
     'src/link.c',
@@ -19,6 +18,10 @@ srcs = [
     'src/config.c',
     'src/memcache.c'
 ]
+
+srcs = [
+    'src/main.c'
+] + lib_srcs
 
 c_args = [
     '-Wpedantic',
