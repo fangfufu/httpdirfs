@@ -108,8 +108,8 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
 static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
                               int n_mesgs)
 {
-    (void) n_running_curl;
-    (void) n_mesgs;
+    (void)n_running_curl;
+    (void)n_mesgs;
     if (curl_msg->msg == CURLMSG_DONE) {
         TransferStruct *ts;
         CURL *curl = curl_msg->easy_handle;

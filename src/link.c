@@ -1048,9 +1048,8 @@ bug report, please include the following HTTP header information:\n%s\n",
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
     curl_off_t recv = -1;
-    if ((http_resp == HTTP_OK) ||
-            (http_resp == HTTP_PARTIAL_CONTENT) ||
-            (http_resp == HTTP_RANGE_NOT_SATISFIABLE)) {
+    if ((http_resp == HTTP_OK) || (http_resp == HTTP_PARTIAL_CONTENT)
+        || (http_resp == HTTP_RANGE_NOT_SATISFIABLE)) {
         ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
@@ -1094,7 +1093,8 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
         header.curr_size = 0;
         header.data = NULL;
 
-        CURL *curl = Link_download_curl_setup(link, req_size, offset, &header, &ts);
+        CURL *curl
+            = Link_download_curl_setup(link, req_size, offset, &header, &ts);
 
         transfer_blocking(curl);
 
@@ -1110,8 +1110,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
             return recv_sz;
         }
 
-        if (recv_sz != (long int) req_size) {
-            lprintf(error, "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
+        if (recv_sz != (long int)req_size) {
+            lprintf(error,
+                    "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
                     req_size, recv_sz);
             FREE(ts.data);
             sleep(CONFIG.http_wait_sec);
