@@ -95,6 +95,8 @@ and this project adheres to
 - Fixed issue #190: Implemented robust retry logic for network downloads
   ([08a7987](https://github.com/fangfufu/httpdirfs/commit/08a7987))
   (https://github.com/fangfufu/httpdirfs/pull/203).
+- Fixed issue #193: Support parsing links to intermediate subdirectories
+  (https://github.com/fangfufu/httpdirfs/issues/193).
 - Fixed security vulnerability V-001
   ([4584847](https://github.com/fangfufu/httpdirfs/commit/4584847)).
 
