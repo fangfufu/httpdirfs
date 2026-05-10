@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.2.8] - 2026-05-10
+
 ### Added
 
 - Added macOS build support and automated CI pipeline
@@ -509,7 +511,8 @@ and this project adheres to
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.7...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...master
+[1.2.8]: https://github.com/fangfufu/httpdirfs/compare/1.2.7...1.2.8
 [1.2.7]: https://github.com/fangfufu/httpdirfs/compare/1.2.6...1.2.7
 [1.2.6]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...1.2.6
 [1.2.5]: https://github.com/fangfufu/httpdirfs/compare/1.2.4...1.2.5

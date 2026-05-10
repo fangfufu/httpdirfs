@@ -1,5 +1,5 @@
 project('httpdirfs', 'c',
-    version: '1.2.7',
+    version: '1.2.8',
     license: 'GPL-3.0-or-later',
     default_options: [
         'buildtype=release',
