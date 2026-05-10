@@ -72,6 +72,7 @@ int main(int argc, char **argv)
     /*
      * parse the combined argument list
      */
+    optind = 1;
     if (parse_arg_list(all_argc, all_argv, &fuse_argv, &fuse_argc)) {
         /*
          * The user basically didn't supply enough arguments, if we reach here
@@ -80,13 +81,22 @@ int main(int argc, char **argv)
         goto fuse_start;
     }
 
+    if (optind + 2 != all_argc) {
+        fprintf(
+            stderr,
+            "Error: You must provide exactly one URL and one mountpoint.\n");
+        print_help(argv[0], 0);
+        exit(EXIT_FAILURE);
+    }
+
     /*--- Add the last remaining argument, which is the mountpoint ---*/
-    add_arg(&fuse_argv, &fuse_argc, argv[argc - 1]);
+    add_arg(&fuse_argv, &fuse_argc, all_argv[optind + 1]);
 
     /*
      * The second last remaining argument is the URL
      */
-    char *base_url = argv[argc - 2];
+    char *base_url = all_argv[optind];
+
     if (strncmp(base_url, "http://", 7) != 0
         && strncmp(base_url, "https://", 8) != 0) {
         fprintf(stderr, "Error: Please supply a valid URL.\n");
