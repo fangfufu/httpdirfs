@@ -953,6 +953,14 @@ TransferStruct Link_download_full(Link *link)
      */
     long http_resp = 0;
     do {
+        /*
+         * Reset the transfer struct for each attempt to avoid accumulating
+         * data from failed/partial attempts.
+         */
+        FREE(ts.data);
+        ts.curr_size = 0;
+        ts.transferring = 1;
+
         transfer_blocking(curl);
         ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (ret) {
@@ -1039,18 +1047,22 @@ bug report, please include the following HTTP header information:\n%s\n",
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
-    if ((http_resp != HTTP_OK) && (http_resp != HTTP_PARTIAL_CONTENT)
-        && (http_resp != HTTP_RANGE_NOT_SATISFIABLE)) {
+    curl_off_t recv = -1;
+    if ((http_resp == HTTP_OK) || (http_resp == HTTP_PARTIAL_CONTENT)
+        || (http_resp == HTTP_RANGE_NOT_SATISFIABLE)) {
+        ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
+        if (ret) {
+            lprintf(error, "%s", curl_easy_strerror(ret));
+        }
+    } else {
         char *url;
         curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
         lprintf(warning, "Could not download %s, HTTP %ld\n", url, http_resp);
-        return -ENOENT;
-    }
-
-    curl_off_t recv;
-    ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
-    if (ret) {
-        lprintf(error, "%s", curl_easy_strerror(ret));
+        if (HTTP_temp_failure(http_resp)) {
+            recv = -EAGAIN;
+        } else {
+            recv = -ENOENT;
+        }
     }
 
     curl_easy_cleanup(curl);
@@ -1061,14 +1073,8 @@ bug report, please include the following HTTP header information:\n%s\n",
 long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 {
     TransferStruct ts;
-    ts.curr_size = 0;
-    ts.data = NULL;
-    ts.type = DATA;
-    ts.transferring = 1;
-
     TransferStruct header;
-    header.curr_size = 0;
-    header.data = NULL;
+    curl_off_t recv_sz;
 
     size_t request_end = offset + req_size;
     if (request_end > link->content_length) {
@@ -1078,16 +1084,44 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
         req_size = link->content_length - offset;
     }
 
-    CURL *curl = Link_download_curl_setup(link, req_size, offset, &header, &ts);
+    do {
+        ts.curr_size = 0;
+        ts.data = NULL;
+        ts.type = DATA;
+        ts.transferring = 1;
 
-    transfer_blocking(curl);
+        header.curr_size = 0;
+        header.data = NULL;
 
-    curl_off_t recv_sz = Link_download_cleanup(curl, &header);
+        CURL *curl
+            = Link_download_curl_setup(link, req_size, offset, &header, &ts);
 
-    if (recv_sz != (long int)req_size) {
-        lprintf(error, "req_size != recv, req_size: %lu, recv: %ld\n", req_size,
-                recv_sz);
-    }
+        transfer_blocking(curl);
+
+        recv_sz = Link_download_cleanup(curl, &header);
+
+        if (recv_sz < 0) {
+            FREE(ts.data);
+            if (recv_sz == -EAGAIN) {
+                lprintf(warning, "HTTP temporary failure, retrying...\n");
+                sleep(CONFIG.http_wait_sec);
+                continue;
+            }
+            return recv_sz;
+        }
+
+        if (recv_sz != (long int)req_size) {
+            lprintf(error,
+                    "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
+                    req_size, recv_sz);
+            FREE(ts.data);
+            sleep(CONFIG.http_wait_sec);
+            continue;
+        }
+
+        /* success */
+        break;
+    } while (1);
 
     memmove(output_buf, ts.data, recv_sz);
     FREE(ts.data);
