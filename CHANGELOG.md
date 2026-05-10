@@ -25,6 +25,14 @@ and this project adheres to
   ([f557a2d](https://github.com/fangfufu/httpdirfs/commit/f557a2d)).
 - Added `USAGE.md` for detailed command-line flag documentation
   ([c85c065](https://github.com/fangfufu/httpdirfs/commit/c85c065)).
+- Added help text for `-f`, `-s`, and `--debug` flags
+  ([553745b](https://github.com/fangfufu/httpdirfs/commit/553745b)).
+- Added `codespell` to `pre-commit` and fixed spelling errors
+  ([a898adf](https://github.com/fangfufu/httpdirfs/commit/a898adf)).
+- Added Repology badge to documentation
+  ([996b925](https://github.com/fangfufu/httpdirfs/commit/996b925)).
+- Added a `pre-commit` GitHub workflow for automated checks
+  ([c5fc5d0](https://github.com/fangfufu/httpdirfs/commit/c5fc5d0)).
 
 ### Changed
 
@@ -43,6 +51,25 @@ and this project adheres to
   (https://github.com/fangfufu/httpdirfs/issues/178).
 - Updated `help2man` options to exclude info pages
   ([2ebd190](https://github.com/fangfufu/httpdirfs/commit/2ebd190)).
+- Refactored nested `if` statements for improved code conciseness
+  ([43906c9](https://github.com/fangfufu/httpdirfs/commit/43906c9)).
+- Simplified safety checks in `LinkTable_uninitialised_fill`
+  ([f593bba](https://github.com/fangfufu/httpdirfs/commit/f593bba)).
+- Allowed `FREE(NULL)` to match standard C `free()` behavior
+  ([5dc541e](https://github.com/fangfufu/httpdirfs/commit/5dc541e)).
+- Replaced `astyle` with `clang-format` for consistent code styling
+  ([a134774](https://github.com/fangfufu/httpdirfs/commit/a134774)).
+- Updated documentation with comprehensive `src/README.md` and pre-commit
+  instructions
+  ([04a8558](https://github.com/fangfufu/httpdirfs/commit/04a8558)).
+- Configured Prettier to prevent merging GitHub alert tags in documentation
+  ([cea9e65](https://github.com/fangfufu/httpdirfs/commit/cea9e65)).
+- Integrated Prettier hook for Markdown formatting
+  ([ee1c1fe](https://github.com/fangfufu/httpdirfs/commit/ee1c1fe)).
+- Refactored `Cache_read1` to `Cache_read_segment` and made it static
+  ([c3c2912](https://github.com/fangfufu/httpdirfs/commit/c3c2912)).
+- Optimized network activity by avoiding polling when a response is already
+  available ([a77a2f6](https://github.com/fangfufu/httpdirfs/commit/a77a2f6)).
 
 ### Fixed
 
@@ -62,6 +89,14 @@ and this project adheres to
   ([92622fc](https://github.com/fangfufu/httpdirfs/commit/92622fc)).
 - Fixed link name comparison logic (`linknames_equal`)
   ([4c1a285](https://github.com/fangfufu/httpdirfs/commit/4c1a285)).
+- Fixed issue #95: Avoid infinite hang when accessing directories returning 404
+  errors ([ed5e9fa](https://github.com/fangfufu/httpdirfs/commit/ed5e9fa))
+  (https://github.com/fangfufu/httpdirfs/issues/95).
+- Fixed issue #190: Implemented robust retry logic for network downloads
+  ([08a7987](https://github.com/fangfufu/httpdirfs/commit/08a7987))
+  (https://github.com/fangfufu/httpdirfs/pull/203).
+- Fixed security vulnerability V-001
+  ([4584847](https://github.com/fangfufu/httpdirfs/commit/4584847)).
 
 ### [1.2.7] - 2024-11-11
 
