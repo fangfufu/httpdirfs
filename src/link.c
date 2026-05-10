@@ -462,6 +462,15 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
         char *relative_url = (char *)href->value;
         make_link_relative(url, relative_url);
 
+        /* Truncate at the first slash to support links to subdirectories */
+        char *slash = strchr(relative_url, '/');
+        if (slash && slash != relative_url) {
+            /* Don't truncate full URIs like http://... */
+            if (*(slash - 1) != ':' && slash[1] != '/') {
+                slash[1] = '\0';
+            }
+        }
+
         /* if it is valid, copy the link onto the heap */
         LinkType type = linkname_to_LinkType(relative_url);
 
