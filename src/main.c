@@ -32,6 +32,7 @@ int main(int argc, char **argv)
      */
     char **fuse_argv = NULL;
     int fuse_argc = 0;
+    int res = 0;
     /*
      * These are the combined argument with the config file
      */
@@ -118,7 +119,7 @@ activate Sonic mode.\n");
     }
 
 fuse_start:
-    fuse_local_init(fuse_argc, fuse_argv);
+    res = fuse_local_init(fuse_argc, fuse_argv);
 
     for (int i = 0; i < all_argc; i++) {
         FREE(all_argv[i]);
@@ -132,7 +133,7 @@ fuse_start:
 
     FREE(config_path);
 
-    return 0;
+    return res;
 }
 
 static char *get_XDG_CONFIG_HOME(void)
