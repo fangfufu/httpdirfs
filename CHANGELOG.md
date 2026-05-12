@@ -6,19 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.2.9] - 2026-05-12
 
 ### Fixed
 
 - Improve link initialization error reporting
-  ([1983abb](https://github.com/fangfufu/httpdirfs/commit/1983abb))
+  ([8911119](https://github.com/fangfufu/httpdirfs/commit/8911119))
   (https://github.com/fangfufu/httpdirfs/issues/207).
 - Return the correct failure exit code
-  ([55a031f](https://github.com/fangfufu/httpdirfs/commit/55a031f))
+  ([5dd032a](https://github.com/fangfufu/httpdirfs/commit/5dd032a))
   (https://github.com/fangfufu/httpdirfs/issues/208).
 - Resolve mountpoint to absolute path to prevent unmount failure on termination
   for relative mountpoints
-  ([88f6980](https://github.com/fangfufu/httpdirfs/commit/88f6980278e4d5a2be3beca9c7b4f52683f5bbc1))
+  ([3a53c40](https://github.com/fangfufu/httpdirfs/commit/3a53c40))
   (https://github.com/fangfufu/httpdirfs/issues/177).
 
 ## [1.2.8] - 2026-05-10
@@ -524,7 +524,8 @@ and this project adheres to
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...master
+[1.2.9]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/fangfufu/httpdirfs/compare/1.2.7...1.2.8
 [1.2.7]: https://github.com/fangfufu/httpdirfs/compare/1.2.6...1.2.7
 [1.2.6]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...1.2.6
