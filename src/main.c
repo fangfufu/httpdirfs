@@ -3,6 +3,7 @@
 #include "log.h"
 #include "util.h"
 
+#include <errno.h>
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,7 +92,15 @@ int main(int argc, char **argv)
     }
 
     /*--- Add the last remaining argument, which is the mountpoint ---*/
-    add_arg(&fuse_argv, &fuse_argc, all_argv[optind + 1]);
+    char *abs_mountpoint = realpath(all_argv[optind + 1], NULL);
+    if (!abs_mountpoint) {
+        fprintf(stderr, "Error: Invalid mountpoint %s: %s\n",
+                all_argv[optind + 1], strerror(errno));
+        print_help(argv[0], 0);
+        exit(EXIT_FAILURE);
+    }
+    add_arg(&fuse_argv, &fuse_argc, abs_mountpoint);
+    FREE(abs_mountpoint);
 
     /*
      * The second last remaining argument is the URL
