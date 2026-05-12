@@ -1039,9 +1039,9 @@ TransferStruct Link_download_full(Link *link)
     return ts;
 }
 
-static CURL *Link_download_curl_setup(
-    Link *link, size_t req_size, off_t offset, TransferStruct *header,
-    TransferStruct *ts) // NOLINT(bugprone-easily-swappable-parameters)
+static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
+                                      TransferStruct *header,
+                                      TransferStruct *ts)
 {
     if (!link) {
         lprintf(fatal, "Invalid supplied\n");

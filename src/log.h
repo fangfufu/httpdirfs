@@ -33,8 +33,7 @@ int log_level_init(void);
  * \details This is for printing nice log messages
  */
 void log_printf(LogType type, const char *file, const char *func, int line,
-                const char *format,
-                ...); // NOLINT(bugprone-easily-swappable-parameters)
+                const char *format, ...);
 
 /**
  * \brief Log type printf

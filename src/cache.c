@@ -450,9 +450,7 @@ end:
  *  - -1 when the data file does not exist
  *  - otherwise, the number of bytes written.
  */
-static long
-Data_write(Cache *cf, const uint8_t *buf, off_t len,
-           off_t offset) // NOLINT(bugprone-easily-swappable-parameters)
+static long Data_write(Cache *cf, const uint8_t *buf, off_t len, off_t offset)
 {
     if (len == 0) {
         /*
@@ -959,8 +957,7 @@ static int Seg_exist(Cache *cf, off_t offset)
  * \param[in] i 1 for exist, 0 for doesn't exist
  * \note Call this after downloading a segment.
  */
-static void Seg_set(Cache *cf, off_t offset,
-                    int i) // NOLINT(bugprone-easily-swappable-parameters)
+static void Seg_set(Cache *cf, off_t offset, int i)
 {
     off_t byte = offset / cf->blksz;
     cf->seg[byte] = i;
