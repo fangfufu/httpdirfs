@@ -8,6 +8,15 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Improve link initialization error reporting
+  ([1983abb](https://github.com/fangfufu/httpdirfs/commit/1983abb))
+  (https://github.com/fangfufu/httpdirfs/issues/207).
+- Return the correct failure exit code
+  ([55a031f](https://github.com/fangfufu/httpdirfs/commit/55a031f))
+  (https://github.com/fangfufu/httpdirfs/issues/208).
+
 ## [1.2.8] - 2026-05-10
 
 ### Added
