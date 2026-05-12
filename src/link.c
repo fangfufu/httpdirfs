@@ -364,10 +364,10 @@ LinkTable *LinkSystem_init(const char *url)
 void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
-    Link **tmp = (Link **)realloc((void *)linktbl->links,
+    Link **tmp = (Link **)REALLOC((void *)linktbl->links,
                                   linktbl->num * sizeof(Link *));
     if (!tmp) {
-        lprintf(fatal, "realloc() failure!\n");
+        lprintf(fatal, "REALLOC() failure!\n");
     }
     linktbl->links = tmp;
     linktbl->links[linktbl->num - 1] = link;
@@ -649,10 +649,10 @@ LinkTable *LinkTable_new(const char *url)
              */
             time_t time_now = time(NULL);
             if (time_now - disk_linktbl->index_time > CONFIG.refresh_timeout) {
-                lprintf(info, "time_now: %ld, index_time: %ld\n", time_now,
-                        disk_linktbl->index_time);
+                lprintf(info, "time_now: %ld, index_time: %ld\n",
+                        (long)time_now, (long)disk_linktbl->index_time);
                 lprintf(info, "diff: %ld, limit: %d\n",
-                        time_now - disk_linktbl->index_time,
+                        (long)(time_now - disk_linktbl->index_time),
                         CONFIG.refresh_timeout);
                 LinkTable_free(disk_linktbl);
             } else {
@@ -668,7 +668,7 @@ LinkTable *LinkTable_new(const char *url)
     if (!linktbl) {
         linktbl = LinkTable_alloc(url);
         linktbl->index_time = time(NULL);
-        lprintf(debug, "linktbl->index_time: %ld\n", linktbl->index_time);
+        lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
 
         /*
          * start downloading the base URL
@@ -698,7 +698,7 @@ LinkTable *LinkTable_new(const char *url)
     }
 
     static unsigned long long i = 0;
-    lprintf(debug, "Calling LinkTable_new for the %lld time!\n", i);
+    lprintf(debug, "Calling LinkTable_new for the %llu time!\n", i);
     i++;
 
     free(unescaped_path);
@@ -740,7 +740,7 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
         return -1;
     }
 
-    lprintf(debug, "linktbl->index_time: %ld\n", linktbl->index_time);
+    lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
     if (fwrite(&linktbl->num, sizeof(int), 1, fp) != 1
         || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to save the header of %s!\n", path);
@@ -800,7 +800,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         FREE(path);
         return NULL;
     }
-    lprintf(debug, "linktbl->index_time: %ld\n", linktbl->index_time);
+    lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
 
     linktbl->links = (Link **)CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
@@ -968,7 +968,7 @@ Link *path_to_Link(const char *path)
             (unsigned long)pthread_self());
 
     PTHREAD_MUTEX_LOCK(&link_lock);
-    char *new_path = strndup(path, MAX_PATH_LEN);
+    char *new_path = STRNDUP(path, MAX_PATH_LEN);
     if (!new_path) {
         lprintf(fatal, "cannot allocate memory\n");
     }

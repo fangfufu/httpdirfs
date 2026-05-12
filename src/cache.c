@@ -47,7 +47,7 @@ char *CacheSystem_get_cache_dir(void)
 
     const char *xdg_cache_home = getenv("XDG_CACHE_HOME");
     if (xdg_cache_home) {
-        cache_dir = strndup(xdg_cache_home, MAX_PATH_LEN);
+        cache_dir = STRNDUP(xdg_cache_home, MAX_PATH_LEN);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
@@ -58,7 +58,7 @@ char *CacheSystem_get_cache_dir(void)
              * XDG_CACHE_HOME and HOME already are full paths. Not relying
              * on environment PWD since it too may be undefined.
              */
-            const char *cur_dir = realpath("./", NULL);
+            const char *cur_dir = REALPATH("./", NULL);
             if (cur_dir) {
                 cache_dir = path_append(cur_dir, default_cache_subdir);
             } else {
@@ -705,7 +705,7 @@ int Cache_create(const char *path)
     lprintf(debug, "Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
-    cf->path = strndup(fn, MAX_PATH_LEN);
+    cf->path = STRNDUP(fn, MAX_PATH_LEN);
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
     cf->blksz = CONFIG.data_blksz;
@@ -813,7 +813,7 @@ Cache *Cache_open(const char *fn)
         fn = link->sonic.id;
     }
 
-    cf->path = strndup(fn, MAX_PATH_LEN);
+    cf->path = STRNDUP(fn, MAX_PATH_LEN);
 
     /*
      * Associate the cache structure with a link
@@ -1055,7 +1055,7 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
          * Wait for any other download thread to finish
          */
 
-        lprintf(cache_lock_debug, "thread %ld: locking w_lock;\n",
+        lprintf(cache_lock_debug, "thread %lx: locking w_lock;\n",
                 (unsigned long)pthread_self());
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
 

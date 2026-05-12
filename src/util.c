@@ -3,6 +3,7 @@
 #include "config.h"
 #include "log.h"
 
+#include <curl/curl.h>
 #include <openssl/evp.h>
 #include <uuid/uuid.h>
 
@@ -28,6 +29,9 @@
  * \details This is basically the length of a UUID
  */
 #define SALT_LEN 36
+
+static MemNode *mem_head = NULL;
+static pthread_mutex_t mem_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 char *path_append(const char *path, const char *filename)
 {
@@ -87,8 +91,8 @@ void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
     ret = pthread_mutex_destroy(x);
     if (ret) {
         fatal_log_printf(file, func, line,
-                         "%lx pthread_mutex_destroy: %d, %s\n",
-                         (unsigned long)pthread_self(), ret, strerror(ret));
+                         "%lx pthread_mutex_destroy: %d, %s\n", pthread_self(),
+                         ret, strerror(ret));
     }
 }
 
@@ -242,19 +246,188 @@ char *generate_md5sum(const char *str)
     return out;
 }
 
-void *CALLOC(size_t nmemb, size_t size)
+void *CALLOC_wrapper(size_t nmemb, size_t size, const char *file,
+                     const char *func, int line)
 {
     void *ptr = calloc(nmemb, size);
     if (!ptr) {
-        lprintf(fatal, "%s!\n", strerror(errno));
+        fatal_log_printf(file, func, line, "%s!\n", strerror(errno));
+    }
+
+    log_printf(debug, file, func, line, "CALLOC: %p, %zu bytes\n", ptr,
+               nmemb * size);
+
+    MemNode *node = calloc(1, sizeof(MemNode));
+    if (!node) {
+        fatal_log_printf(file, func, line, "Could not allocate MemNode: %s!\n",
+                         strerror(errno));
+    }
+    node->ptr = ptr;
+    node->size = nmemb * size;
+    node->file = file;
+    node->func = func;
+    node->line = line;
+
+    pthread_mutex_lock(&mem_mutex);
+    node->next = mem_head;
+    mem_head = node;
+    pthread_mutex_unlock(&mem_mutex);
+
+    return ptr;
+}
+
+char *STRDUP_wrapper(const char *s, const char *file, const char *func,
+                     int line)
+{
+    if (!s) {
+        return NULL;
+    }
+    size_t len = strlen(s) + 1;
+    char *ptr = CALLOC_wrapper(len, sizeof(char), file, func, line);
+    if (ptr) {
+        memcpy(ptr, s, len);
     }
     return ptr;
 }
 
-void FREE(void *ptr)
+char *STRNDUP_wrapper(const char *s, size_t n, const char *file,
+                      const char *func, int line)
 {
+    if (!s) {
+        return NULL;
+    }
+    size_t len = strnlen(s, n);
+    char *ptr = CALLOC_wrapper(len + 1, sizeof(char), file, func, line);
     if (ptr) {
-        free(ptr);
+        memcpy(ptr, s, len);
+        ptr[len] = '\0';
+    }
+    return ptr;
+}
+
+void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
+                      const char *func, int line)
+{
+    if (!ptr) {
+        return CALLOC_wrapper(1, size, file, func, line);
+    }
+
+    pthread_mutex_lock(&mem_mutex);
+    MemNode **curr = &mem_head;
+    while (*curr) {
+        if ((*curr)->ptr == ptr) {
+            MemNode *node = *curr;
+            log_printf(debug, file, func, line, "REALLOC: %p, %zu bytes\n", ptr,
+                       size);
+            void *new_ptr = realloc(ptr, size);
+            if (!new_ptr) {
+                pthread_mutex_unlock(&mem_mutex);
+                fatal_log_printf(file, func, line, "realloc failed: %s!\n",
+                                 strerror(errno));
+            }
+            node->ptr = new_ptr;
+            node->size = size;
+            node->file = file;
+            node->func = func;
+            node->line = line;
+            pthread_mutex_unlock(&mem_mutex);
+            log_printf(debug, file, func, line, "REALLOC result: %p\n",
+                       new_ptr);
+            return new_ptr;
+        }
+        curr = &((*curr)->next);
+    }
+    pthread_mutex_unlock(&mem_mutex);
+
+    log_printf(warning, file, func, line, "REALLOC: %p not found in tracker!\n",
+               ptr);
+    void *new_ptr = realloc(ptr, size);
+    if (!new_ptr) {
+        fatal_log_printf(file, func, line, "realloc failed: %s!\n",
+                         strerror(errno));
+    }
+    return new_ptr;
+}
+
+char *REALPATH_wrapper(const char *path, char *resolved_path, const char *file,
+                       const char *func, int line)
+{
+    char *res = realpath(path, resolved_path);
+    if (res && !resolved_path) {
+        log_printf(debug, file, func, line, "REALPATH: %p\n", (void *)res);
+        // We need to track the pointer returned by realpath
+        // But realpath uses malloc internally, so we should untrack it with
+        // free() later. Wait, our FREE_wrapper already handles pointers not in
+        // the tracker by calling free(). But if we want it to be deallocated at
+        // exit, we SHOULD track it.
+
+        MemNode *node = calloc(1, sizeof(MemNode));
+        if (!node) {
+            fatal_log_printf(file, func, line,
+                             "Could not allocate MemNode: %s!\n",
+                             strerror(errno));
+        }
+        node->ptr = res;
+        node->size = 0; // We don't know the size, but realpath returns a
+                        // null-terminated string
+        node->file = file;
+        node->func = func;
+        node->line = line;
+
+        pthread_mutex_lock(&mem_mutex);
+        node->next = mem_head;
+        mem_head = node;
+        pthread_mutex_unlock(&mem_mutex);
+    }
+    return res;
+}
+
+void FREE_wrapper(void *ptr, const char *file, const char *func, int line)
+{
+    if (!ptr) {
+        return;
+    }
+
+    pthread_mutex_lock(&mem_mutex);
+    MemNode **curr = &mem_head;
+    while (*curr) {
+        if ((*curr)->ptr == ptr) {
+            MemNode *to_free = *curr;
+            *curr = to_free->next;
+            free(to_free);
+            goto found;
+        }
+        curr = &((*curr)->next);
+    }
+    pthread_mutex_unlock(&mem_mutex);
+
+    log_printf(warning, file, func, line, "FREE: %p not found in tracker!\n",
+               ptr);
+    free(ptr);
+    return;
+
+found:
+    pthread_mutex_unlock(&mem_mutex);
+    log_printf(debug, file, func, line, "FREE: %p\n", ptr);
+    free(ptr);
+}
+
+void mem_cleanup(void)
+{
+    pthread_mutex_lock(&mem_mutex);
+    MemNode *curr = mem_head;
+    while (curr) {
+        MemNode *next = curr->next;
+        free(curr->ptr);
+        free(curr);
+        curr = next;
+    }
+    mem_head = NULL;
+    pthread_mutex_unlock(&mem_mutex);
+
+    if (CONFIG.http_headers) {
+        curl_slist_free_all(CONFIG.http_headers);
+        CONFIG.http_headers = NULL;
     }
 }
 

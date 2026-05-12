@@ -63,7 +63,7 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         add_arg(&all_argv, &all_argc, argv[i]);
         if (!strcmp(argv[i], "--config")) {
-            config_path = strdup(argv[i + 1]);
+            config_path = STRDUP(argv[i + 1]);
         }
     }
 
@@ -100,7 +100,7 @@ int main(int argc, char **argv)
     }
 
     /*--- Add the last remaining argument, which is the mountpoint ---*/
-    char *abs_mountpoint = realpath(all_argv[optind + 1], NULL);
+    char *abs_mountpoint = REALPATH(all_argv[optind + 1], NULL);
     if (!abs_mountpoint) {
         fprintf(stderr, "Error: Invalid mountpoint %s: %s\n",
                 all_argv[optind + 1], strerror(errno));
@@ -176,14 +176,14 @@ static char *get_XDG_CONFIG_HOME(void)
 
     const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
     if (xdg_config_home) {
-        config_dir = strndup(xdg_config_home, MAX_PATH_LEN);
+        config_dir = STRNDUP(xdg_config_home, MAX_PATH_LEN);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
             config_dir = path_append(user_home, default_config_subdir);
         } else {
             lprintf(warning, "$HOME is unset\n");
-            const char *cur_dir = realpath("./", NULL);
+            const char *cur_dir = REALPATH("./", NULL);
             if (cur_dir) {
                 config_dir = path_append(cur_dir, default_config_subdir);
             } else {
@@ -219,22 +219,22 @@ void parse_config_file(char ***argv, int *argc)
                 char *space;
                 space = strchr(buf, ' ');
                 if (!space) {
-                    *argv = (char **)realloc((void *)*argv,
+                    *argv = (char **)REALLOC((void *)*argv,
                                              *argc * sizeof(char *));
-                    (*argv)[*argc - 1] = strndup(buf, buf_len);
+                    (*argv)[*argc - 1] = STRNDUP(buf, buf_len);
                 } else {
                     (*argc)++;
-                    *argv = (char **)realloc((void *)*argv,
+                    *argv = (char **)REALLOC((void *)*argv,
                                              *argc * sizeof(char *));
                     /*
                      * Only copy up to the space character
                      */
-                    (*argv)[*argc - 2] = strndup(buf, space - buf);
+                    (*argv)[*argc - 2] = STRNDUP(buf, space - buf);
                     /*
                      * Starts copying after the space
                      */
                     (*argv)[*argc - 1]
-                        = strndup(space + 1, buf_len - (space + 1 - buf));
+                        = STRNDUP(space + 1, buf_len - (space + 1 - buf));
                 }
             }
         }
@@ -313,13 +313,13 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             add_arg(fuse_argv, fuse_argc, "-s");
             break;
         case 'u':
-            CONFIG.http_username = strdup(optarg);
+            CONFIG.http_username = STRDUP(optarg);
             break;
         case 'p':
-            CONFIG.http_password = strdup(optarg);
+            CONFIG.http_password = STRDUP(optarg);
             break;
         case 'P':
-            CONFIG.proxy = strdup(optarg);
+            CONFIG.proxy = STRDUP(optarg);
             break;
         case 'L':
             /*
@@ -327,10 +327,10 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
              */
             switch (long_index) {
             case 6:
-                CONFIG.proxy_username = strdup(optarg);
+                CONFIG.proxy_username = STRDUP(optarg);
                 break;
             case 7:
-                CONFIG.proxy_password = strdup(optarg);
+                CONFIG.proxy_password = STRDUP(optarg);
                 break;
             case 8:
                 CONFIG.cache_enabled = 1;
@@ -345,19 +345,19 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.max_conns = (int)strtol(optarg, NULL, 10);
                 break;
             case 12:
-                CONFIG.user_agent = strdup(optarg);
+                CONFIG.user_agent = STRDUP(optarg);
                 break;
             case 13:
                 CONFIG.http_wait_sec = (int)strtol(optarg, NULL, 10);
                 break;
             case 14:
-                CONFIG.cache_dir = strdup(optarg);
+                CONFIG.cache_dir = STRDUP(optarg);
                 break;
             case 15:
-                CONFIG.sonic_username = strdup(optarg);
+                CONFIG.sonic_username = STRDUP(optarg);
                 break;
             case 16:
-                CONFIG.sonic_password = strdup(optarg);
+                CONFIG.sonic_password = STRDUP(optarg);
                 break;
             case 17:
                 CONFIG.sonic_id3 = 1;
@@ -380,10 +380,10 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.mode = SINGLE;
                 break;
             case 23:
-                CONFIG.cafile = strdup(optarg);
+                CONFIG.cafile = STRDUP(optarg);
                 break;
             case 24:
-                CONFIG.proxy_cafile = strdup(optarg);
+                CONFIG.proxy_cafile = STRDUP(optarg);
                 break;
             case 25:
                 CONFIG.refresh_timeout = (int)strtol(optarg, NULL, 10);
@@ -422,9 +422,9 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 {
     (*fuse_argc)++;
     *fuse_argv_ptr
-        = (char **)realloc((void *)*fuse_argv_ptr, *fuse_argc * sizeof(char *));
+        = (char **)REALLOC((void *)*fuse_argv_ptr, *fuse_argc * sizeof(char *));
     char **fuse_argv = *fuse_argv_ptr;
-    fuse_argv[*fuse_argc - 1] = strdup(opt_string);
+    fuse_argv[*fuse_argc - 1] = STRDUP(opt_string);
 }
 
 static void print_help(char *program_name, int long_help)
