@@ -280,16 +280,13 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
              */
             int n_running = curl_multi_perform_once();
 
-            /*
-             * If no handles are running but u > 0, we have an error
-             * and we must break to avoid infinite loop.
-             */
             if (n_running == 0) {
-                lprintf(error, "Some links failed to initialize.\n");
                 for (int i = 0; i < linktbl->num; i++) {
                     Link *this_link = linktbl->links[i];
                     if (this_link->type == LINK_UNINITIALISED_FILE
                         || this_link->type == LINK_UNINITIALISED_DIR) {
+                        lprintf(error, "Failed to initialize: %s\n",
+                                this_link->f_url);
                         this_link->type = LINK_INVALID;
                     }
                 }
