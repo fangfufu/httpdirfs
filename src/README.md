@@ -19,8 +19,8 @@ maintainable.
 
 ### Indentation and Formatting
 
-The project follows the **Kernighan & Ritchie (K&R)** style. We use `astyle` for
-automatic formatting.
+The project follows the **Kernighan & Ritchie (K&R)** style. We use
+`clang-format` for automatic formatting.
 
 Manual formatting can be triggered via Meson:
 
@@ -41,8 +41,9 @@ code formatting, static analysis, and basic sanity checks.
 
 **Checks performed:**
 
-- Code formatting (`astyle`)
+- Code formatting (`clang-format`)
 - Static analysis (`clang-tidy`)
+- Spelling checks (`codespell`)
 - Markdown formatting (`prettier`)
 - Standard file checks (trailing whitespace, merge conflicts, large files)
 
@@ -76,6 +77,27 @@ pre-commit run --all-files
 > ```bash
 > meson setup builddir
 > ```
+
+---
+
+## Logging and Error Handling
+
+`httpdirfs` uses a centralized logging system defined in `log.h`.
+
+- Use the `lprintf(type, ...)` macro for logging. It automatically includes the
+  file name, function name, and line number.
+- Fatal errors should use the `fatal` log level.
+- `lprintf(fatal, ...)` will automatically call `exit_failure()`, which prints a
+  backtrace and terminates the program.
+
+## Memory Management
+
+The project uses wrappers for memory allocation to ensure consistent error
+handling.
+
+- Use `CALLOC(nmemb, size)` instead of `calloc()`. It automatically handles
+  allocation failures by logging a fatal error.
+- Use `FREE(ptr)` instead of `free()`.
 
 ---
 

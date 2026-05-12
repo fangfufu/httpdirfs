@@ -20,11 +20,17 @@ and this project adheres to
   for relative mountpoints
   ([3a53c40](https://github.com/fangfufu/httpdirfs/commit/3a53c40))
   (https://github.com/fangfufu/httpdirfs/issues/177).
+- Removed useless `NOLINT` tags
+  ([c8abdec](https://github.com/fangfufu/httpdirfs/commit/c8abdec)).
 
 ### Changed
 
 - Update help's default value based on `config.h`
+  ([adf3bb9](https://github.com/fangfufu/httpdirfs/commit/adf3bb9))
   (https://github.com/fangfufu/httpdirfs/issues/150).
+- Update documentation in `src/README.md` and `USAGE.md`
+  ([1d7e8e5](https://github.com/fangfufu/httpdirfs/commit/1d7e8e5),
+  [1b16c9d](https://github.com/fangfufu/httpdirfs/commit/1b16c9d)).
 
 ## [1.2.8] - 2026-05-10
 
