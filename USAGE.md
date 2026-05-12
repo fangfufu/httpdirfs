@@ -1,7 +1,7 @@
 ## HTTPDirFS Usage
 
 As of commit
-[a134774a823a684828589c9db78cfd0b80bdcbb5](https://github.com/fangfufu/httpdirfs/commit/a134774a823a684828589c9db78cfd0b80bdcbb5),
+[75d31293c791a4249e4bdd93cfa0c43bc1332479](https://github.com/fangfufu/httpdirfs/commit/75d31293c791a4249e4bdd93cfa0c43bc1332479),
 HTTPDirFS supports the following usage flags:
 
     usage: ./httpdirfs [options] URL mountpoint
@@ -46,7 +46,7 @@ HTTPDirFS supports the following usage flags:
             --retry-wait        Set delay in seconds before retrying an HTTP request
                                 after encountering an error. (default: 5)
             --invalid-refresh   Try refreshing invalid links when reading a directory.
-            --user-agent        Set user agent string (default: "HTTPDirFS")
+            --user-agent        Set user agent string (default: "HTTPDirFS-VERSION")
             --no-range-check    Disable the built-in check for the server's support
                                 for HTTP range requests
             --zero-len-is-dir   If a file has a zero length, treat it as a directory
