@@ -21,6 +21,11 @@ and this project adheres to
   ([3a53c40](https://github.com/fangfufu/httpdirfs/commit/3a53c40))
   (https://github.com/fangfufu/httpdirfs/issues/177).
 
+### Changed
+
+- Update help's default value based on `config.h`
+  (https://github.com/fangfufu/httpdirfs/issues/150).
+
 ## [1.2.8] - 2026-05-10
 
 ### Added
