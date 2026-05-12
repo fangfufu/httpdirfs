@@ -440,23 +440,24 @@ HTTPDirFS options:\n\
                             specified with `--cache-location`, if the option is\n\
                             seen first. Then exit in either case.\n\
         --cacert            Certificate authority for the server\n\
-        --dl-seg-size       Set cache download segment size, in MB (default: 8)\n\
+        --dl-seg-size       Set cache download segment size, in MB (default: " XSTR(
+                        DEFAULT_DATA_BLKSZ_MB) ")\n\
                             Note: this setting is ignored if previously\n\
                             cached data is found for the requested file.\n\
         --http-header       Set one or more HTTP headers\n\
         --max-seg-count     Set maximum number of download segments a file\n\
-                            can have. (default: 128*1024)\n\
+                            can have. (default: " XSTR(DEFAULT_MAX_SEGBC) ")\n\
                             With the default setting, the maximum memory usage\n\
                             per file is 128KB. This allows caching files up\n\
                             to 1TB in size using the default segment size.\n\
         --max-conns         Set maximum number of network connections that\n\
-                            libcurl is allowed to make. (default: 10)\n\
+                            libcurl is allowed to make. (default: " XSTR(DEFAULT_NETWORK_MAX_CONNS) ")\n\
         --refresh-timeout   The directories are refreshed after the specified\n\
-                            time, in seconds (default: 3600)\n\
+                            time, in seconds (default: " XSTR(DEFAULT_REFRESH_TIMEOUT) ")\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
-                            after encountering an error. (default: 5)\n\
+                            after encountering an error. (default: " XSTR(DEFAULT_HTTP_WAIT_SEC) ")\n\
         --invalid-refresh   Try refreshing invalid links when reading a directory.\n\
-        --user-agent        Set user agent string (default: \"HTTPDirFS\")\n\
+        --user-agent        Set user agent string (default: \"" DEFAULT_USER_AGENT "\")\n\
         --no-range-check    Disable the built-in check for the server's support\n\
                             for HTTP range requests\n\
         --zero-len-is-dir   If a file has a zero length, treat it as a directory\n\
