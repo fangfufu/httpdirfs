@@ -12,12 +12,12 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
     size_t recv_size = size * nmemb;
     TransferStruct *ts = (TransferStruct *)userp;
 
-    char *tmp = realloc(ts->data, ts->curr_size + recv_size + 1);
+    char *tmp = REALLOC(ts->data, ts->curr_size + recv_size + 1);
     if (!tmp) {
         /*
          * out of memory!
          */
-        lprintf(fatal, "realloc failure!\n");
+        lprintf(fatal, "REALLOC failure!\n");
     }
     ts->data = tmp;
 

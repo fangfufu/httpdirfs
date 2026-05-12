@@ -29,7 +29,7 @@ static SonicConfigStruct SONIC_CONFIG;
 void sonic_config_init(const char *server, const char *username,
                        const char *password)
 {
-    SONIC_CONFIG.server = strndup(server, MAX_PATH_LEN);
+    SONIC_CONFIG.server = STRNDUP(server, MAX_PATH_LEN);
     /*
      * Correct for the extra '/'
      */
@@ -37,8 +37,8 @@ void sonic_config_init(const char *server, const char *username,
     if (SONIC_CONFIG.server[server_url_len] == '/') {
         SONIC_CONFIG.server[server_url_len] = '\0';
     }
-    SONIC_CONFIG.username = strndup(username, MAX_FILENAME_LEN);
-    SONIC_CONFIG.password = strndup(password, MAX_FILENAME_LEN);
+    SONIC_CONFIG.username = STRNDUP(username, MAX_FILENAME_LEN);
+    SONIC_CONFIG.password = STRNDUP(password, MAX_FILENAME_LEN);
     SONIC_CONFIG.client = DEFAULT_USER_AGENT;
 
     if (!CONFIG.sonic_insecure) {
