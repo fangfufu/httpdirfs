@@ -4,6 +4,8 @@
 #include "util.h"
 
 #include <errno.h>
+#include <unistd.h>
+#include <sys/stat.h>
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
@@ -91,6 +93,12 @@ int main(int argc, char **argv)
         exit(EXIT_FAILURE);
     }
 
+    /*--- Check if FUSE is available ---*/
+    if (access("/dev/fuse", F_OK) == -1) {
+        fprintf(stderr, "Error: FUSE kernel module is not loaded.\n");
+        exit(EXIT_FAILURE);
+    }
+
     /*--- Add the last remaining argument, which is the mountpoint ---*/
     char *abs_mountpoint = realpath(all_argv[optind + 1], NULL);
     if (!abs_mountpoint) {
@@ -99,6 +107,22 @@ int main(int argc, char **argv)
         print_help(argv[0], 0);
         exit(EXIT_FAILURE);
     }
+
+    struct stat st;
+    if (stat(abs_mountpoint, &st) == -1) {
+        fprintf(stderr, "Error: Could not stat mountpoint %s: %s\n",
+                abs_mountpoint, strerror(errno));
+        FREE(abs_mountpoint);
+        exit(EXIT_FAILURE);
+    }
+
+    if (!S_ISDIR(st.st_mode)) {
+        fprintf(stderr, "Error: Mountpoint %s is not a directory.\n",
+                abs_mountpoint);
+        FREE(abs_mountpoint);
+        exit(EXIT_FAILURE);
+    }
+
     add_arg(&fuse_argv, &fuse_argc, abs_mountpoint);
     FREE(abs_mountpoint);
 
