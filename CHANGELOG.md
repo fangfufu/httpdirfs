@@ -8,6 +8,13 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.2.9] - 2026-05-13
+
+### Added
+
+- Fail early if mountpoint or FUSE module is missing
+  ([5c53ad3](https://github.com/fangfufu/httpdirfs/commit/5c53ad3)).
+
 ### Fixed
 
 - Improve link initialization error reporting
@@ -535,7 +542,8 @@ and this project adheres to
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...master
+[1.2.9]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/fangfufu/httpdirfs/compare/1.2.7...1.2.8
 [1.2.7]: https://github.com/fangfufu/httpdirfs/compare/1.2.6...1.2.7
 [1.2.6]: https://github.com/fangfufu/httpdirfs/compare/1.2.5...1.2.6
