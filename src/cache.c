@@ -1098,8 +1098,8 @@ which doesn't make sense\n",
             Seg_set(cf, dl_offset, 1);
         }
     } else {
-        lprintf(error, "received %ld rather than %d, possible network \
-error.\n",
+        lprintf(error, "received %ld rather than %d, possible network "
+                "error.\n",
                 recv, cf->blksz);
     }
     send = len;
