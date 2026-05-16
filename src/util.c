@@ -3,7 +3,6 @@
 #include "config.h"
 #include "log.h"
 
-#include <curl/curl.h>
 #include <openssl/evp.h>
 #include <uuid/uuid.h>
 

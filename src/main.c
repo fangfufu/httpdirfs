@@ -62,7 +62,13 @@ int main(int argc, char **argv)
      */
     for (int i = 1; i < argc; i++) {
         add_arg(&all_argv, &all_argc, argv[i]);
-        if (!strcmp(argv[i], "--config")) {
+        if (!strncmp(argv[i], "--config=", 9)) {
+            if (argv[i][9] == '\0') {
+                lprintf(fatal, "--config requires a path\n");
+            }
+            FREE(config_path);
+            config_path = strdup(argv[i] + 9);
+        } else if (!strcmp(argv[i], "--config")) {
             if (i + 1 >= argc) {
                 lprintf(fatal, "--config requires a path\n");
             }

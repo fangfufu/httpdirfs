@@ -120,6 +120,8 @@ void *CALLOC(size_t nmemb, size_t size);
 
 /**
  * \brief wrapper for free(), but the pointer is set to NULL afterwards.
+ * \note This macro is not safe for const pointers as it attempts to set
+ * the pointer to NULL.
  */
 void FREE_wrapper(void *ptr);
 #define FREE(ptr)                                                              \

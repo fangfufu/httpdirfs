@@ -3,6 +3,7 @@
 #include "config.h"
 #include "log.h"
 #include "util.h"
+#include <curl/curl.h>
 
 #include <sys/stat.h>
 
