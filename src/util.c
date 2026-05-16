@@ -60,7 +60,8 @@ void pthread_mutex_init_wrapper(pthread_mutex_t *x,
                                 const char *x_name)
 {
     log_printf(debug, file, func, line, "%lx pthread_mutex_init: %p, %p, %s\n",
-               (unsigned long)pthread_self(), (void *)x, (void *)attr, x_name);
+               (unsigned long)pthread_self(), (void *)x, (const void *)attr,
+               x_name);
     pthread_mutexattr_t mutex_attr;
     if (attr == NULL) {
         pthread_mutexattr_init(&mutex_attr);
