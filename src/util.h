@@ -119,9 +119,26 @@ char *generate_md5sum(const char *str);
 void *CALLOC(size_t nmemb, size_t size);
 
 /**
- * \brief wrapper for free(), but the pointer is set to NULL afterwards.
+ * \brief Internal wrapper for free().
  */
-void FREE(void *ptr);
+void FREE_wrapper(void *ptr);
+
+/**
+ * \brief Macro wrapper for free() that sets the pointer to NULL afterwards.
+ * \note This macro is safe for pointers to const data (e.g., const char *p)
+ * because it only modifies the pointer variable itself, not the data it points
+ * to. However, it will fail for const-qualified pointer variables (e.g., char *
+ * const p) as it attempts to set the pointer itself to NULL.
+ * \note When used on a function parameter (e.g., FREE(ptr)), it only nullifies
+ * the local copy of the pointer within the function scope. The caller's
+ * original pointer remains unchanged and may become a dangling pointer.
+ */
+#define FREE(ptr)                                                              \
+    do {                                                                       \
+        __extension__ __auto_type __ptr_to_free = &(ptr);                      \
+        FREE_wrapper((void *)*__ptr_to_free);                                  \
+        *__ptr_to_free = NULL;                                                 \
+    } while (0)
 
 /**
  * \brief Convert a string to hex
