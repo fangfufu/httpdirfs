@@ -983,8 +983,8 @@ static void *Cache_bgdl(void *arg)
     long recv = Link_download(cf->link, (char *)recv_buf, cf->blksz,
                               cf->next_dl_offset);
     if (recv < 0) {
-        lprintf(error, "thread %lx received %ld bytes, \
-which doesn't make sense\n",
+        lprintf(error, "thread %lx received %ld bytes, "
+                "which doesn't make sense\n",
                 (unsigned long)pthread_self(), recv);
     }
 
