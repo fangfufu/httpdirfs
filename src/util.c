@@ -417,7 +417,9 @@ found:
 
 void mem_cleanup(void)
 {
-    pthread_mutex_lock(&mem_mutex);
+    if (pthread_mutex_trylock(&mem_mutex) != 0) {
+        goto cleanup_headers;
+    }
     MemNode *curr = mem_head;
     while (curr) {
         MemNode *next = curr->next;
@@ -428,6 +430,7 @@ void mem_cleanup(void)
     mem_head = NULL;
     pthread_mutex_unlock(&mem_mutex);
 
+cleanup_headers:
     if (CONFIG.http_headers) {
         curl_slist_free_all(CONFIG.http_headers);
         CONFIG.http_headers = NULL;
