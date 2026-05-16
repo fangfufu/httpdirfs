@@ -33,18 +33,24 @@ int log_level_init(void);
  * \details This is for printing nice log messages
  */
 void log_printf(LogType type, const char *file, const char *func, int line,
-                const char *format, ...);
+                const char *format, ...) __attribute__((format(printf, 5, 6)));
+
+/**
+ * \brief Fatal log printf
+ * \details This is for printing fatal error messages and exiting
+ */
+void fatal_log_printf(const char *file, const char *func, int line,
+                      const char *format, ...) __attribute__((noreturn))
+__attribute__((format(printf, 4, 5)));
 
 /**
  * \brief Log type printf
  * \details This macro automatically prints out the filename and line number
  */
 #define lprintf(type, ...)                                                     \
-    do {                                                                       \
-        log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__);           \
-        if ((type) == fatal)                                                   \
-            exit_failure();                                                    \
-    } while (0)
+    ((type) == fatal                                                           \
+         ? fatal_log_printf(__FILE__, __func__, __LINE__, __VA_ARGS__)         \
+         : log_printf(type, __FILE__, __func__, __LINE__, __VA_ARGS__))
 
 /**
  * \brief Print the version information for HTTPDirFS

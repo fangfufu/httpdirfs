@@ -121,7 +121,12 @@ void *CALLOC(size_t nmemb, size_t size);
 /**
  * \brief wrapper for free(), but the pointer is set to NULL afterwards.
  */
-void FREE(void *ptr);
+void FREE_wrapper(void *ptr);
+#define FREE(ptr)                                                              \
+    do {                                                                       \
+        FREE_wrapper((void *)(ptr));                                           \
+        (ptr) = NULL;                                                          \
+    } while (0)
 
 /**
  * \brief Convert a string to hex

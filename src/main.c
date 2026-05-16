@@ -63,7 +63,13 @@ int main(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         add_arg(&all_argv, &all_argc, argv[i]);
         if (!strcmp(argv[i], "--config")) {
+            if (i + 1 >= argc) {
+                lprintf(fatal, "--config requires a path\n");
+            }
+            FREE(config_path);
             config_path = strdup(argv[i + 1]);
+            add_arg(&all_argv, &all_argc, argv[i + 1]);
+            i++;
         }
     }
 
@@ -157,12 +163,12 @@ fuse_start:
     for (int i = 0; i < all_argc; i++) {
         FREE(all_argv[i]);
     }
-    FREE((void *)all_argv);
+    FREE(all_argv);
 
     for (int i = 0; i < fuse_argc; i++) {
         FREE(fuse_argv[i]);
     }
-    FREE((void *)fuse_argv);
+    FREE(fuse_argv);
 
     FREE(config_path);
 
@@ -240,7 +246,9 @@ void parse_config_file(char ***argv, int *argc)
         }
         fclose(config);
     }
-    FREE(full_path);
+    if (full_path != config_path) {
+        FREE(full_path);
+    }
 }
 
 static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
