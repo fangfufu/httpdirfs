@@ -59,8 +59,9 @@ void pthread_mutex_init_wrapper(pthread_mutex_t *x,
                                 const char *file, const char *func, int line,
                                 const char *x_name)
 {
-    log_printf(debug, file, func, line, "%x pthread_mutex_init: %p, %p, %s\n",
-               pthread_self(), x, attr, x_name);
+    log_printf(debug, file, func, line, "%lx pthread_mutex_init: %p, %p, %s\n",
+               (unsigned long)pthread_self(), (void *)x, (const void *)attr,
+               x_name);
     pthread_mutexattr_t mutex_attr;
     if (attr == NULL) {
         pthread_mutexattr_init(&mutex_attr);
@@ -69,8 +70,8 @@ void pthread_mutex_init_wrapper(pthread_mutex_t *x,
     }
     int ret = pthread_mutex_init(x, attr);
     if (ret) {
-        log_printf(fatal, file, func, line, "%x pthread_mutex_init: %d, %s\n",
-                   pthread_self(), ret, strerror(ret));
+        fatal_log_printf(file, func, line, "%lx pthread_mutex_init: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
     }
     if (attr == &mutex_attr) {
         pthread_mutexattr_destroy(&mutex_attr);
@@ -81,40 +82,40 @@ void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
                                    const char *func, int line,
                                    const char *x_name)
 {
-    log_printf(debug, file, func, line, "%x pthread_mutex_destroy: %p, %s\n",
-               pthread_self(), x, x_name);
+    log_printf(debug, file, func, line, "%lx pthread_mutex_destroy: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)x, x_name);
     int ret;
     ret = pthread_mutex_destroy(x);
     if (ret) {
-        log_printf(fatal, file, func, line,
-                   "%x pthread_mutex_destroy: %d, %s\n", pthread_self(), ret,
-                   strerror(ret));
+        fatal_log_printf(file, func, line,
+                         "%lx pthread_mutex_destroy: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
     }
 }
 
 void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
                                   pthread_mutex_t *x, const char *x_name)
 {
-    log_printf(debug, file, func, line, "%x pthread_mutex_unlock: %p, %s\n",
-               pthread_self(), x, x_name);
+    log_printf(debug, file, func, line, "%lx pthread_mutex_unlock: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)x, x_name);
     int i;
     i = pthread_mutex_unlock(x);
     if (i) {
-        log_printf(fatal, file, func, line, "%x pthread_mutex_unlock: %d, %s\n",
-                   pthread_self(), i, strerror(i));
+        fatal_log_printf(file, func, line, "%lx pthread_mutex_unlock: %d, %s\n",
+                         (unsigned long)pthread_self(), i, strerror(i));
     }
 }
 
 void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
                                 pthread_mutex_t *x, const char *x_name)
 {
-    log_printf(debug, file, func, line, "%x pthread_mutex_lock: %p, %s\n",
-               pthread_self(), x, x_name);
+    log_printf(debug, file, func, line, "%lx pthread_mutex_lock: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)x, x_name);
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
-        log_printf(fatal, file, func, line, "%x pthread_mutex_unlock: %d, %s\n",
-                   pthread_self(), i, strerror(i));
+        fatal_log_printf(file, func, line, "%lx pthread_mutex_lock: %d, %s\n",
+                         (unsigned long)pthread_self(), i, strerror(i));
     }
 }
 
@@ -122,26 +123,31 @@ void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
                       const char *file, const char *func, int line,
                       const char *sem_name)
 {
-    log_printf(debug, file, func, line, "%x sem_init: %p, %d, %u, %s\n",
-               pthread_self(), sem, pshared, value, sem_name);
+    log_printf(debug, file, func, line, "%lx sem_init: %p, %d, %u, %s\n",
+               (unsigned long)pthread_self(), (void *)sem, pshared, value,
+               sem_name);
     int i;
     i = sem_init(sem, pshared, value);
     if (i) {
-        log_printf(fatal, file, func, line, "%x sem_init: %d, %s\n",
-                   pthread_self(), i, strerror(i));
+        int saved_errno = errno;
+        fatal_log_printf(file, func, line, "%lx sem_init: %d, %s\n",
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
 void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
                          int line, const char *sem_name)
 {
-    log_printf(debug, file, func, line, "%x sem_destroy: %p, %s\n",
-               pthread_self(), sem, sem_name);
+    log_printf(debug, file, func, line, "%lx sem_destroy: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)sem, sem_name);
     int i;
     i = sem_destroy(sem);
     if (i) {
-        log_printf(fatal, file, func, line, "%x sem_destroy: %d, %s\n",
-                   pthread_self(), i, strerror(i));
+        int saved_errno = errno;
+        fatal_log_printf(file, func, line, "%lx sem_destroy: %d, %s\n",
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
@@ -150,29 +156,33 @@ void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
 {
     int j;
     if (sem_getvalue(sem, &j)) {
-        log_printf(fatal, file, func, line, "%x sem_getvalue: %s\n",
-                   pthread_self(), strerror(errno));
+        fatal_log_printf(file, func, line, "%lx sem_getvalue: %s\n",
+                         (unsigned long)pthread_self(), strerror(errno));
     }
-    log_printf(debug, file, func, line, "%x sem_wait: %p, %s, value: %d\n",
-               pthread_self(), sem, sem_name, j);
+    log_printf(debug, file, func, line, "%lx sem_wait: %p, %s, value: %d\n",
+               (unsigned long)pthread_self(), (void *)sem, sem_name, j);
     int i;
     i = sem_wait(sem);
     if (i) {
-        log_printf(fatal, file, func, line, "%x sem_wait: %d, %s\n",
-                   pthread_self(), i, strerror(i));
+        int saved_errno = errno;
+        fatal_log_printf(file, func, line, "%lx sem_wait: %d, %s\n",
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
 void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
                       const char *sem_name)
 {
-    log_printf(debug, file, func, line, "%x sem_post: %p, %s\n", pthread_self(),
-               sem, sem_name);
+    log_printf(debug, file, func, line, "%lx sem_post: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)sem, sem_name);
     int i;
     i = sem_post(sem);
     if (i) {
-        log_printf(fatal, file, func, line, "%x sem_post: %d, %s\n",
-                   pthread_self(), i, strerror(i));
+        int saved_errno = errno;
+        fatal_log_printf(file, func, line, "%lx sem_post: %d, %s\n",
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
