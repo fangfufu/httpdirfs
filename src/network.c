@@ -163,8 +163,8 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
  */
 int curl_multi_perform_once(void)
 {
-    lprintf(network_lock_debug, "thread %x: locking transfer_lock;\n",
-            pthread_self());
+    lprintf(network_lock_debug, "thread %lx: locking transfer_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&transfer_lock);
 
     /*
@@ -192,8 +192,8 @@ int curl_multi_perform_once(void)
         curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
     }
 
-    lprintf(network_lock_debug, "thread %x: unlocking transfer_lock;\n",
-            pthread_self());
+    lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
     return n_running_curl;
@@ -257,8 +257,8 @@ void transfer_blocking(CURL *curl)
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
 
-    lprintf(network_lock_debug, "thread %x: locking transfer_lock;\n",
-            pthread_self());
+    lprintf(network_lock_debug, "thread %lx: locking transfer_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&transfer_lock);
 
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
@@ -266,8 +266,8 @@ void transfer_blocking(CURL *curl)
         lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
     }
 
-    lprintf(network_lock_debug, "thread %x: unlocking transfer_lock;\n",
-            pthread_self());
+    lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 
     while (ts->transferring) {
@@ -277,8 +277,8 @@ void transfer_blocking(CURL *curl)
 
 void transfer_nonblocking(CURL *curl)
 {
-    lprintf(network_lock_debug, "thread %x: locking transfer_lock;\n",
-            pthread_self());
+    lprintf(network_lock_debug, "thread %lx: locking transfer_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&transfer_lock);
 
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
@@ -286,8 +286,8 @@ void transfer_nonblocking(CURL *curl)
         lprintf(error, "%s\n", curl_multi_strerror(res));
     }
 
-    lprintf(network_lock_debug, "thread %x: unlocking transfer_lock;\n",
-            pthread_self());
+    lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 }
 
