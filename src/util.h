@@ -129,6 +129,16 @@ void FREE(void *ptr);
 char *str_to_hex(char *s);
 
 /**
+ * \brief wrapper for strdup(), with error handling
+ */
+char *STRDUP(const char *s);
+
+/**
+ * \brief wrapper for strndup(), with error handling
+ */
+char *STRNDUP(const char *s, size_t n);
+
+/**
  * \brief initialise the configuration data structure
  */
 void Config_init(void);
