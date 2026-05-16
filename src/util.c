@@ -91,8 +91,8 @@ void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
     ret = pthread_mutex_destroy(x);
     if (ret) {
         fatal_log_printf(file, func, line,
-                         "%lx pthread_mutex_destroy: %d, %s\n", pthread_self(),
-                         ret, strerror(ret));
+                         "%lx pthread_mutex_destroy: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
     }
 }
 
@@ -117,7 +117,7 @@ void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
-        fatal_log_printf(file, func, line, "%lx pthread_mutex_unlock: %d, %s\n",
+        fatal_log_printf(file, func, line, "%lx pthread_mutex_lock: %d, %s\n",
                          (unsigned long)pthread_self(), i, strerror(i));
     }
 }
@@ -131,9 +131,10 @@ void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
                sem_name);
     int i;
     i = sem_init(sem, pshared, value);
-    if (i) {
+    if (i == -1) {
+        int err = errno;
         fatal_log_printf(file, func, line, "%lx sem_init: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), err, strerror(err));
     }
 }
 
@@ -144,9 +145,10 @@ void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
                (unsigned long)pthread_self(), (void *)sem, sem_name);
     int i;
     i = sem_destroy(sem);
-    if (i) {
+    if (i == -1) {
+        int err = errno;
         fatal_log_printf(file, func, line, "%lx sem_destroy: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), err, strerror(err));
     }
 }
 
@@ -162,9 +164,10 @@ void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
                (unsigned long)pthread_self(), (void *)sem, sem_name, j);
     int i;
     i = sem_wait(sem);
-    if (i) {
+    if (i == -1) {
+        int err = errno;
         fatal_log_printf(file, func, line, "%lx sem_wait: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), err, strerror(err));
     }
 }
 
@@ -175,9 +178,10 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
                (unsigned long)pthread_self(), (void *)sem, sem_name);
     int i;
     i = sem_post(sem);
-    if (i) {
+    if (i == -1) {
+        int err = errno;
         fatal_log_printf(file, func, line, "%lx sem_post: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), err, strerror(err));
     }
 }
 
@@ -368,8 +372,7 @@ char *REALPATH_wrapper(const char *path, char *resolved_path, const char *file,
                              strerror(errno));
         }
         node->ptr = res;
-        node->size = 0; // We don't know the size, but realpath returns a
-                        // null-terminated string
+        node->size = strlen(res) + 1; // Store actual length of allocated string
         node->file = file;
         node->func = func;
         node->line = line;

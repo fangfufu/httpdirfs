@@ -26,35 +26,33 @@ static void vlog_printf(LogType type, const char *file, const char *func,
                         int line, const char *format, va_list args)
 {
     if (type == fatal || (type & CONFIG.log_type)) {
-        if (type & CONFIG.log_type) {
-            switch (type) {
-            case fatal:
-                fprintf(stderr, "Fatal:");
-                break;
-            case error:
-                fprintf(stderr, "Error:");
-                break;
-            case warning:
-                fprintf(stderr, "Warning:");
-                break;
-            case info:
-                goto print_actual_message;
-            default:
-                fprintf(stderr, "Debug");
-                if (type != debug) {
-                    fprintf(stderr, "(%x)", type);
-                }
-                fprintf(stderr, ":");
-                break;
+        switch (type) {
+        case fatal:
+            fprintf(stderr, "Fatal:");
+            break;
+        case error:
+            fprintf(stderr, "Error:");
+            break;
+        case warning:
+            fprintf(stderr, "Warning:");
+            break;
+        case info:
+            goto print_actual_message;
+        default:
+            fprintf(stderr, "Debug");
+            if (type != debug) {
+                fprintf(stderr, "(%x)", type);
             }
-
-            fprintf(stderr, "%s:%d:", file, line);
-
-        print_actual_message: {
+            fprintf(stderr, ":");
+            break;
         }
-            fprintf(stderr, "%s: ", func);
-            vfprintf(stderr, format, args);
-        }
+
+        fprintf(stderr, "%s:%d:", file, line);
+
+    print_actual_message: {
+    }
+        fprintf(stderr, "%s: ", func);
+        vfprintf(stderr, format, args);
     }
 }
 

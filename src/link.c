@@ -582,7 +582,7 @@ void LinkTable_free(LinkTable *linktbl)
             LinkTable_free(linktbl->links[i]->next_table);
             FREE(linktbl->links[i]);
         }
-        FREE((void *)linktbl->links);
+        FREE(linktbl->links);
         FREE(linktbl);
     }
 }

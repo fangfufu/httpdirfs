@@ -137,7 +137,11 @@ void *CALLOC_wrapper(size_t nmemb, size_t size, const char *file,
  * \brief wrapper for free(), but the pointer is set to NULL afterwards.
  */
 void FREE_wrapper(void *ptr, const char *file, const char *func, int line);
-#define FREE(ptr) FREE_wrapper(ptr, __FILE__, __func__, __LINE__)
+#define FREE(ptr)                                                              \
+    do {                                                                       \
+        FREE_wrapper((void *)(ptr), __FILE__, __func__, __LINE__);             \
+        (ptr) = NULL;                                                          \
+    } while (0)
 
 /**
  * \brief wrapper for STRDUP(), with memory tracking
