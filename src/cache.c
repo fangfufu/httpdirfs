@@ -1082,8 +1082,8 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
     lprintf(debug, "thread %lx: spawned.\n ", (unsigned long)pthread_self());
     long recv = Link_download(cf->link, (char *)recv_buf, cf->blksz, dl_offset);
     if (recv < 0) {
-        lprintf(error, "thread %lx received %ld bytes, \
-which doesn't make sense\n",
+        lprintf(error, "thread %lx received %ld bytes, "
+                "which doesn't make sense\n",
                 (unsigned long)pthread_self(), recv);
     }
     /*
