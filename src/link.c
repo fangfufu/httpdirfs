@@ -847,6 +847,7 @@ LinkTable *path_to_LinkTable(const char *path)
             return NULL;
         }
         tmp_link = link;
+        next_table = link->next_table;
     }
 
     if (!next_table) {
