@@ -3,6 +3,7 @@
 #include "log.h"
 #include "util.h"
 
+#include <ctype.h>
 #include <errno.h>
 #include <unistd.h>
 #include <sys/stat.h>
@@ -62,8 +63,21 @@ int main(int argc, char **argv)
      */
     for (int i = 1; i < argc; i++) {
         add_arg(&all_argv, &all_argc, argv[i]);
-        if (!strcmp(argv[i], "--config")) {
-            config_path = strdup(argv[i + 1]);
+        if (!strncmp(argv[i], "--config=", 9)) {
+            if (argv[i][9] == '\0') {
+                lprintf(fatal, "--config requires a path\n");
+            }
+            FREE(config_path);
+            config_path = STRDUP(argv[i] + 9);
+        } else if (!strcmp(argv[i], "--config")) {
+            if (i + 1 >= argc || argv[i + 1][0] == '\0'
+                || argv[i + 1][0] == '-') {
+                lprintf(fatal, "--config requires a path\n");
+            }
+            FREE(config_path);
+            config_path = STRDUP(argv[i + 1]);
+            add_arg(&all_argv, &all_argc, argv[i + 1]);
+            i++;
         }
     }
 
@@ -176,7 +190,7 @@ static char *get_XDG_CONFIG_HOME(void)
 
     const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
     if (xdg_config_home) {
-        config_dir = strndup(xdg_config_home, MAX_PATH_LEN);
+        config_dir = STRNDUP(xdg_config_home, MAX_PATH_LEN);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
@@ -205,42 +219,54 @@ void parse_config_file(char ***argv, int *argc)
         full_path = config_path;
     }
 
-    /*
-     * The buffer has to be able to fit a URL
-     */
-    int buf_len = MAX_PATH_LEN;
-    char buf[buf_len];
+    char *buf = NULL;
+    size_t buf_len = 0;
     FILE *config = fopen(full_path, "r");
-    if (config) {
-        while (fgets(buf, buf_len, config)) {
-            if (buf[0] == '-') {
-                (*argc)++;
-                buf[strnlen(buf, buf_len) - 1] = '\0';
-                char *space;
-                space = strchr(buf, ' ');
+    if (!config) {
+        if (config_path) {
+            lprintf(fatal, "Could not open config file %s: %s\n", full_path,
+                    strerror(errno));
+        }
+    } else {
+        while (getline(&buf, &buf_len, config) != -1) {
+            // Remove trailing whitespace
+            size_t len = strlen(buf);
+            while (len > 0 && isspace((unsigned char)buf[len - 1])) {
+                buf[--len] = '\0';
+            }
+
+            char *line = buf;
+            while (*line && isspace((unsigned char)*line)) {
+                line++;
+            }
+
+            if (line[0] == '-') {
+                char *space = strpbrk(line, " \t");
                 if (!space) {
-                    *argv = (char **)realloc((void *)*argv,
-                                             *argc * sizeof(char *));
-                    (*argv)[*argc - 1] = strndup(buf, buf_len);
+                    add_arg(argv, argc, line);
                 } else {
-                    (*argc)++;
-                    *argv = (char **)realloc((void *)*argv,
-                                             *argc * sizeof(char *));
+                    *space = '\0';
+                    add_arg(argv, argc, line);
                     /*
-                     * Only copy up to the space character
+                     * Starts copying after the space, skipping leading
+                     * whitespace
                      */
-                    (*argv)[*argc - 2] = strndup(buf, space - buf);
-                    /*
-                     * Starts copying after the space
-                     */
-                    (*argv)[*argc - 1]
-                        = strndup(space + 1, buf_len - (space + 1 - buf));
+                    char *value = space + 1;
+                    while (*value && isspace((unsigned char)*value)) {
+                        value++;
+                    }
+                    if (*value != '\0') {
+                        add_arg(argv, argc, value);
+                    }
                 }
             }
         }
+        FREE(buf);
         fclose(config);
     }
-    FREE(full_path);
+    if (full_path != config_path) {
+        FREE(full_path);
+    }
 }
 
 static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
@@ -313,13 +339,13 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             add_arg(fuse_argv, fuse_argc, "-s");
             break;
         case 'u':
-            CONFIG.http_username = strdup(optarg);
+            CONFIG.http_username = STRDUP(optarg);
             break;
         case 'p':
-            CONFIG.http_password = strdup(optarg);
+            CONFIG.http_password = STRDUP(optarg);
             break;
         case 'P':
-            CONFIG.proxy = strdup(optarg);
+            CONFIG.proxy = STRDUP(optarg);
             break;
         case 'L':
             /*
@@ -327,10 +353,10 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
              */
             switch (long_index) {
             case 6:
-                CONFIG.proxy_username = strdup(optarg);
+                CONFIG.proxy_username = STRDUP(optarg);
                 break;
             case 7:
-                CONFIG.proxy_password = strdup(optarg);
+                CONFIG.proxy_password = STRDUP(optarg);
                 break;
             case 8:
                 CONFIG.cache_enabled = 1;
@@ -345,19 +371,19 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.max_conns = (int)strtol(optarg, NULL, 10);
                 break;
             case 12:
-                CONFIG.user_agent = strdup(optarg);
+                CONFIG.user_agent = STRDUP(optarg);
                 break;
             case 13:
                 CONFIG.http_wait_sec = (int)strtol(optarg, NULL, 10);
                 break;
             case 14:
-                CONFIG.cache_dir = strdup(optarg);
+                CONFIG.cache_dir = STRDUP(optarg);
                 break;
             case 15:
-                CONFIG.sonic_username = strdup(optarg);
+                CONFIG.sonic_username = STRDUP(optarg);
                 break;
             case 16:
-                CONFIG.sonic_password = strdup(optarg);
+                CONFIG.sonic_password = STRDUP(optarg);
                 break;
             case 17:
                 CONFIG.sonic_id3 = 1;
@@ -380,10 +406,10 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.mode = SINGLE;
                 break;
             case 23:
-                CONFIG.cafile = strdup(optarg);
+                CONFIG.cafile = STRDUP(optarg);
                 break;
             case 24:
-                CONFIG.proxy_cafile = strdup(optarg);
+                CONFIG.proxy_cafile = STRDUP(optarg);
                 break;
             case 25:
                 CONFIG.refresh_timeout = (int)strtol(optarg, NULL, 10);
@@ -420,11 +446,16 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
  */
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 {
+    char **tmp = (char **)realloc((void *)*fuse_argv_ptr,
+                                  ((size_t)*fuse_argc + 1) * sizeof(char *));
+    if (!tmp) {
+        lprintf(fatal, "realloc failed: %s\n", strerror(errno));
+        return;
+    }
+    *fuse_argv_ptr = tmp;
     (*fuse_argc)++;
-    *fuse_argv_ptr
-        = (char **)realloc((void *)*fuse_argv_ptr, *fuse_argc * sizeof(char *));
     char **fuse_argv = *fuse_argv_ptr;
-    fuse_argv[*fuse_argc - 1] = strdup(opt_string);
+    fuse_argv[*fuse_argc - 1] = STRDUP(opt_string);
 }
 
 static void print_help(char *program_name, int long_help)

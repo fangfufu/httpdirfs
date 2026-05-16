@@ -276,3 +276,21 @@ char *str_to_hex(char *s)
     }
     return hex;
 }
+
+char *STRDUP(const char *s)
+{
+    char *ptr = strdup(s);
+    if (!ptr) {
+        lprintf(fatal, "%s!\n", strerror(errno));
+    }
+    return ptr;
+}
+
+char *STRNDUP(const char *s, size_t n)
+{
+    char *ptr = strndup(s, n);
+    if (!ptr) {
+        lprintf(fatal, "%s!\n", strerror(errno));
+    }
+    return ptr;
+}
