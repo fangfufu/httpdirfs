@@ -498,7 +498,7 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
 LinkTable *sonic_LinkTable_new_id3(int depth, const char *id)
 {
     char *url;
-    LinkTable *linktbl;
+    LinkTable *linktbl = NULL;
     switch (depth) {
     /*
      * Root table

@@ -22,45 +22,58 @@ int log_level_init(void)
 #endif
 }
 
+static void __attribute__((format(printf, 5, 0)))
+vlog_printf(LogType type, const char *file, const char *func, int line,
+            const char *format, va_list args)
+{
+    switch (type) {
+    case fatal:
+        fprintf(stderr, "Fatal:");
+        break;
+    case error:
+        fprintf(stderr, "Error:");
+        break;
+    case warning:
+        fprintf(stderr, "Warning:");
+        break;
+    case info:
+        goto print_actual_message;
+    default:
+        fprintf(stderr, "Debug");
+        if (type != debug) {
+            fprintf(stderr, "(%x)", (unsigned int)type);
+        }
+        fprintf(stderr, ":");
+        break;
+    }
+
+    fprintf(stderr, "%s:%d:", file, line);
+
+print_actual_message: {
+}
+    fprintf(stderr, "%s: ", func);
+    vfprintf(stderr, format, args);
+}
+
 void log_printf(LogType type, const char *file, const char *func, int line,
                 const char *format, ...)
 {
     if (type & CONFIG.log_type) {
-        switch (type) {
-        case fatal:
-            fprintf(stderr, "Fatal:");
-            break;
-        case error:
-            fprintf(stderr, "Error:");
-            break;
-        case warning:
-            fprintf(stderr, "Warning:");
-            break;
-        case info:
-            goto print_actual_message;
-        default:
-            fprintf(stderr, "Debug");
-            if (type != debug) {
-                fprintf(stderr, "(%x)", type);
-            }
-            fprintf(stderr, ":");
-            break;
-        }
-
-        fprintf(stderr, "%s:%d:", file, line);
-
-    print_actual_message: {
-    }
-        fprintf(stderr, "%s: ", func);
         va_list args;
         va_start(args, format);
-        vfprintf(stderr, format, args);
+        vlog_printf(type, file, func, line, format, args);
         va_end(args);
-
-        if (type == fatal) {
-            exit_failure();
-        }
     }
+}
+
+void fatal_log_printf(const char *file, const char *func, int line,
+                      const char *format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    vlog_printf(fatal, file, func, line, format, args);
+    va_end(args);
+    exit_failure();
 }
 
 void print_version(void)
