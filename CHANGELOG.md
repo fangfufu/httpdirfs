@@ -8,6 +8,14 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Fixed
+
+- Reuse populated LinkTable to prevent memory leaks and redundant I/O
+  ([fba125c](https://github.com/fangfufu/httpdirfs/commit/fba125c)).
+- Fix Sonic ID3 recursive root listing with artists by improving parser
+  robustness ([6ea84ae](https://github.com/fangfufu/httpdirfs/commit/6ea84ae))
+  (https://github.com/fangfufu/httpdirfs/pull/213).
+
 ## [1.2.9] - 2026-05-13
 
 ### Added
