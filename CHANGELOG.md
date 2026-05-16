@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.2.10] - 2026-05-16
+
 ### Fixed
 
 - Reuse populated LinkTable to prevent memory leaks and redundant I/O
@@ -550,7 +552,8 @@ and this project adheres to
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.10...master
+[1.2.10]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...1.2.10
 [1.2.9]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/fangfufu/httpdirfs/compare/1.2.7...1.2.8
 [1.2.7]: https://github.com/fangfufu/httpdirfs/compare/1.2.6...1.2.7
