@@ -128,8 +128,10 @@ void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
     int i;
     i = sem_init(sem, pshared, value);
     if (i) {
+        int saved_errno = errno;
         fatal_log_printf(file, func, line, "%lx sem_init: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
@@ -141,8 +143,10 @@ void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
     int i;
     i = sem_destroy(sem);
     if (i) {
+        int saved_errno = errno;
         fatal_log_printf(file, func, line, "%lx sem_destroy: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
@@ -159,8 +163,10 @@ void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
     int i;
     i = sem_wait(sem);
     if (i) {
+        int saved_errno = errno;
         fatal_log_printf(file, func, line, "%lx sem_wait: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 
@@ -172,8 +178,10 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
     int i;
     i = sem_post(sem);
     if (i) {
+        int saved_errno = errno;
         fatal_log_printf(file, func, line, "%lx sem_post: %d, %s\n",
-                         (unsigned long)pthread_self(), i, strerror(i));
+                         (unsigned long)pthread_self(), i,
+                         strerror(saved_errno));
     }
 }
 

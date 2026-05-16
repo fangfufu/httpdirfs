@@ -57,7 +57,7 @@ print_actual_message: {
 void log_printf(LogType type, const char *file, const char *func, int line,
                 const char *format, ...)
 {
-    if (type & CONFIG.log_type) {
+    if (type == fatal || (type & CONFIG.log_type)) {
         va_list args;
         va_start(args, format);
         vlog_printf(type, file, func, line, format, args);
