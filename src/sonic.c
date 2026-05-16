@@ -328,6 +328,26 @@ static void sanitise_LinkTable(LinkTable *linktbl)
     }
 }
 
+/*
+ * LinkTable of the <index> element currently being parsed by
+ * XML_parser_id3_root() / XML_parser_id3_root_end(). The previous
+ * "last link added to root" heuristic mis-parents artists when an
+ * <index> produces no link or when elements arrive in an unexpected
+ * order. Track the parent explicitly via an end-element handler.
+ */
+static LinkTable *id3_current_index_table = NULL;
+
+static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
+                                        const char **attr);
+
+static void XMLCALL XML_parser_id3_root_end(void *data, const char *elem)
+{
+    (void)data;
+    if (!strcmp(elem, "index")) {
+        id3_current_index_table = NULL;
+    }
+}
+
 /**
  * \brief parse a XML string in order to fill in the LinkTable
  */
@@ -352,6 +372,11 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
 
     XML_SetStartElementHandler(parser, handler);
 
+    if (handler == &XML_parser_id3_root) {
+        id3_current_index_table = NULL;
+        XML_SetEndElementHandler(parser, XML_parser_id3_root_end);
+    }
+
     if (XML_Parse(parser, xml.data, xml.curr_size, 1) == XML_STATUS_ERROR) {
         lprintf(error, "Parse error at line %lu: %s\n",
                 XML_GetCurrentLineNumber(parser),
@@ -359,6 +384,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     }
 
     XML_ParserFree(parser);
+    id3_current_index_table = NULL;
 
     FREE(xml.data);
 
@@ -393,14 +419,6 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
     }
 
     LinkTable *root_linktbl = (LinkTable *)data;
-    LinkTable *this_linktbl = NULL;
-
-    /*
-     * Set the current linktbl, if we have more than head link.
-     */
-    if (root_linktbl->num > 1) {
-        this_linktbl = root_linktbl->links[root_linktbl->num - 1]->next_table;
-    }
 
     int id_set = 0;
     int linkname_set = 0;
@@ -426,11 +444,16 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
          */
         if (linkname_set) {
             LinkTable_add(root_linktbl, link);
+            id3_current_index_table = link->next_table;
         } else {
             FREE(link);
         }
         return;
     } else if (!strcmp(elem, "artist")) {
+        if (!id3_current_index_table) {
+            lprintf(warning, "Ignoring <artist> outside of any <index>\n");
+            return;
+        }
         link = CALLOC(1, sizeof(Link));
         link->type = LINK_DIR;
         /*
@@ -456,11 +479,15 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
          * Clean up if linkname is not set
          */
         if (!linkname_set || !id_set) {
+            if (link->sonic.id) {
+                FREE(link->sonic.id);
+            }
+
             FREE(link);
             return;
         }
 
-        LinkTable_add(this_linktbl, link);
+        LinkTable_add(id3_current_index_table, link);
     }
     /*
      * If we reach here, then this element does not contain directory structural
