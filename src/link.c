@@ -438,7 +438,7 @@ static int linknames_equal(const char *str_a, const char *str_b)
     }
 
 end:
-    lprintf(debug, "linknames comparison: a: %s, b: %s, max_len: %d %s\n",
+    lprintf(debug, "linknames comparison: a: %s, b: %s, comp_len: %zu %s\n",
             str_a, str_b, comp_len, identical ? ", identical!" : "");
     return identical;
 }
@@ -592,7 +592,7 @@ void LinkTable_print(LinkTable *linktbl)
     if (CONFIG.log_type & info) {
         int j = 0;
         lprintf(info, "--------------------------------------------\n");
-        lprintf(info, " LinkTable %p for %s\n", linktbl,
+        lprintf(info, " LinkTable %p for %s\n", (void *)linktbl,
                 linktbl->links[0]->f_url);
         lprintf(info, "--------------------------------------------\n");
         for (int i = 0; i < linktbl->num; i++) {
@@ -649,10 +649,10 @@ LinkTable *LinkTable_new(const char *url)
              */
             time_t time_now = time(NULL);
             if (time_now - disk_linktbl->index_time > CONFIG.refresh_timeout) {
-                lprintf(info, "time_now: %d, index_time: %d\n", time_now,
-                        disk_linktbl->index_time);
-                lprintf(info, "diff: %d, limit: %d\n",
-                        time_now - disk_linktbl->index_time,
+                lprintf(info, "time_now: %ld, index_time: %ld\n",
+                        (long)time_now, (long)disk_linktbl->index_time);
+                lprintf(info, "diff: %ld, limit: %d\n",
+                        (long)(time_now - disk_linktbl->index_time),
                         CONFIG.refresh_timeout);
                 LinkTable_free(disk_linktbl);
             } else {
@@ -668,7 +668,7 @@ LinkTable *LinkTable_new(const char *url)
     if (!linktbl) {
         linktbl = LinkTable_alloc(url);
         linktbl->index_time = time(NULL);
-        lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
+        lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
 
         /*
          * start downloading the base URL
@@ -698,7 +698,7 @@ LinkTable *LinkTable_new(const char *url)
     }
 
     static unsigned long long i = 0;
-    lprintf(debug, "Calling LinkTable_new for the %d time!\n", i);
+    lprintf(debug, "Calling LinkTable_new for the %llu time!\n", i);
     i++;
 
     free(unescaped_path);
@@ -740,7 +740,7 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
         return -1;
     }
 
-    lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
+    lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
     if (fwrite(&linktbl->num, sizeof(int), 1, fp) != 1
         || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to save the header of %s!\n", path);
@@ -800,7 +800,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         FREE(path);
         return NULL;
     }
-    lprintf(debug, "linktbl->index_time: %d\n", linktbl->index_time);
+    lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
 
     linktbl->links = (Link **)CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
@@ -964,7 +964,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 
 Link *path_to_Link(const char *path)
 {
-    lprintf(link_lock_debug, "thread %x: locking link_lock;\n", pthread_self());
+    lprintf(link_lock_debug, "thread %lx: locking link_lock;\n",
+            (unsigned long)pthread_self());
 
     PTHREAD_MUTEX_LOCK(&link_lock);
     char *new_path = strndup(path, MAX_PATH_LEN);
@@ -974,8 +975,8 @@ Link *path_to_Link(const char *path)
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
     FREE(new_path);
 
-    lprintf(link_lock_debug, "thread %x: unlocking link_lock;\n",
-            pthread_self());
+    lprintf(link_lock_debug, "thread %lx: unlocking link_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&link_lock);
     return link;
 }
