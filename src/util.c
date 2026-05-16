@@ -255,7 +255,7 @@ void *CALLOC(size_t nmemb, size_t size)
     return ptr;
 }
 
-void FREE(void *ptr)
+void FREE_wrapper(void *ptr)
 {
     if (ptr) {
         free(ptr);
