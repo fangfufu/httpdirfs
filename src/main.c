@@ -171,12 +171,12 @@ fuse_start:
     for (int i = 0; i < all_argc; i++) {
         FREE(all_argv[i]);
     }
-    FREE((void *)all_argv);
+    FREE(all_argv);
 
     for (int i = 0; i < fuse_argc; i++) {
         FREE(fuse_argv[i]);
     }
-    FREE((void *)fuse_argv);
+    FREE(fuse_argv);
 
     FREE(config_path);
 
