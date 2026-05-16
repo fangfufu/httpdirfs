@@ -3,6 +3,7 @@
 #include "config.h"
 #include "log.h"
 #include "util.h"
+#include <curl/curl.h>
 
 #include <sys/stat.h>
 
@@ -119,8 +120,8 @@ static char *CacheSystem_calc_dir(const char *url)
 
 void CacheSystem_init(const char *path, int url_supplied)
 {
-    lprintf(cache_lock_debug, "thread %x: initialise cf_lock;\n",
-            pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: initialise cf_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_INIT(&cf_lock, NULL);
 
     if (url_supplied) {
@@ -386,8 +387,8 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         return -EINVAL;
     }
 
-    lprintf(cache_lock_debug, "thread %x: locking seek_lock;\n",
-            pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: locking seek_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
     long byte_read = 0;
@@ -434,8 +435,8 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 
 end:
 
-    lprintf(cache_lock_debug, "thread %x: unlocking seek_lock;\n",
-            pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: unlocking seek_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     return byte_read;
 }
@@ -459,8 +460,8 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len, off_t offset)
         return 0;
     }
 
-    lprintf(cache_lock_debug, "thread %x: locking seek_lock;\n",
-            pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: locking seek_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&cf->seek_lock);
 
     long byte_written = 0;
@@ -489,8 +490,8 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len, off_t offset)
     }
 
 end:
-    lprintf(cache_lock_debug, "thread %x: unlocking seek_lock;\n",
-            pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: unlocking seek_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->seek_lock);
     return byte_written;
 }
@@ -760,13 +761,14 @@ Cache *Cache_open(const char *fn)
         return NULL;
     }
 
-    lprintf(cache_lock_debug, "thread %x: locking cf_lock;\n", pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: locking cf_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
     if (link->cache_ptr) {
         link->cache_ptr->cache_opened++;
-        lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return link->cache_ptr;
     }
@@ -777,16 +779,16 @@ Cache *Cache_open(const char *fn)
     if (CONFIG.mode == NORMAL || CONFIG.mode == SINGLE) {
         if (Cache_exist(fn)) {
 
-            lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                    pthread_self());
+            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                    (unsigned long)pthread_self());
             PTHREAD_MUTEX_UNLOCK(&cf_lock);
             return NULL;
         }
     } else if (CONFIG.mode == SONIC) {
         if (Cache_exist(link->sonic.id)) {
 
-            lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                    pthread_self());
+            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                    (unsigned long)pthread_self());
             PTHREAD_MUTEX_UNLOCK(&cf_lock);
             return NULL;
         }
@@ -823,8 +825,8 @@ Cache *Cache_open(const char *fn)
         lprintf(error, "cannot open metadata file %s.\n", fn);
         Cache_free(cf);
 
-        lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return NULL;
     }
@@ -836,8 +838,8 @@ Cache *Cache_open(const char *fn)
         lprintf(error, "metadata error: %s.\n", fn);
         Cache_free(cf);
 
-        lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return NULL;
     }
@@ -853,8 +855,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n",
                 fn, cf->content_length, Data_size(fn));
         Cache_free(cf);
 
-        lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return NULL;
     }
@@ -866,8 +868,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n",
         lprintf(warning, "outdated cache file: %s.\n", fn);
         Cache_free(cf);
 
-        lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return NULL;
     }
@@ -876,8 +878,8 @@ cf->content_length: %ld, Data_size(fn): %ld.\n",
         lprintf(error, "cannot open data file %s.\n", fn);
         Cache_free(cf);
 
-        lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return NULL;
     }
@@ -887,24 +889,24 @@ cf->content_length: %ld, Data_size(fn): %ld.\n",
      */
     cf->link->cache_ptr = cf;
 
-    lprintf(cache_lock_debug, "thread %x: unlocking cf_lock;\n",
-            pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
     return cf;
 }
 
 void Cache_close(Cache *cf)
 {
-    lprintf(cache_lock_debug, "thread %x: locking cf_lock: %s\n",
-            pthread_self(), cf->path);
+    lprintf(cache_lock_debug, "thread %lx: locking cf_lock: %s\n",
+            (unsigned long)pthread_self(), cf->path);
     PTHREAD_MUTEX_LOCK(&cf_lock);
 
     cf->cache_opened--;
 
     if (cf->cache_opened > 0) {
         lprintf(cache_lock_debug,
-                "thread %x: unlocking cf_lock: %s, cache_opened: %d\n",
-                pthread_self(), cf->path, cf->cache_opened);
+                "thread %lx: unlocking cf_lock: %s, cache_opened: %d\n",
+                (unsigned long)pthread_self(), cf->path, cf->cache_opened);
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         return;
     }
@@ -915,8 +917,8 @@ void Cache_close(Cache *cf)
      * running. This will cause a use-after-free error.
      */
     lprintf(cache_lock_debug,
-            "thread %x: waiting for background download to finish for %s\n",
-            pthread_self(), cf->path);
+            "thread %lx: waiting for background download to finish for %s\n",
+            (unsigned long)pthread_self(), cf->path);
     SEM_WAIT(&cf->bgt_sem);
 
     if (Meta_write(cf)) {
@@ -934,8 +936,8 @@ void Cache_close(Cache *cf)
     cf->link->cache_ptr = NULL;
 
     lprintf(cache_lock_debug,
-            "thread %x: unlocking cf_lock, cache closed: %s\n", pthread_self(),
-            cf->path);
+            "thread %lx: unlocking cf_lock, cache closed: %s\n",
+            (unsigned long)pthread_self(), cf->path);
     Cache_free(cf);
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
 }
@@ -973,17 +975,18 @@ static void *Cache_bgdl(void *arg)
 {
     Cache *cf = (Cache *)arg;
 
-    lprintf(cache_lock_debug, "thread %x: locking w_lock;\n", pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: locking w_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "thread %x spawned.\n ", pthread_self());
+    lprintf(debug, "thread %lx spawned.\n ", (unsigned long)pthread_self());
     long recv = Link_download(cf->link, (char *)recv_buf, cf->blksz,
                               cf->next_dl_offset);
     if (recv < 0) {
-        lprintf(error, "thread %x received %ld bytes, \
+        lprintf(error, "thread %lx received %ld bytes, \
 which doesn't make sense\n",
-                pthread_self(), recv);
+                (unsigned long)pthread_self(), recv);
     }
 
     if ((recv == cf->blksz)
@@ -993,14 +996,15 @@ which doesn't make sense\n",
             Seg_set(cf, cf->next_dl_offset, 1);
         }
     } else {
-        lprintf(error, "received %ld rather than %ld, possible network \
+        lprintf(error, "received %ld rather than %d, possible network \
 error.\n",
                 recv, cf->blksz);
     }
 
     FREE(recv_buf);
 
-    lprintf(cache_lock_debug, "thread %x: unlocking w_lock;\n", pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
     SEM_POST(&cf->bgt_sem);
 
@@ -1052,8 +1056,8 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
          * Wait for any other download thread to finish
          */
 
-        lprintf(cache_lock_debug, "thread %ld: locking w_lock;\n",
-                pthread_self());
+        lprintf(cache_lock_debug, "thread %lx: locking w_lock;\n",
+                (unsigned long)pthread_self());
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
 
         if (Seg_exist(cf, dl_offset)) {
@@ -1063,8 +1067,8 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
              */
             send = Data_read(cf, (uint8_t *)output_buf, len, offset_start);
 
-            lprintf(cache_lock_debug, "thread %x: unlocking w_lock;\n",
-                    pthread_self());
+            lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
+                    (unsigned long)pthread_self());
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
             goto bgdl;
@@ -1076,12 +1080,12 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
      */
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "thread %x: spawned.\n ", pthread_self());
+    lprintf(debug, "thread %lx: spawned.\n ", (unsigned long)pthread_self());
     long recv = Link_download(cf->link, (char *)recv_buf, cf->blksz, dl_offset);
     if (recv < 0) {
-        lprintf(error, "thread %x received %ld bytes, \
+        lprintf(error, "thread %lx received %ld bytes, \
 which doesn't make sense\n",
-                pthread_self(), recv);
+                (unsigned long)pthread_self(), recv);
     }
     /*
      * check if we have received enough data, write it to the disk
@@ -1095,7 +1099,7 @@ which doesn't make sense\n",
             Seg_set(cf, dl_offset, 1);
         }
     } else {
-        lprintf(error, "received %ld rather than %ld, possible network \
+        lprintf(error, "received %ld rather than %d, possible network \
 error.\n",
                 recv, cf->blksz);
     }
@@ -1110,7 +1114,8 @@ error.\n",
     }
     FREE(recv_buf);
 
-    lprintf(cache_lock_debug, "thread %x: unlocking w_lock;\n", pthread_self());
+    lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
+            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
     /*
@@ -1126,8 +1131,8 @@ bgdl: {
         int ret = sem_trywait(&cf->bgt_sem);
         if (!ret) {
             lprintf(cache_lock_debug,
-                    "parent thread %x: sem_trywait successful\n",
-                    pthread_self());
+                    "parent thread %lx: sem_trywait successful\n",
+                    (unsigned long)pthread_self());
             cf->next_dl_offset = next_dl_offset;
             Cache_bgdl_launcher(cf);
         } else if (errno != EAGAIN) {

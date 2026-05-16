@@ -2,6 +2,8 @@
 
 #include "log.h"
 #include <stddef.h>
+#include <stdlib.h>
+#include "util.h"
 
 
 ConfigStruct CONFIG;
