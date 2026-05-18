@@ -791,126 +791,84 @@ Cache *Cache_open(const char *fn)
         return link->cache_ptr;
     }
 
-    /*
-     * Check if both metadata and data file exist
-     */
-    if (CONFIG.mode == NORMAL || CONFIG.mode == SINGLE) {
-        if (Cache_exist(fn)) {
-
-            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                    (unsigned long)pthread_self());
-            PTHREAD_MUTEX_UNLOCK(&cf_lock);
-            return NULL;
-        }
-    } else if (CONFIG.mode == SONIC) {
-        if (Cache_exist(link->sonic.id)) {
-
-            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                    (unsigned long)pthread_self());
-            PTHREAD_MUTEX_UNLOCK(&cf_lock);
-            return NULL;
-        }
-    } else {
-        lprintf(fatal, "Invalid CONFIG.mode\n");
-    }
-
-    /*
-     * Create the cache in-memory data structure
-     */
-    Cache *cf = Cache_alloc();
-
-    /*
-     * Fill in the fs_path
-     */
-    cf->fs_path = CALLOC(PATH_MAX + 1, sizeof(char));
-    snprintf(cf->fs_path, PATH_MAX + 1, "%s", fn);
-
-    /*
-     * Set the path for the local cache file, if we are in sonic mode
-     */
+    const char *actual_fn = fn;
     if (CONFIG.mode == SONIC) {
-        fn = link->sonic.id;
+        actual_fn = link->sonic.id;
     }
 
-    cf->path = STRNDUP(fn, PATH_MAX);
+    // Try up to 2 times. If opening fails on the first attempt (outdated,
+    // corrupt, etc.), we delete the cache and try creating and opening a fresh
+    // one.
+    for (int attempt = 0; attempt < 2; attempt++) {
+        if (Cache_exist(actual_fn) != 0) {
+            Cache_delete(fn);
+            if (Cache_create(fn) != 0) {
+                lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                        (unsigned long)pthread_self());
+                PTHREAD_MUTEX_UNLOCK(&cf_lock);
+                return NULL;
+            }
+        }
 
-    /*
-     * Associate the cache structure with a link
-     */
-    cf->link = link;
+        /*
+         * Create the cache in-memory data structure
+         */
+        Cache *cf = Cache_alloc();
 
-    if (Meta_open(cf)) {
-        lprintf(error, "cannot open metadata file %s.\n", fn);
-        Cache_free(cf);
+        /*
+         * Fill in the fs_path
+         */
+        cf->fs_path = CALLOC(PATH_MAX + 1, sizeof(char));
+        snprintf(cf->fs_path, PATH_MAX + 1, "%s", fn);
 
-        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return NULL;
-    }
+        cf->path = STRNDUP(actual_fn, PATH_MAX);
 
-    /*
-     * Corrupt metadata
-     */
-    if (Meta_read(cf)) {
-        lprintf(error, "metadata error: %s.\n", fn);
-        Cache_free(cf);
+        /*
+         * Associate the cache structure with a link
+         */
+        cf->link = link;
 
-        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return NULL;
-    }
-
-    /*
-     * Inconsistency between metadata and data file, note that on disk file
-     * size might be bigger than content_length, due to on-disk filesystem
-     * allocation policy.
-     */
-    if (cf->content_length > Data_size(fn)) {
-        lprintf(error, "metadata inconsistency %s, \
+        int ok = 1;
+        if (Meta_open(cf)) {
+            lprintf(error, "cannot open metadata file %s.\n", actual_fn);
+            ok = 0;
+        } else if (Meta_read(cf)) {
+            lprintf(error, "metadata error: %s.\n", actual_fn);
+            ok = 0;
+        } else if (cf->content_length > Data_size(actual_fn)) {
+            lprintf(error, "metadata inconsistency %s, \
 cf->content_length: %ld, Data_size(fn): %ld.\n",
-                fn, cf->content_length, Data_size(fn));
+                    actual_fn, cf->content_length, Data_size(actual_fn));
+            ok = 0;
+        } else if (cf->time != cf->link->time) {
+            lprintf(warning, "outdated cache file: %s.\n", actual_fn);
+            ok = 0;
+        } else if (Data_open(cf)) {
+            lprintf(error, "cannot open data file %s.\n", actual_fn);
+            ok = 0;
+        }
+
+        if (ok) {
+            /*
+             * Yup, we just created a circular loop. ;)
+             */
+            cf->link->cache_ptr = cf;
+
+            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                    (unsigned long)pthread_self());
+            PTHREAD_MUTEX_UNLOCK(&cf_lock);
+            return cf;
+        }
+
+        // Clean up memory and delete files before retry
         Cache_free(cf);
-
-        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return NULL;
+        Cache_delete(fn);
     }
-
-    /*
-     * Check if the cache files are not outdated
-     */
-    if (cf->time != cf->link->time) {
-        lprintf(warning, "outdated cache file: %s.\n", fn);
-        Cache_free(cf);
-
-        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return NULL;
-    }
-
-    if (Data_open(cf)) {
-        lprintf(error, "cannot open data file %s.\n", fn);
-        Cache_free(cf);
-
-        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf_lock);
-        return NULL;
-    }
-
-    /*
-     * Yup, we just created a circular loop. ;)
-     */
-    cf->link->cache_ptr = cf;
 
     lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
-    return cf;
+    return NULL;
 }
 
 void Cache_close(Cache *cf)
