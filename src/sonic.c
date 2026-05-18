@@ -29,7 +29,7 @@ static SonicConfigStruct SONIC_CONFIG;
 void sonic_config_init(const char *server, const char *username,
                        const char *password)
 {
-    SONIC_CONFIG.server = strndup(server, PATH_MAX);
+    SONIC_CONFIG.server = STRNDUP(server, PATH_MAX);
     /*
      * Correct for the extra '/'
      */
@@ -37,8 +37,8 @@ void sonic_config_init(const char *server, const char *username,
     if (server_url_len > 0 && SONIC_CONFIG.server[server_url_len - 1] == '/') {
         SONIC_CONFIG.server[server_url_len - 1] = '\0';
     }
-    SONIC_CONFIG.username = strndup(username, NAME_MAX);
-    SONIC_CONFIG.password = strndup(password, NAME_MAX);
+    SONIC_CONFIG.username = STRNDUP(username, NAME_MAX);
+    SONIC_CONFIG.password = STRNDUP(password, NAME_MAX);
     SONIC_CONFIG.client = DEFAULT_USER_AGENT;
 
     if (!CONFIG.sonic_insecure) {
@@ -76,6 +76,7 @@ static char *sonic_gen_auth_str(void)
                  SONIC_CONFIG.client);
         FREE(salt);
         FREE(token);
+        FREE(pwd_salt);
         return auth_str;
     } else {
         char *pwd_hex = str_to_hex(SONIC_CONFIG.password);
@@ -307,7 +308,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
 
 static void sanitise_LinkTable(LinkTable *linktbl)
 {
-    for (int i = 0; i < linktbl->num; i++) {
+    for (int i = 0; i < linktbl->size; i++) {
         if (!strcmp(linktbl->links[i]->linkname, ".")) {
             /* Note the super long sanitised name to avoid collision */
             strcpy(linktbl->links[i]->linkname, "__DOT__");

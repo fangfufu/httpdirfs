@@ -9,6 +9,8 @@
 #include <semaphore.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /**
  * \brief append a path
@@ -113,15 +115,34 @@ char *generate_salt(void);
  */
 char *generate_md5sum(const char *str);
 
+#ifdef DEBUG
+
 /**
- * \brief wrapper for calloc(), with error handling
+ * \brief memory allocation tracker node
  */
-void *CALLOC(size_t nmemb, size_t size);
+typedef struct MemNode {
+    void *ptr;
+    size_t size;
+    const char *file;
+    const char *func;
+    int line;
+    struct MemNode *next;
+} MemNode;
+
+#endif
+
+/**
+ * \brief wrapper for calloc(), with error handling and memory tracking
+ */
+void *CALLOC_wrapper(size_t nmemb, size_t size, const char *file,
+                     const char *func, int line);
+#define CALLOC(nmemb, size)                                                    \
+    CALLOC_wrapper(nmemb, size, __FILE__, __func__, __LINE__)
 
 /**
  * \brief Internal wrapper for free().
  */
-void FREE_wrapper(void *ptr);
+void FREE_wrapper(void *ptr, const char *file, const char *func, int line);
 
 /**
  * \brief Macro wrapper for free() that sets the pointer to NULL afterwards.
@@ -136,24 +157,49 @@ void FREE_wrapper(void *ptr);
 #define FREE(ptr)                                                              \
     do {                                                                       \
         __extension__ __auto_type __ptr_to_free = &(ptr);                      \
-        FREE_wrapper((void *)*__ptr_to_free);                                  \
+        FREE_wrapper((void *)*__ptr_to_free, __FILE__, __func__, __LINE__);    \
         *__ptr_to_free = NULL;                                                 \
     } while (0)
+
+/**
+ * \brief wrapper for STRDUP(), with memory tracking
+ */
+char *STRDUP_wrapper(const char *s, const char *file, const char *func,
+                     int line);
+#define STRDUP(s) STRDUP_wrapper(s, __FILE__, __func__, __LINE__)
+
+/**
+ * \brief wrapper for STRNDUP(), with memory tracking
+ */
+char *STRNDUP_wrapper(const char *s, size_t n, const char *file,
+                      const char *func, int line);
+#define STRNDUP(s, n) STRNDUP_wrapper(s, n, __FILE__, __func__, __LINE__)
+
+/**
+ * \brief wrapper for realloc(), with memory tracking
+ */
+void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
+                      const char *func, int line);
+#define REALLOC(ptr, size)                                                     \
+    REALLOC_wrapper(ptr, size, __FILE__, __func__, __LINE__)
+
+/**
+ * \brief wrapper for realpath(), with memory tracking
+ */
+char *REALPATH_wrapper(const char *path, char *resolved_path, const char *file,
+                       const char *func, int line);
+#define REALPATH(path, resolved_path)                                          \
+    REALPATH_wrapper(path, resolved_path, __FILE__, __func__, __LINE__)
+
+/**
+ * \brief cleanup all allocated memory
+ */
+void mem_cleanup(void);
 
 /**
  * \brief Convert a string to hex
  */
 char *str_to_hex(char *s);
-
-/**
- * \brief wrapper for strdup(), with error handling
- */
-char *STRDUP(const char *s);
-
-/**
- * \brief wrapper for strndup(), with error handling
- */
-char *STRNDUP(const char *s, size_t n);
 
 /**
  * \brief initialise the configuration data structure

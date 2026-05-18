@@ -242,7 +242,7 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
      * Start all uninitialized requests once
      */
     int total_uninitialized = 0;
-    for (int i = 0; i < linktbl->num; i++) {
+    for (int i = 0; i < linktbl->size; i++) {
         Link *this_link = linktbl->links[i];
         if (this_link->type == LINK_UNINITIALISED_FILE
             || this_link->type == LINK_UNINITIALISED_DIR) {
@@ -260,7 +260,7 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
     int j = 0;
     do {
         u = 0;
-        for (int i = 0; i < linktbl->num; i++) {
+        for (int i = 0; i < linktbl->size; i++) {
             Link *this_link = linktbl->links[i];
             if (this_link->type == LINK_UNINITIALISED_FILE
                 || this_link->type == LINK_UNINITIALISED_DIR) {
@@ -284,7 +284,7 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
             int n_running = curl_multi_perform_once();
 
             if (n_running == 0) {
-                for (int i = 0; i < linktbl->num; i++) {
+                for (int i = 0; i < linktbl->size; i++) {
                     Link *this_link = linktbl->links[i];
                     if (this_link->type == LINK_UNINITIALISED_FILE
                         || this_link->type == LINK_UNINITIALISED_DIR) {
@@ -367,14 +367,10 @@ LinkTable *LinkSystem_init(const char *url)
 
 void LinkTable_add(LinkTable *linktbl, Link *link)
 {
-    linktbl->num++;
-    Link **tmp = (Link **)realloc((void *)linktbl->links,
-                                  linktbl->num * sizeof(Link *));
-    if (!tmp) {
-        lprintf(fatal, "realloc() failure!\n");
-    }
-    linktbl->links = tmp;
-    linktbl->links[linktbl->num - 1] = link;
+    linktbl->links = (Link **)REALLOC(
+        (void *)linktbl->links, ((size_t)linktbl->size + 1) * sizeof(Link *));
+    linktbl->links[linktbl->size] = link;
+    linktbl->size++;
 }
 
 static LinkType linkname_to_LinkType(const char *linkname)
@@ -479,7 +475,7 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
         if ((type == LINK_UNINITIALISED_DIR)
             || (type == LINK_UNINITIALISED_FILE)) {
             int identical_link_found = 0;
-            for (int i = 0; i < linktbl->num; i++) {
+            for (int i = 0; i < linktbl->size; i++) {
                 if (linknames_equal(relative_url,
                                     linktbl->links[i]->linkname)) {
                     identical_link_found = 1;
@@ -544,7 +540,7 @@ static void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
     lprintf(debug, "Filling %s\n", head_link->f_url);
-    for (int i = 1; i < linktbl->num; i++) {
+    for (int i = 1; i < linktbl->size; i++) {
         Link *this_link = linktbl->links[i];
         /* Some web sites use characters in their href attributes that really
            shouldn't be in their href attributes, most commonly spaces. And
@@ -582,9 +578,13 @@ static void LinkTable_fill(LinkTable *linktbl)
 void LinkTable_free(LinkTable *linktbl)
 {
     if (linktbl) {
-        for (int i = 0; i < linktbl->num; i++) {
-            LinkTable_free(linktbl->links[i]->next_table);
-            FREE(linktbl->links[i]);
+        for (int i = 0; i < linktbl->size; i++) {
+            Link *entry = linktbl->links ? linktbl->links[i] : NULL;
+            if (!entry) {
+                continue;
+            }
+            LinkTable_free(entry->next_table);
+            FREE(entry);
         }
         FREE(linktbl->links);
         FREE(linktbl);
@@ -599,7 +599,7 @@ void LinkTable_print(LinkTable *linktbl)
         lprintf(info, " LinkTable %p for %s\n", (void *)linktbl,
                 linktbl->links[0]->f_url);
         lprintf(info, "--------------------------------------------\n");
-        for (int i = 0; i < linktbl->num; i++) {
+        for (int i = 0; i < linktbl->size; i++) {
             Link *this_link = linktbl->links[i];
             lprintf(info, "%d %c %lu %s %s\n", i, this_link->type,
                     this_link->content_length, this_link->linkname,
@@ -618,7 +618,7 @@ void LinkTable_print(LinkTable *linktbl)
 LinkTable *LinkTable_alloc(const char *url)
 {
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
-    linktbl->num = 0;
+    linktbl->size = 0;
     linktbl->index_time = 0;
     linktbl->links = NULL;
 
@@ -629,7 +629,7 @@ LinkTable *LinkTable_alloc(const char *url)
     Link *head_link = Link_new("/", LINK_HEAD);
     LinkTable_add(linktbl, head_link);
     strncpy(head_link->f_url, url, PATH_MAX);
-    assert(linktbl->num == 1);
+    assert(linktbl->size == 1);
     return linktbl;
 }
 
@@ -743,12 +743,12 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     }
 
     lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
-    if (fwrite(&linktbl->num, sizeof(int), 1, fp) != 1
+    if (fwrite(&linktbl->size, sizeof(int), 1, fp) != 1
         || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to save the header of %s!\n", path);
     }
     FREE(path);
-    for (int i = 0; i < linktbl->num; i++) {
+    for (int i = 0; i < linktbl->size; i++) {
         ignore_value(
             fwrite(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp));
         ignore_value(
@@ -788,7 +788,8 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     }
 
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
-    if (fread(&linktbl->num, sizeof(int), 1, fp) != 1
+    int sz = 0;
+    if (fread(&sz, sizeof(int), 1, fp) != 1
         || fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to read the header of %s!\n", path);
         fclose(fp);
@@ -797,10 +798,24 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         FREE(path);
         return NULL;
     }
+
+    if (sz < 1 || sz > (int)(INT_MAX / sizeof(Link *))) {
+        lprintf(error, "Invalid link table size: %d in %s!\n", sz, path);
+        fclose(fp);
+        LinkTable_free(linktbl);
+        LinkTable_disk_delete(dirn);
+        FREE(path);
+        return NULL;
+    }
+
+    linktbl->size = sz;
     lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
 
-    linktbl->links = (Link **)CALLOC(linktbl->num, sizeof(Link *));
-    for (int i = 0; i < linktbl->num; i++) {
+    linktbl->links
+        = (Link **)CALLOC( // NOLINT(clang-analyzer-optin.taint.TaintedAlloc)
+            sz, sizeof(Link *));
+
+    for (int i = 0; i < sz; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
         if (fread(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp)
                 != NAME_MAX
@@ -905,7 +920,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
         /*
          * We cannot find another '/', we have reached the last level
          */
-        for (int i = 1; i < linktbl->num; i++) {
+        for (int i = 1; i < linktbl->size; i++) {
             if (!strncmp(path, linktbl->links[i]->linkname, NAME_MAX)) {
                 /*
                  * We found our link
@@ -928,7 +943,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
          * move the pointer past the '/'
          */
         char *next_path = slash + 1;
-        for (int i = 1; i < linktbl->num; i++) {
+        for (int i = 1; i < linktbl->size; i++) {
             if (!strncmp(path, linktbl->links[i]->linkname, NAME_MAX)) {
                 /*
                  * The next sub-directory exists
@@ -964,7 +979,7 @@ Link *path_to_Link(const char *path)
             (unsigned long)pthread_self());
 
     PTHREAD_MUTEX_LOCK(&link_lock);
-    char *new_path = strndup(path, PATH_MAX);
+    char *new_path = STRNDUP(path, PATH_MAX);
     if (!new_path) {
         lprintf(fatal, "cannot allocate memory\n");
     }

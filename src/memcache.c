@@ -9,17 +9,15 @@
 size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp)
 {
-    size_t recv_size = size * nmemb;
     TransferStruct *ts = (TransferStruct *)userp;
 
-    char *tmp = realloc(ts->data, ts->curr_size + recv_size + 1);
-    if (!tmp) {
-        /*
-         * out of memory!
-         */
-        lprintf(fatal, "realloc failure!\n");
+    if (size != 0 && nmemb > (SIZE_MAX - ts->curr_size - 1) / size) {
+        lprintf(fatal, "Response buffer size overflow!\n");
     }
-    ts->data = tmp;
+    size_t recv_size = size * nmemb;
+
+    void *new_data = REALLOC(ts->data, ts->curr_size + recv_size + 1);
+    ts->data = new_data;
 
     memmove(&ts->data[ts->curr_size], recv_data, recv_size);
     ts->curr_size += recv_size;

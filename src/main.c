@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     }
 
     /*--- Add the last remaining argument, which is the mountpoint ---*/
-    char *abs_mountpoint = realpath(all_argv[optind + 1], NULL);
+    char *abs_mountpoint = REALPATH(all_argv[optind + 1], NULL);
     if (!abs_mountpoint) {
         fprintf(stderr, "Error: Invalid mountpoint %s: %s\n",
                 all_argv[optind + 1], strerror(errno));
@@ -197,7 +197,7 @@ static char *get_XDG_CONFIG_HOME(void)
             config_dir = path_append(user_home, default_config_subdir);
         } else {
             lprintf(warning, "$HOME is unset\n");
-            const char *cur_dir = realpath("./", NULL);
+            const char *cur_dir = REALPATH("./", NULL);
             if (cur_dir) {
                 config_dir = path_append(cur_dir, default_config_subdir);
             } else {
@@ -289,26 +289,25 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"proxy-password", required_argument, NULL, 'L'},  /* 7 */
            {"cache", no_argument, NULL, 'L'},                 /* 8 */
            {"dl-seg-size", required_argument, NULL, 'L'},     /* 9 */
-           {"max-seg-count", required_argument, NULL, 'L'},   /* 10 */
-           {"max-conns", required_argument, NULL, 'L'},       /* 11 */
-           {"user-agent", required_argument, NULL, 'L'},      /* 12 */
-           {"retry-wait", required_argument, NULL, 'L'},      /* 13 */
-           {"cache-location", required_argument, NULL, 'L'},  /* 14 */
-           {"sonic-username", required_argument, NULL, 'L'},  /* 15 */
-           {"sonic-password", required_argument, NULL, 'L'},  /* 16 */
-           {"sonic-id3", no_argument, NULL, 'L'},             /* 17 */
-           {"no-range-check", no_argument, NULL, 'L'},        /* 18 */
-           {"sonic-insecure", no_argument, NULL, 'L'},        /* 19 */
-           {"insecure-tls", no_argument, NULL, 'L'},          /* 20 */
-           {"config", required_argument, NULL, 'L'},          /* 21 */
-           {"single-file-mode", no_argument, NULL, 'L'},      /* 22 */
-           {"cacert", required_argument, NULL, 'L'},          /* 23 */
-           {"proxy-cacert", required_argument, NULL, 'L'},    /* 24 */
-           {"refresh-timeout", required_argument, NULL, 'L'}, /* 25 */
-           {"http-header", required_argument, NULL, 'L'},     /* 26 */
-           {"cache-clear", no_argument, NULL, 'L'},           /* 27 */
-           {"zero-len-is-dir", no_argument, NULL, 'L'},       /* 28 */
-           {"invalid-refresh", no_argument, NULL, 'L'},       /* 29 */
+           {"max-conns", required_argument, NULL, 'L'},       /* 10 */
+           {"user-agent", required_argument, NULL, 'L'},      /* 11 */
+           {"retry-wait", required_argument, NULL, 'L'},      /* 12 */
+           {"cache-location", required_argument, NULL, 'L'},  /* 13 */
+           {"sonic-username", required_argument, NULL, 'L'},  /* 14 */
+           {"sonic-password", required_argument, NULL, 'L'},  /* 15 */
+           {"sonic-id3", no_argument, NULL, 'L'},             /* 16 */
+           {"no-range-check", no_argument, NULL, 'L'},        /* 17 */
+           {"sonic-insecure", no_argument, NULL, 'L'},        /* 18 */
+           {"insecure-tls", no_argument, NULL, 'L'},          /* 19 */
+           {"config", required_argument, NULL, 'L'},          /* 20 */
+           {"single-file-mode", no_argument, NULL, 'L'},      /* 21 */
+           {"cacert", required_argument, NULL, 'L'},          /* 22 */
+           {"proxy-cacert", required_argument, NULL, 'L'},    /* 23 */
+           {"refresh-timeout", required_argument, NULL, 'L'}, /* 24 */
+           {"http-header", required_argument, NULL, 'L'},     /* 25 */
+           {"cache-clear", no_argument, NULL, 'L'},           /* 26 */
+           {"zero-len-is-dir", no_argument, NULL, 'L'},       /* 27 */
+           {"invalid-refresh", no_argument, NULL, 'L'},       /* 28 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -365,66 +364,63 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.data_blksz = (int)strtol(optarg, NULL, 10) * 1024 * 1024;
                 break;
             case 10:
-                CONFIG.max_segbc = strtol(optarg, NULL, 10);
-                break;
-            case 11:
                 CONFIG.max_conns = (int)strtol(optarg, NULL, 10);
                 break;
-            case 12:
+            case 11:
                 CONFIG.user_agent = STRDUP(optarg);
                 break;
-            case 13:
+            case 12:
                 CONFIG.http_wait_sec = (int)strtol(optarg, NULL, 10);
                 break;
-            case 14:
+            case 13:
                 CONFIG.cache_dir = STRDUP(optarg);
                 break;
-            case 15:
+            case 14:
                 CONFIG.sonic_username = STRDUP(optarg);
                 break;
-            case 16:
+            case 15:
                 CONFIG.sonic_password = STRDUP(optarg);
                 break;
-            case 17:
+            case 16:
                 CONFIG.sonic_id3 = 1;
                 break;
-            case 18:
+            case 17:
                 CONFIG.no_range_check = 1;
                 break;
-            case 19:
+            case 18:
                 CONFIG.sonic_insecure = 1;
                 break;
-            case 20:
+            case 19:
                 CONFIG.insecure_tls = 1;
                 break;
-            case 21:
+            case 20:
                 /*
                  * This is for --config, we don't need to do anything
                  */
                 break;
-            case 22:
+            case 21:
                 CONFIG.mode = SINGLE;
                 break;
-            case 23:
+            case 22:
                 CONFIG.cafile = STRDUP(optarg);
                 break;
-            case 24:
+            case 23:
                 CONFIG.proxy_cafile = STRDUP(optarg);
                 break;
-            case 25:
+            case 24:
                 CONFIG.refresh_timeout = (int)strtol(optarg, NULL, 10);
                 break;
-            case 26:
+            case 25:
                 CONFIG.http_headers
                     = curl_slist_append(CONFIG.http_headers, optarg);
                 break;
-            case 27:
+            case 26:
                 CacheSystem_clear();
                 break;
-            case 28:
+            case 27:
                 CONFIG.zero_len_is_dir = 1;
                 break;
-            case 29:
+            case 28:
                 CONFIG.invalid_refresh = 1;
                 break;
             default:
@@ -446,16 +442,12 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
  */
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 {
-    char **tmp = (char **)realloc((void *)*fuse_argv_ptr,
-                                  ((size_t)*fuse_argc + 1) * sizeof(char *));
-    if (!tmp) {
-        lprintf(fatal, "realloc failed: %s\n", strerror(errno));
-        return;
-    }
-    *fuse_argv_ptr = tmp;
-    (*fuse_argc)++;
+    char **new_argv = (char **)REALLOC(
+        (void *)*fuse_argv_ptr, ((size_t)*fuse_argc + 1) * sizeof(char *));
+    *fuse_argv_ptr = new_argv;
     char **fuse_argv = *fuse_argv_ptr;
-    fuse_argv[*fuse_argc - 1] = STRDUP(opt_string);
+    fuse_argv[*fuse_argc] = STRDUP(opt_string);
+    (*fuse_argc)++;
 }
 
 static void print_help(char *program_name, int long_help)
@@ -500,11 +492,6 @@ HTTPDirFS options:\n\
                             Note: this setting is ignored if previously\n\
                             cached data is found for the requested file.\n\
         --http-header       Set one or more HTTP headers\n\
-        --max-seg-count     Set maximum number of download segments a file\n\
-                            can have. (default: " XSTR(DEFAULT_MAX_SEGBC) ")\n\
-                            With the default setting, the maximum memory usage\n\
-                            per file is 128KB. This allows caching files up\n\
-                            to 1TB in size using the default segment size.\n\
         --max-conns         Set maximum number of network connections that\n\
                             libcurl is allowed to make. (default: " XSTR(DEFAULT_NETWORK_MAX_CONNS) ")\n\
         --refresh-timeout   The directories are refreshed after the specified\n\
