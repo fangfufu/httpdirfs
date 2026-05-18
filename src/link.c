@@ -1295,7 +1295,7 @@ static void make_link_relative(const char *page_url, char *link_url)
     }
     int skip_len = strlen(page_url);
     if (page_url[skip_len - 1] != '/') {
-        if (page_url[skip_len] != '/') {
+        if (link_url[skip_len] != '/') {
             /* Um, I'm not sure what to do here, so give up. */
             return;
         }
