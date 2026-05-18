@@ -55,7 +55,7 @@ cleanup() {
     log_info "Cleaning up..."
 
     # Unmount if still mounted
-    if mountpoint -q "${MOUNT_DIR}" 2>/dev/null; then
+    if [[ -n "${MOUNT_DIR:-}" ]] && mountpoint -q "${MOUNT_DIR}" 2>/dev/null; then
         do_unmount "${MOUNT_DIR}"
         sleep 1
     fi
