@@ -337,7 +337,7 @@ log_info "Unmounted successfully."
 
 # ─── Step 6: Cache mode with multithreaded reads ────────────────────────────
 
-log_info "=== Cache mode test ==="
+log_info "=== Cache mode tests ==="
 
 # Get the large file's expected SHA-256 from the manifest
 LARGE_FILE_SHA256=$(python3 -c "
@@ -354,60 +354,76 @@ else:
 if [[ -z "${LARGE_FILE_SHA256}" ]]; then
     skip "Cache test: large_1g.bin not in manifest"
 else
-    log_info "Mounting with httpdirfs (cache mode)..."
+    # Test with multiple block sizes to exercise segbc edge cases:
+    #   8 MB  - default, 1 GB / 8 MB  = 128 exactly (no remainder)
+    #  16 MB  - fewer segments, 1 GB / 16 MB = 64 exactly
+    #   1 MB  - many segments, 1 GB / 1 MB  = 1024 exactly
+    #   7 MB  - 1 GB / 7 MB ≈ 146.3 (remainder)
+    #   3 MB  - 1 GB / 3 MB ≈ 341.3 (remainder)
+    BLOCK_SIZES="8 16 1 7 3"
 
-    "${HTTPDIRFS_BIN}" \
-        -f \
-        --cache \
-        --cache-location "${CACHE_DIR}" \
-        "${BASE_URL}" \
-        "${CACHE_MOUNT_DIR}" &
-    CACHE_HTTPDIRFS_PID=$!
+    for BLKSZ in ${BLOCK_SIZES}; do
+        log_info "--- Cache test: --dl-seg-size ${BLKSZ} ---"
 
-    # Wait for mount
-    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
-        if mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
-            break
+        # Clean cache directory for each run
+        rm -rf "${CACHE_DIR:?}"/*
+
+        "${HTTPDIRFS_BIN}" \
+            -f \
+            --cache \
+            --cache-location "${CACHE_DIR}" \
+            --dl-seg-size "${BLKSZ}" \
+            "${BASE_URL}" \
+            "${CACHE_MOUNT_DIR}" &
+        CACHE_HTTPDIRFS_PID=$!
+
+        # Wait for mount
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            if mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
+                break
+            fi
+            sleep 1
+        done
+
+        if ! mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
+            log_error "httpdirfs (cache, blksz=${BLKSZ}M) failed to mount."
+            skip "Cache mode tests (mount failed, blksz=${BLKSZ}M)"
+            wait "${CACHE_HTTPDIRFS_PID}" 2>/dev/null || true
+            continue
         fi
-        sleep 1
-    done
 
-    if ! mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
-        log_error "httpdirfs (cache) failed to mount within ${MOUNT_TIMEOUT}s."
-        skip "Cache mode tests (mount failed)"
-    else
-        log_info "httpdirfs (cache) mounted at ${CACHE_MOUNT_DIR}"
+        log_info "httpdirfs (cache, blksz=${BLKSZ}M) mounted"
 
         LARGE_FILE="${CACHE_MOUNT_DIR}/large_1g.bin"
 
         # Test: Multithreaded read with 8 threads
-        log_info "Test group: Multithreaded cache read (8 threads)"
+        log_info "Test group: Multithreaded cache read (blksz=${BLKSZ}M)"
         if python3 "${SCRIPT_DIR}/multithread_read.py" \
             "${LARGE_FILE}" "${LARGE_FILE_SHA256}" 8; then
-            pass "Multithreaded read (8 threads): checksum OK"
+            pass "Multithreaded read (blksz=${BLKSZ}M, 8 threads): OK"
         else
-            fail "Multithreaded read (8 threads): checksum mismatch"
+            fail "Multithreaded read (blksz=${BLKSZ}M, 8 threads): FAIL"
         fi
 
-        # Test: Sequential read of the same file (should come from cache now)
-        log_info "Test group: Cached sequential re-read"
+        # Test: Sequential re-read (should come from cache now)
+        log_info "Test group: Cached re-read (blksz=${BLKSZ}M)"
         actual_sha256=$(sha256sum "${LARGE_FILE}" 2>/dev/null \
             | awk '{print $1}')
         if [[ "${actual_sha256}" == "${LARGE_FILE_SHA256}" ]]; then
-            pass "Cached re-read: checksum OK"
+            pass "Cached re-read (blksz=${BLKSZ}M): OK"
         else
-            fail "Cached re-read: checksum mismatch"
+            fail "Cached re-read (blksz=${BLKSZ}M): FAIL"
             log_error "  expected: ${LARGE_FILE_SHA256}"
             log_error "  actual:   ${actual_sha256}"
         fi
 
-        # Unmount cache mode
-        log_info "Unmounting cache mount..."
+        # Unmount
         do_unmount "${CACHE_MOUNT_DIR}"
         wait "${CACHE_HTTPDIRFS_PID}" 2>/dev/null || true
-        log_info "Cache mount unmounted."
-    fi
+        log_info "Cache mount (blksz=${BLKSZ}M) unmounted."
+    done
 fi
+
 
 # ─── Summary ────────────────────────────────────────────────────────────────
 
