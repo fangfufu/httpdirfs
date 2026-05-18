@@ -31,6 +31,10 @@ c_args = [
     '-DVERSION="' + meson.project_version() + '"'
 ]
 
+if get_option('debug')
+    c_args += '-DDEBUG'
+endif
+
 cc = meson.get_compiler('c')
 
 gumbo_dep = dependency('gumbo')

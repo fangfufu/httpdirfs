@@ -30,6 +30,47 @@ meson compile format
 
 ---
 
+## Building and Debugging
+
+The project supports two main build configurations: **Debug** and **Release**.
+
+### Debug vs. Release Builds
+
+| Feature                | Debug Build (`--buildtype=debug`)                               | Release Build (`--buildtype=release`)                      |
+| :--------------------- | :-------------------------------------------------------------- | :--------------------------------------------------------- |
+| **Optimization Level** | None (`-O0`) — code maps exactly to source lines.               | High (`-O3`) — optimized for performance and speed.        |
+| **Debug Symbols**      | Enabled (`-g`) — for step-through debugging via GDB/LLDB.       | Omitted — minimal binary size.                             |
+| **`DEBUG` Macro**      | Defined (`-DDEBUG`) — enables verbose debug logging by default. | Undefined — standard logging only, maximizing performance. |
+| **Use Case**           | Local development, debugging, and bug reporting.                | Production deployment.                                     |
+
+### Creating a Debug Build
+
+By default, the project is configured with a release build configuration
+(`buildtype=release`). To create a debug build, configure the build directory
+with the `debug` build type:
+
+```bash
+meson setup builddir --buildtype=debug
+```
+
+Or, if the build directory has already been configured, you can reconfigure it:
+
+```bash
+meson configure builddir --buildtype=debug
+```
+
+Then compile the project:
+
+```bash
+meson compile -C builddir
+```
+
+When building with the `debug` build type, the `DEBUG` macro is automatically
+defined in `meson.build`. This enables debug-level logging messages by default
+in `httpdirfs`.
+
+---
+
 ## Development Workflow
 
 We use automated tools to maintain code quality and prevent common errors.
