@@ -14,6 +14,8 @@ typedef struct Cache Cache;
 #include "link.h"
 #include "network.h"
 
+struct TransferStruct;
+
 #include <stdio.h>
 #include <stdint.h>
 #include <pthread.h>
@@ -59,6 +61,15 @@ struct Cache {
     sem_t bgt_sem;
     /** \brief the offset of the next segment to be downloaded in background*/
     off_t next_dl_offset;
+
+    /** \brief mutex lock for background download progress */
+    pthread_mutex_t dl_lock;
+    /** \brief condition variable for background download progress */
+    pthread_cond_t dl_cond;
+    /** \brief the active TransferStruct for the background download */
+    struct TransferStruct *active_dl_ts;
+    /** \brief the offset currently being downloaded in background */
+    off_t active_dl_offset;
 
     /** \brief the FUSE filesystem path to the remote file*/
     char *fs_path;

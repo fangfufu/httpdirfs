@@ -1158,7 +1158,8 @@ bug report, please include the following HTTP header information:\n%s\n",
     return recv;
 }
 
-long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
+long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
+                   Cache *cf)
 {
     TransferStruct ts;
     TransferStruct header;
@@ -1177,9 +1178,17 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
         ts.data = NULL;
         ts.type = DATA;
         ts.transferring = 1;
+        ts.cache_ptr = cf;
+
+        if (cf) {
+            PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+            cf->active_dl_ts = &ts;
+            PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        }
 
         header.curr_size = 0;
         header.data = NULL;
+        header.cache_ptr = NULL;
 
         CURL *curl
             = Link_download_curl_setup(link, req_size, offset, &header, &ts);
@@ -1230,7 +1239,7 @@ long path_download(const char *path, char *output_buf, size_t req_size,
         return -ENOENT;
     }
 
-    return Link_download(link, output_buf, req_size, offset);
+    return Link_download(link, output_buf, req_size, offset, NULL);
 }
 
 static void make_link_relative(const char *page_url, char *link_url)
