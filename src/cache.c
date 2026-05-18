@@ -48,7 +48,7 @@ char *CacheSystem_get_cache_dir(void)
 
     const char *xdg_cache_home = getenv("XDG_CACHE_HOME");
     if (xdg_cache_home) {
-        cache_dir = strndup(xdg_cache_home, PATH_MAX);
+        cache_dir = STRNDUP(xdg_cache_home, PATH_MAX);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
@@ -59,7 +59,7 @@ char *CacheSystem_get_cache_dir(void)
              * XDG_CACHE_HOME and HOME already are full paths. Not relying
              * on environment PWD since it too may be undefined.
              */
-            const char *cur_dir = realpath("./", NULL);
+            const char *cur_dir = REALPATH("./", NULL);
             if (cur_dir) {
                 cache_dir = path_append(cur_dir, default_cache_subdir);
             } else {
@@ -238,9 +238,9 @@ static int Meta_read(Cache *cf)
         lprintf(warning, "Warning: cf->blksz != CONFIG.data_blksz\n");
     }
 
-    if (cf->segbc > CONFIG.max_segbc) {
-        lprintf(error, "Error: segbc: %ld\n", cf->segbc);
-        return EFBIG;
+    if (cf->segbc <= 0 || cf->segbc > INT_MAX) {
+        lprintf(error, "Error: invalid segbc size: %ld\n", cf->segbc);
+        return EBADMSG;
     }
 
     /*
@@ -706,7 +706,7 @@ int Cache_create(const char *path)
     lprintf(debug, "Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
-    cf->path = strndup(fn, PATH_MAX);
+    cf->path = STRNDUP(fn, PATH_MAX);
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
     cf->blksz = CONFIG.data_blksz;
@@ -814,7 +814,7 @@ Cache *Cache_open(const char *fn)
         fn = link->sonic.id;
     }
 
-    cf->path = strndup(fn, PATH_MAX);
+    cf->path = STRNDUP(fn, PATH_MAX);
 
     /*
      * Associate the cache structure with a link
