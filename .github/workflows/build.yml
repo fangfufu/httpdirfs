@@ -55,12 +55,14 @@ jobs:
           libgumbo-dev \
           libcurl4-openssl-dev \
           libfuse3-dev \
+          fuse3 \
           uuid-dev \
           libexpat1-dev \
           libssl-dev \
           meson \
           ninja-build \
-          help2man
+          help2man \
+          python3
 
     - name: Setup Meson
       run: |
@@ -70,5 +72,8 @@ jobs:
     - name: Compile
       run: meson compile -C builddir
 
-    - name: Test
-      run: meson test -C builddir
+    - name: Unit tests
+      run: meson test -C builddir --no-suite integration
+
+    - name: Integration tests
+      run: meson test -C builddir --suite integration --verbose
