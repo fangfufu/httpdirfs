@@ -42,7 +42,11 @@ fuse_dep = dependency('fuse3')
 uuid_dep = dependency('uuid')
 expat_dep = dependency('expat')
 openssl_dep = dependency('openssl')
-execinfo_dep = cc.find_library('execinfo', required: false)
+if cc.has_function('backtrace', prefix: '#include <execinfo.h>')
+    execinfo_dep = dependency('', required: false)
+else
+    execinfo_dep = cc.find_library('execinfo', required: false)
+endif
 
 httpdirfs_deps = [
     gumbo_dep,
