@@ -238,7 +238,8 @@ static int Meta_read(Cache *cf)
         lprintf(warning, "Warning: cf->blksz != CONFIG.data_blksz\n");
     }
 
-    if (cf->segbc <= 0 || cf->segbc > INT_MAX) {
+    long max_segbc = (cf->content_length / cf->blksz) + 1;
+    if (cf->segbc <= 0 || cf->segbc > max_segbc || cf->segbc > INT_MAX) {
         lprintf(error, "Error: invalid segbc size: %ld\n", cf->segbc);
         return EBADMSG;
     }
