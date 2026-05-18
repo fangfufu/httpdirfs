@@ -62,7 +62,8 @@ jobs:
           meson \
           ninja-build \
           help2man \
-          python3
+          python3 \
+          clang
 
     - name: Setup Meson
       run: |
