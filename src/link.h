@@ -33,7 +33,7 @@ typedef enum {
  * \details index 0 contains the Link for the base URL
  */
 struct LinkTable {
-    int num;
+    int size;
     time_t index_time;
     Link **links;
 };

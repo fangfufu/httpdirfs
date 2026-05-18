@@ -26,7 +26,7 @@ repos:
 -   repo: local
     hooks:
     -   id: clang-format
-        name: clang-format (formatted files must be manual re-staged)
+        name: clang-format
         entry: clang-format -i
         language: system
         files: \.(c|h)$

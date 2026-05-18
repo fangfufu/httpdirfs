@@ -167,7 +167,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     dir_add(buf, ".", NULL, 0, 0);
     dir_add(buf, "..", NULL, 0, 0);
     /* We skip the head link */
-    for (int i = 1; i < linktbl->num; i++) {
+    for (int i = 1; i < linktbl->size; i++) {
         Link *link = linktbl->links[i];
         if (link->type != LINK_INVALID) {
             dir_add(buf, link->linkname, NULL, 0, 0);
