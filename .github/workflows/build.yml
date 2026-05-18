@@ -36,6 +36,9 @@ jobs:
     - name: Compile
       run: meson compile -C builddir
 
+    - name: Test
+      run: meson test -C builddir
+
   build-ubuntu:
     name: Build (Ubuntu, ${{ matrix.compiler }})
     runs-on: ubuntu-latest
@@ -66,3 +69,6 @@ jobs:
 
     - name: Compile
       run: meson compile -C builddir
+
+    - name: Test
+      run: meson test -C builddir
