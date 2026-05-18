@@ -365,8 +365,11 @@ else
     for BLKSZ in ${BLOCK_SIZES}; do
         log_info "--- Cache test: --dl-seg-size ${BLKSZ} ---"
 
-        # Clean cache directory for each run
-        rm -rf "${CACHE_DIR:?}"/*
+        # Remove and recreate the cache directory for a completely
+        # clean state — ensures no metadata from a previous block size
+        # can affect the next run
+        rm -rf "${CACHE_DIR:?}"
+        mkdir -p "${CACHE_DIR}"
 
         "${HTTPDIRFS_BIN}" \
             -f \
