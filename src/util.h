@@ -21,11 +21,6 @@
 char *path_append(const char *path, const char *filename);
 
 /**
- * \brief division, but rounded to the nearest integer rather than truncating
- */
-int64_t round_div(int64_t a, int64_t b);
-
-/**
  * \brief wrapper for pthread_mutex_init(), with error handling
  */
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
