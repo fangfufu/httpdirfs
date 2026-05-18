@@ -988,6 +988,12 @@ static void *Cache_bgdl(void *arg)
                 "thread %lx received %ld bytes, "
                 "which doesn't make sense\n",
                 (unsigned long)pthread_self(), recv);
+        FREE(recv_buf);
+        lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
+                (unsigned long)pthread_self());
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+        SEM_POST(&cf->bgt_sem);
+        pthread_exit(NULL);
     }
 
     if ((recv == cf->blksz)
@@ -1089,6 +1095,11 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
                 "thread %lx received %ld bytes, "
                 "which doesn't make sense\n",
                 (unsigned long)pthread_self(), recv);
+        FREE(recv_buf);
+        lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
+                (unsigned long)pthread_self());
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+        return recv;
     }
     /*
      * check if we have received enough data, write it to the disk
@@ -1157,8 +1168,12 @@ long Cache_read(Cache *cf, char *const output_buf, off_t len,
         if (end > start + len) {
             end = start + len;
         }
-        send += Cache_read_segment(cf, output_buf + (start - offset_start),
-                                   end - start, start);
+        long seg_send = Cache_read_segment(
+            cf, output_buf + (start - offset_start), end - start, start);
+        if (seg_send < 0) {
+            return seg_send;
+        }
+        send += seg_send;
     }
     return send;
 }
