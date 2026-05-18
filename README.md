@@ -60,7 +60,7 @@ Under Debian 13 "Trixie" and newer versions, you need the following
 dependencies:
 
     libgumbo-dev libfuse3-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
-    libexpat1-dev pkg-config meson
+    libexpat1-dev pkg-config meson clang-format
 
 You can then compile the program similar to how you compile a typical program
 that uses the Meson build system:
