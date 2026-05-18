@@ -7,8 +7,7 @@ project('httpdirfs', 'c',
         ]
 )
 
-srcs = [
-    'src/main.c',
+lib_srcs = [
     'src/network.c',
     'src/fuse_local.c',
     'src/link.c',
@@ -45,9 +44,26 @@ expat_dep = dependency('expat')
 openssl_dep = dependency('openssl')
 execinfo_dep = cc.find_library('execinfo', required: false)
 
+httpdirfs_deps = [
+    gumbo_dep,
+    libcurl_dep,
+    fuse_dep,
+    uuid_dep,
+    expat_dep,
+    openssl_dep,
+    execinfo_dep
+]
+
+httpdirfs_lib = static_library('httpdirfs_lib',
+    lib_srcs,
+    dependencies : httpdirfs_deps,
+    c_args: c_args,
+)
+
 httpdirfs = executable('httpdirfs',
-    srcs,
-    dependencies : [gumbo_dep, libcurl_dep, fuse_dep, uuid_dep, expat_dep, openssl_dep, execinfo_dep],
+    'src/main.c',
+    link_with: httpdirfs_lib,
+    dependencies : httpdirfs_deps,
     c_args: c_args,
     install: true,
     install_dir: get_option('bindir'),
@@ -74,3 +90,5 @@ run_target('format',
 
 run_target('doxygen',
   command : 'scripts/doxygen.sh')
+
+subdir('tests')
