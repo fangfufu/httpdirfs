@@ -1,7 +1,9 @@
 #include "config.h"
 
 #include "log.h"
+#include "util.h"
 #include <stddef.h>
+#include <stdlib.h>
 
 
 ConfigStruct CONFIG;
@@ -48,8 +50,6 @@ void Config_init(void)
 
     CONFIG.data_blksz = DEFAULT_DATA_BLKSZ;
 
-    CONFIG.max_segbc = DEFAULT_MAX_SEGBC;
-
     /*-------------- Sonic related -------------*/
     CONFIG.sonic_username = NULL;
 
@@ -58,4 +58,5 @@ void Config_init(void)
     CONFIG.sonic_id3 = 0;
 
     CONFIG.sonic_insecure = 0;
+    atexit(mem_cleanup);
 }

@@ -48,7 +48,7 @@ char *CacheSystem_get_cache_dir(void)
 
     const char *xdg_cache_home = getenv("XDG_CACHE_HOME");
     if (xdg_cache_home) {
-        cache_dir = strndup(xdg_cache_home, PATH_MAX);
+        cache_dir = STRNDUP(xdg_cache_home, PATH_MAX);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
@@ -59,9 +59,10 @@ char *CacheSystem_get_cache_dir(void)
              * XDG_CACHE_HOME and HOME already are full paths. Not relying
              * on environment PWD since it too may be undefined.
              */
-            const char *cur_dir = realpath("./", NULL);
+            char *cur_dir = REALPATH("./", NULL);
             if (cur_dir) {
                 cache_dir = path_append(cur_dir, default_cache_subdir);
+                FREE(cur_dir);
             } else {
                 lprintf(fatal, "Could not create cache directory\n");
             }
@@ -216,8 +217,6 @@ static int Meta_read(Cache *cf)
         return EIO;
     }
 
-    int nmemb = 0;
-
     if (1 != fread(&cf->time, sizeof(long), 1, fp)
         || 1 != fread(&cf->content_length, sizeof(off_t), 1, fp)
         || 1 != fread(&cf->blksz, sizeof(int), 1, fp)
@@ -238,16 +237,36 @@ static int Meta_read(Cache *cf)
         lprintf(warning, "Warning: cf->blksz != CONFIG.data_blksz\n");
     }
 
-    if (cf->segbc > CONFIG.max_segbc) {
-        lprintf(error, "Error: segbc: %ld\n", cf->segbc);
-        return EFBIG;
+    if (cf->content_length <= 0 || cf->blksz <= 0) {
+        lprintf(error, "Error: invalid metadata sizes\n");
+        return EBADMSG;
+    }
+
+    if (cf->content_length > INT64_MAX - cf->blksz) {
+        lprintf(error, "Error: segbc upper bound overflow\n");
+        return EBADMSG;
+    }
+
+    off_t max_segbc = cf->content_length / cf->blksz;
+
+    if ((cf->content_length % cf->blksz) != 0) {
+        max_segbc += 1;
+    }
+
+    if (max_segbc > INT_MAX) {
+        max_segbc = INT_MAX;
+    }
+
+    if (cf->segbc <= 0 || cf->segbc > max_segbc) {
+        lprintf(error, "Error: invalid segbc size: %ld\n", cf->segbc);
+        return EBADMSG;
     }
 
     /*
      * Allocate memory for all segments, and read them in
      */
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
-    nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
+    long nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
 
     /*
      * We shouldn't have gone past the end of the file
@@ -256,8 +275,7 @@ static int Meta_read(Cache *cf)
         /*
          * reached EOF
          */
-        lprintf(error, "attempted to read past the end of the \
-file!\n");
+        lprintf(error, "attempted to read past the end of the file!\n");
         return EBADMSG;
     }
 
@@ -706,7 +724,7 @@ int Cache_create(const char *path)
     lprintf(debug, "Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
-    cf->path = strndup(fn, PATH_MAX);
+    cf->path = STRNDUP(fn, PATH_MAX);
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
     cf->blksz = CONFIG.data_blksz;
@@ -814,7 +832,7 @@ Cache *Cache_open(const char *fn)
         fn = link->sonic.id;
     }
 
-    cf->path = strndup(fn, PATH_MAX);
+    cf->path = STRNDUP(fn, PATH_MAX);
 
     /*
      * Associate the cache structure with a link

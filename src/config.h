@@ -33,13 +33,6 @@
  */
 #define DEFAULT_DATA_BLKSZ (DEFAULT_DATA_BLKSZ_MB * 1024 * 1024)
 
-/**
- * \brief Maximum segment block count
- * \details This is set to 128*1024 blocks, which uses 128KB. By default,
- * this allows the user to store (128*1024)*(8*1024*1024) = 1TB of data
- */
-#define DEFAULT_MAX_SEGBC (128 * 1024)
-
 #define STR(x) #x
 #define XSTR(x) STR(x)
 
