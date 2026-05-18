@@ -100,16 +100,13 @@ static CURL *Link_to_curl(Link *link)
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
-    if (CONFIG.cafile) {
+    if (CONFIG.cafile || CONFIG.capath) {
         /*
-         * Having been given a certificate file, disable any search directory
-         * built into libcurl, so that we exclusively use the explicitly given
-         * certificate(s).
-         *
-         * If we ever add a CAPATH option, we should do the mirror for CAINFO,
-         * too: disable both and then enable whichever one(s) were given.
+         * Having been given a certificate file or directory, disable any search
+         * paths built into libcurl, so that we exclusively use the explicitly
+         * given certificate(s).
          */
-        ret = curl_easy_setopt(curl, CURLOPT_CAPATH, NULL);
+        ret = curl_easy_setopt(curl, CURLOPT_CAPATH, CONFIG.capath);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }
@@ -177,9 +174,9 @@ static CURL *Link_to_curl(Link *link)
         }
     }
 
-    if (CONFIG.proxy_cafile) {
+    if (CONFIG.proxy_cafile || CONFIG.proxy_capath) {
         /* See CONFIG.cafile above */
-        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAPATH, NULL);
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAPATH, CONFIG.proxy_capath);
         if (ret) {
             lprintf(error, "%s", curl_easy_strerror(ret));
         }

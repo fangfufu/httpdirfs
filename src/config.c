@@ -25,6 +25,8 @@ void Config_init(void)
 
     CONFIG.proxy_password = NULL;
 
+    CONFIG.proxy_capath = NULL;
+
     CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
 
     CONFIG.user_agent = DEFAULT_USER_AGENT;
@@ -38,6 +40,10 @@ void Config_init(void)
     CONFIG.zero_len_is_dir = 0;
 
     CONFIG.insecure_tls = 0;
+
+    CONFIG.cafile = NULL;
+
+    CONFIG.capath = NULL;
 
     CONFIG.refresh_timeout = DEFAULT_REFRESH_TIMEOUT;
 
