@@ -37,26 +37,28 @@ static pthread_mutex_t mem_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 char *path_append(const char *path, const char *filename)
 {
+    if (!path || !filename) {
+        return NULL;
+    }
     size_t ul = strnlen(path, PATH_MAX);
     int needs_separator = 0;
+    const char *f = filename;
     if (ul > 0 && (path[ul - 1] != '/') && (filename[0] != '/')) {
         needs_separator = 1;
+    } else if (ul > 0 && (path[ul - 1] == '/') && (filename[0] == '/')) {
+        // Strip the redundant leading slash from the filename
+        f = filename + 1;
     }
 
     char *str;
-    size_t sl = strnlen(filename, NAME_MAX);
+    size_t sl = strnlen(f, PATH_MAX);
     str = CALLOC(ul + sl + needs_separator + 1, sizeof(char));
     strncpy(str, path, ul);
     if (needs_separator) {
         str[ul] = '/';
     }
-    strncat(str, filename, sl);
+    strncat(str, f, sl);
     return str;
-}
-
-int64_t round_div(int64_t a, int64_t b)
-{
-    return (a + (b / 2)) / b;
 }
 
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
