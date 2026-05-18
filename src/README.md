@@ -119,6 +119,13 @@ pre-commit run --all-files
 > meson setup builddir
 > ```
 
+<!-- prettier-ignore -->
+> [!IMPORTANT]
+> The `integration-test-clang` hook requires `clang` to be installed on the
+> system (e.g., `sudo apt install clang` on Debian/Ubuntu systems). Please
+> ensure that `clang` is installed so the Clang-based integration tests can run
+> successfully during pre-commit checks.
+
 ---
 
 ## Logging and Error Handling

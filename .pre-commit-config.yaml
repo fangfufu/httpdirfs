@@ -42,3 +42,12 @@ repos:
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
+    -   id: integration-test-clang
+        name: Integration Test (Clang)
+        entry: >-
+          bash -c 'if [ ! -d builddir_clang ]; then
+          CC=clang meson setup builddir_clang; fi &&
+          meson test -C builddir_clang --suite integration --verbose'
+        language: system
+        pass_filenames: false
+        files: \.(c|h|py|sh)$
