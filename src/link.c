@@ -364,10 +364,10 @@ LinkTable *LinkSystem_init(const char *url)
 void LinkTable_add(LinkTable *linktbl, Link *link)
 {
     linktbl->num++;
-    Link **tmp = (Link **)realloc((void *)linktbl->links,
+    Link **tmp = (Link **)REALLOC((void *)linktbl->links,
                                   linktbl->num * sizeof(Link *));
     if (!tmp) {
-        lprintf(fatal, "realloc() failure!\n");
+        lprintf(fatal, "REALLOC() failure!\n");
     }
     linktbl->links = tmp;
     linktbl->links[linktbl->num - 1] = link;
@@ -968,7 +968,7 @@ Link *path_to_Link(const char *path)
             (unsigned long)pthread_self());
 
     PTHREAD_MUTEX_LOCK(&link_lock);
-    char *new_path = strndup(path, MAX_PATH_LEN);
+    char *new_path = STRNDUP(path, MAX_PATH_LEN);
     if (!new_path) {
         lprintf(fatal, "cannot allocate memory\n");
     }

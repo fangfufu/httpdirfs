@@ -114,7 +114,7 @@ int main(int argc, char **argv)
     }
 
     /*--- Add the last remaining argument, which is the mountpoint ---*/
-    char *abs_mountpoint = realpath(all_argv[optind + 1], NULL);
+    char *abs_mountpoint = REALPATH(all_argv[optind + 1], NULL);
     if (!abs_mountpoint) {
         fprintf(stderr, "Error: Invalid mountpoint %s: %s\n",
                 all_argv[optind + 1], strerror(errno));
@@ -197,7 +197,7 @@ static char *get_XDG_CONFIG_HOME(void)
             config_dir = path_append(user_home, default_config_subdir);
         } else {
             lprintf(warning, "$HOME is unset\n");
-            const char *cur_dir = realpath("./", NULL);
+            const char *cur_dir = REALPATH("./", NULL);
             if (cur_dir) {
                 config_dir = path_append(cur_dir, default_config_subdir);
             } else {
@@ -446,10 +446,9 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
  */
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 {
-    char **tmp = (char **)realloc((void *)*fuse_argv_ptr,
+    char **tmp = (char **)REALLOC((void *)*fuse_argv_ptr,
                                   ((size_t)*fuse_argc + 1) * sizeof(char *));
     if (!tmp) {
-        lprintf(fatal, "realloc failed: %s\n", strerror(errno));
         return;
     }
     *fuse_argv_ptr = tmp;
