@@ -39,6 +39,13 @@ jobs:
     - name: Test
       run: meson test -C builddir
 
+    - name: Upload Meson logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: meson-logs-mac
+        path: builddir/meson-logs/
+
   build-ubuntu:
     name: Build (Ubuntu, ${{ matrix.compiler }})
     runs-on: ubuntu-latest
@@ -78,3 +85,10 @@ jobs:
 
     - name: Integration tests
       run: meson test -C builddir --suite integration --verbose
+
+    - name: Upload Meson logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: meson-logs-ubuntu-${{ matrix.compiler }}
+        path: builddir/meson-logs/
