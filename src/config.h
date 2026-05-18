@@ -63,6 +63,8 @@ typedef struct {
     char *proxy_password;
     /** \brief HTTP proxy certificate file */
     char *proxy_cafile;
+    /** \brief HTTP proxy certificate directory */
+    char *proxy_capath;
     /** \brief HTTP maximum connection count */
     long max_conns;
     /** \brief HTTP user agent*/
@@ -79,6 +81,8 @@ typedef struct {
     int insecure_tls;
     /** \brief Server certificate file */
     char *cafile;
+    /** \brief Server certificate directory */
+    char *capath;
     /** \brief Refresh directory listing after refresh_timeout seconds */
     int refresh_timeout;
     /** \brief Try refreshing invalid links when reading a directory */

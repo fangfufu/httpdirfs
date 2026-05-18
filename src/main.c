@@ -309,6 +309,8 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"cache-clear", no_argument, NULL, 'L'},           /* 26 */
            {"zero-len-is-dir", no_argument, NULL, 'L'},       /* 27 */
            {"invalid-refresh", no_argument, NULL, 'L'},       /* 28 */
+           {"capath", required_argument, NULL, 'L'},          /* 29 */
+           {"proxy-capath", required_argument, NULL, 'L'},    /* 30 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -424,6 +426,12 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 28:
                 CONFIG.invalid_refresh = 1;
                 break;
+            case 29:
+                CONFIG.capath = STRDUP(optarg);
+                break;
+            case 30:
+                CONFIG.proxy_capath = STRDUP(optarg);
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -481,6 +489,7 @@ HTTPDirFS options:\n\
         --proxy-username    Username for the proxy\n\
         --proxy-password    Password for the proxy\n\
         --proxy-cacert      Certificate authority for the proxy\n\
+        --proxy-capath      Certificate authority directory for the proxy\n\
         --cache             Enable cache (default: off)\n\
         --cache-location    Set a custom cache location\n\
                             (default: \"${XDG_CACHE_HOME}/httpdirfs\")\n\
@@ -488,6 +497,7 @@ HTTPDirFS options:\n\
                             specified with `--cache-location`, if the option is\n\
                             seen first. Then exit in either case.\n\
         --cacert            Certificate authority for the server\n\
+        --capath            Certificate authority directory for the server\n\
         --dl-seg-size       Set cache download segment size, in MB (default: " XSTR(
                         DEFAULT_DATA_BLKSZ_MB) ")\n\
                             Note: this setting is ignored if previously\n\
