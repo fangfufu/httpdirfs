@@ -37,16 +37,19 @@ static Link *Link_new(const char *linkname, LinkType type)
 {
     Link *link = CALLOC(1, sizeof(Link));
 
-    strncpy(link->linkname, linkname, MAX_FILENAME_LEN);
-    strncpy(link->linkpath, linkname, MAX_FILENAME_LEN);
+    strncpy(link->linkname, linkname, NAME_MAX);
+    strncpy(link->linkpath, linkname, NAME_MAX);
     link->type = type;
 
     /*
      * remove the '/' from linkname if it exists
      */
-    char *c = &(link->linkname[strnlen(link->linkname, MAX_FILENAME_LEN) - 1]);
-    if (*c == '/') {
-        *c = '\0';
+    size_t len = strnlen(link->linkname, NAME_MAX);
+    if (len > 0) {
+        char *c = &(link->linkname[len - 1]);
+        if (*c == '/') {
+            *c = '\0';
+        }
     }
 
     return link;
@@ -310,7 +313,8 @@ static LinkTable *single_LinkTable_new(const char *url)
     char *ptr = curl_easy_unescape(NULL, orig_ptr, 0, NULL);
     LinkTable *linktbl = LinkTable_alloc(url);
     Link *link = Link_new(ptr, LINK_UNINITIALISED_FILE);
-    strncpy(link->f_url, url, MAX_FILENAME_LEN);
+    strncpy(link->f_url, url, PATH_MAX);
+    curl_free(ptr);
     LinkTable_add(linktbl, link);
     LinkTable_uninitialised_fill(linktbl);
     LinkTable_print(linktbl);
@@ -320,7 +324,7 @@ static LinkTable *single_LinkTable_new(const char *url)
 LinkTable *LinkSystem_init(const char *url)
 {
     PTHREAD_MUTEX_INIT(&link_lock, NULL);
-    int url_len = strnlen(url, MAX_PATH_LEN) - 1;
+    size_t len = strnlen(url, PATH_MAX);
     /*
      * --------- Set the length of the root link -----------
      */
@@ -328,7 +332,7 @@ LinkTable *LinkSystem_init(const char *url)
      * This is where the '/' should be
      */
     ROOT_LINK_OFFSET
-        = strnlen(url, MAX_PATH_LEN) - ((url[url_len] == '/') ? 1 : 0);
+        = (len > 0 && url[len - 1] == '/') ? (int)len - 1 : (int)len;
 
     /*
      * --------------------- Enable cache system --------------------
@@ -391,14 +395,14 @@ static LinkType linkname_to_LinkType(const char *linkname)
     /* The linkname must not contain '/' in the middle. */
     const char *slash = strchr(linkname, '/');
     if (slash) {
-        int linkname_len = strnlen(linkname, MAX_FILENAME_LEN) - 1;
+        int linkname_len = strnlen(linkname, NAME_MAX) - 1;
         if (slash - linkname != linkname_len) {
             return LINK_INVALID;
         }
     }
 
     /* '/' must be at the end to be a valid directory name */
-    if (linkname[strnlen(linkname, MAX_FILENAME_LEN) - 1] == '/') {
+    if (linkname[strnlen(linkname, NAME_MAX) - 1] == '/') {
         return LINK_UNINITIALISED_DIR;
     }
 
@@ -410,8 +414,8 @@ static LinkType linkname_to_LinkType(const char *linkname)
  */
 static int linknames_equal(const char *str_a, const char *str_b)
 {
-    size_t len_a = strnlen(str_a, MAX_FILENAME_LEN);
-    size_t len_b = strnlen(str_b, MAX_FILENAME_LEN);
+    size_t len_a = strnlen(str_a, NAME_MAX);
+    size_t len_b = strnlen(str_b, NAME_MAX);
     size_t max_len = MAX(len_a, len_b);
     size_t comp_len = MIN(len_a, len_b);
     int identical = 0;
@@ -564,12 +568,12 @@ static void LinkTable_fill(LinkTable *linktbl)
         }
         char *url = path_append(head_link->f_url, escaped_path);
         curl_free(escaped_path);
-        strncpy(this_link->f_url, url, MAX_PATH_LEN);
+        strncpy(this_link->f_url, url, PATH_MAX);
         FREE(url);
         char *unescaped_linkname;
         unescaped_linkname
             = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
-        strncpy(this_link->linkname, unescaped_linkname, MAX_FILENAME_LEN);
+        strncpy(this_link->linkname, unescaped_linkname, NAME_MAX);
         curl_free(unescaped_linkname);
     }
     LinkTable_uninitialised_fill(linktbl);
@@ -624,7 +628,7 @@ LinkTable *LinkTable_alloc(const char *url)
      */
     Link *head_link = Link_new("/", LINK_HEAD);
     LinkTable_add(linktbl, head_link);
-    strncpy(head_link->f_url, url, MAX_PATH_LEN);
+    strncpy(head_link->f_url, url, PATH_MAX);
     assert(linktbl->num == 1);
     return linktbl;
 }
@@ -709,8 +713,7 @@ LinkTable *LinkTable_new(const char *url)
 static void LinkTable_disk_delete(const char *dirn)
 {
     char *metadirn = path_append(META_DIR, dirn);
-    char *path;
-    path = path_append(metadirn, "/.LinkTable");
+    char *path = path_append(metadirn, ".LinkTable");
     if (unlink(path)) {
         lprintf(error, "unlink(%s): %s\n", path, strerror(errno));
     }
@@ -729,8 +732,7 @@ static inline void ignore_value(int i)
 int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 {
     char *metadirn = path_append(META_DIR, dirn);
-    char *path;
-    path = path_append(metadirn, "/.LinkTable");
+    char *path = path_append(metadirn, ".LinkTable");
     FILE *fp = fopen(path, "w");
     FREE(metadirn);
 
@@ -747,10 +749,10 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     }
     FREE(path);
     for (int i = 0; i < linktbl->num; i++) {
-        ignore_value(fwrite(linktbl->links[i]->linkname, sizeof(char),
-                            MAX_FILENAME_LEN, fp));
         ignore_value(
-            fwrite(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp));
+            fwrite(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp));
+        ignore_value(
+            fwrite(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp));
         ignore_value(fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
         ignore_value(
             fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp));
@@ -775,12 +777,7 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
 LinkTable *LinkTable_disk_open(const char *dirn)
 {
     char *metadirn = path_append(META_DIR, dirn);
-    char *path;
-    if (metadirn[strnlen(metadirn, MAX_PATH_LEN)] == '/') {
-        path = path_append(metadirn, ".LinkTable");
-    } else {
-        path = path_append(metadirn, "/.LinkTable");
-    }
+    char *path = path_append(metadirn, ".LinkTable");
     FILE *fp = fopen(path, "r");
     FREE(metadirn);
 
@@ -805,11 +802,10 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     linktbl->links = (Link **)CALLOC(linktbl->num, sizeof(Link *));
     for (int i = 0; i < linktbl->num; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
-        if (fread(linktbl->links[i]->linkname, sizeof(char), MAX_FILENAME_LEN,
-                  fp)
-                != MAX_FILENAME_LEN
-            || fread(linktbl->links[i]->f_url, sizeof(char), MAX_PATH_LEN, fp)
-                   != MAX_PATH_LEN
+        if (fread(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp)
+                != NAME_MAX
+            || fread(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp)
+                   != PATH_MAX
             || fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp) != 1
             || fread(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp)
                    != 1
@@ -896,7 +892,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
     /*
      * remove the last '/' if it exists
      */
-    size_t path_len = strnlen(path, MAX_PATH_LEN);
+    size_t path_len = strnlen(path, PATH_MAX);
     if (path_len > 0) {
         char *slash = &(path[path_len - 1]);
         if (*slash == '/') {
@@ -910,7 +906,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
          * We cannot find another '/', we have reached the last level
          */
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
+            if (!strncmp(path, linktbl->links[i]->linkname, NAME_MAX)) {
                 /*
                  * We found our link
                  */
@@ -933,7 +929,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
          */
         char *next_path = slash + 1;
         for (int i = 1; i < linktbl->num; i++) {
-            if (!strncmp(path, linktbl->links[i]->linkname, MAX_FILENAME_LEN)) {
+            if (!strncmp(path, linktbl->links[i]->linkname, NAME_MAX)) {
                 /*
                  * The next sub-directory exists
                  */
@@ -968,7 +964,7 @@ Link *path_to_Link(const char *path)
             (unsigned long)pthread_self());
 
     PTHREAD_MUTEX_LOCK(&link_lock);
-    char *new_path = strndup(path, MAX_PATH_LEN);
+    char *new_path = strndup(path, PATH_MAX);
     if (!new_path) {
         lprintf(fatal, "cannot allocate memory\n");
     }

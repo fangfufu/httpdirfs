@@ -29,16 +29,16 @@ static SonicConfigStruct SONIC_CONFIG;
 void sonic_config_init(const char *server, const char *username,
                        const char *password)
 {
-    SONIC_CONFIG.server = strndup(server, MAX_PATH_LEN);
+    SONIC_CONFIG.server = strndup(server, PATH_MAX);
     /*
      * Correct for the extra '/'
      */
-    size_t server_url_len = strnlen(SONIC_CONFIG.server, MAX_PATH_LEN) - 1;
-    if (SONIC_CONFIG.server[server_url_len] == '/') {
-        SONIC_CONFIG.server[server_url_len] = '\0';
+    size_t server_url_len = strnlen(SONIC_CONFIG.server, PATH_MAX);
+    if (server_url_len > 0 && SONIC_CONFIG.server[server_url_len - 1] == '/') {
+        SONIC_CONFIG.server[server_url_len - 1] = '\0';
     }
-    SONIC_CONFIG.username = strndup(username, MAX_FILENAME_LEN);
-    SONIC_CONFIG.password = strndup(password, MAX_FILENAME_LEN);
+    SONIC_CONFIG.username = strndup(username, NAME_MAX);
+    SONIC_CONFIG.password = strndup(password, NAME_MAX);
     SONIC_CONFIG.client = DEFAULT_USER_AGENT;
 
     if (!CONFIG.sonic_insecure) {
@@ -62,14 +62,16 @@ static char *sonic_gen_auth_str(void)
 {
     if (!CONFIG.sonic_insecure) {
         char *salt = generate_salt();
-        size_t pwd_len = strnlen(SONIC_CONFIG.password, MAX_FILENAME_LEN);
-        size_t pwd_salt_len = pwd_len + strnlen(salt, MAX_FILENAME_LEN);
+        size_t pwd_len = strnlen(SONIC_CONFIG.password, NAME_MAX);
+        size_t salt_len = strnlen(salt, NAME_MAX);
+        size_t pwd_salt_len = pwd_len + salt_len;
         char *pwd_salt = CALLOC(pwd_salt_len + 1, sizeof(char));
-        strncat(pwd_salt, SONIC_CONFIG.password, MAX_FILENAME_LEN);
-        strncat(pwd_salt + pwd_len, salt, MAX_FILENAME_LEN);
+        memcpy(pwd_salt, SONIC_CONFIG.password, pwd_len);
+        memcpy(pwd_salt + pwd_len, salt, salt_len);
+        pwd_salt[pwd_salt_len] = '\0';
         char *token = generate_md5sum(pwd_salt);
-        char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-        snprintf(auth_str, MAX_PATH_LEN, ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
+        char *auth_str = CALLOC(PATH_MAX + 1, sizeof(char));
+        snprintf(auth_str, PATH_MAX + 1, ".view?u=%s&t=%s&s=%s&v=%s&c=%s",
                  SONIC_CONFIG.username, token, salt, SONIC_CONFIG.api_version,
                  SONIC_CONFIG.client);
         FREE(salt);
@@ -77,8 +79,8 @@ static char *sonic_gen_auth_str(void)
         return auth_str;
     } else {
         char *pwd_hex = str_to_hex(SONIC_CONFIG.password);
-        char *auth_str = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-        snprintf(auth_str, MAX_PATH_LEN, ".view?u=%s&p=enc:%s&v=%s&c=%s",
+        char *auth_str = CALLOC(PATH_MAX + 1, sizeof(char));
+        snprintf(auth_str, PATH_MAX + 1, ".view?u=%s&p=enc:%s&v=%s&c=%s",
                  SONIC_CONFIG.username, pwd_hex, SONIC_CONFIG.api_version,
                  SONIC_CONFIG.client);
         FREE(pwd_hex);
@@ -92,8 +94,8 @@ static char *sonic_gen_auth_str(void)
 static char *sonic_gen_url_first_part(char *method)
 {
     char *auth_str = sonic_gen_auth_str();
-    char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s/rest/%s%s", SONIC_CONFIG.server, method,
+    char *url = CALLOC(PATH_MAX + 1, sizeof(char));
+    snprintf(url, PATH_MAX + 1, "%s/rest/%s%s", SONIC_CONFIG.server, method,
              auth_str);
     FREE(auth_str);
     return url;
@@ -105,8 +107,8 @@ static char *sonic_gen_url_first_part(char *method)
 static char *sonic_getMusicDirectory_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("getMusicDirectory");
-    char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
+    char *url = CALLOC(PATH_MAX + 1, sizeof(char));
+    snprintf(url, PATH_MAX + 1, "%s&id=%s", first_part, id);
     FREE(first_part);
     return url;
 }
@@ -117,8 +119,8 @@ static char *sonic_getMusicDirectory_link(const char *id)
 static char *sonic_getArtist_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("getArtist");
-    char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
+    char *url = CALLOC(PATH_MAX + 1, sizeof(char));
+    snprintf(url, PATH_MAX + 1, "%s&id=%s", first_part, id);
     FREE(first_part);
     return url;
 }
@@ -129,8 +131,8 @@ static char *sonic_getArtist_link(const char *id)
 static char *sonic_getAlbum_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("getAlbum");
-    char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&id=%s", first_part, id);
+    char *url = CALLOC(PATH_MAX + 1, sizeof(char));
+    snprintf(url, PATH_MAX + 1, "%s&id=%s", first_part, id);
     FREE(first_part);
     return url;
 }
@@ -141,8 +143,8 @@ static char *sonic_getAlbum_link(const char *id)
 static char *sonic_stream_link(const char *id)
 {
     char *first_part = sonic_gen_url_first_part("stream");
-    char *url = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(url, MAX_PATH_LEN, "%s&format=raw&id=%s", first_part, id);
+    char *url = CALLOC(PATH_MAX + 1, sizeof(char));
+    snprintf(url, PATH_MAX + 1, "%s&format=raw&id=%s", first_part, id);
     FREE(first_part);
     return url;
 }
@@ -210,22 +212,22 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
     char *suffix = "";
     for (int i = 0; attr[i]; i += 2) {
         if (!strcmp("id", attr[i])) {
-            link->sonic.id = CALLOC(MAX_FILENAME_LEN + 1, sizeof(char));
-            strncpy(link->sonic.id, attr[i + 1], MAX_FILENAME_LEN);
+            link->sonic.id = CALLOC(NAME_MAX + 1, sizeof(char));
+            strncpy(link->sonic.id, attr[i + 1], NAME_MAX);
             id_set = 1;
             continue;
         }
 
         if (!strcmp("path", attr[i])) {
-            memset(link->linkname, 0, MAX_FILENAME_LEN);
+            memset(link->linkname, 0, NAME_MAX);
             /*
              * Skip to the last '/' if it exists
              */
             const char *s = strrchr(attr[i + 1], '/');
             if (s) {
-                strncpy(link->linkname, s + 1, MAX_FILENAME_LEN);
+                strncpy(link->linkname, s + 1, NAME_MAX);
             } else {
-                strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
+                strncpy(link->linkname, attr[i + 1], NAME_MAX);
             }
             linkname_set = 1;
             continue;
@@ -238,7 +240,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
          */
         if (!linkname_set
             && (!strcmp("title", attr[i]) || !strcmp("name", attr[i]))) {
-            strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
+            strncpy(link->linkname, attr[i + 1], NAME_MAX);
             linkname_set = 1;
             continue;
         }
@@ -279,9 +281,9 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
         }
     }
 
-    if (!linkname_set && strnlen(title, MAX_PATH_LEN) > 0
-        && strnlen(suffix, MAX_PATH_LEN) > 0) {
-        snprintf(link->linkname, MAX_FILENAME_LEN, "%02d - %s.%s", track, title,
+    if (!linkname_set && strnlen(title, PATH_MAX) > 0
+        && strnlen(suffix, PATH_MAX) > 0) {
+        snprintf(link->linkname, NAME_MAX + 1, "%02d - %s.%s", track, title,
                  suffix);
         linkname_set = 1;
     }
@@ -296,7 +298,7 @@ static void XMLCALL XML_parser_general(void *data, const char *elem,
 
     if (link->type == LINK_FILE) {
         char *url = sonic_stream_link(link->sonic.id);
-        strncpy(link->f_url, url, MAX_PATH_LEN);
+        strncpy(link->f_url, url, PATH_MAX);
         FREE(url);
     }
 
@@ -431,7 +433,7 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
         link->type = LINK_DIR;
         for (int i = 0; attr[i]; i += 2) {
             if (!strcmp("name", attr[i])) {
-                strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
+                strncpy(link->linkname, attr[i + 1], NAME_MAX);
                 linkname_set = 1;
                 /*
                  * Allocate a new LinkTable
@@ -462,14 +464,14 @@ static void XMLCALL XML_parser_id3_root(void *data, const char *elem,
         link->sonic.depth = 3;
         for (int i = 0; attr[i]; i += 2) {
             if (!strcmp("name", attr[i])) {
-                strncpy(link->linkname, attr[i + 1], MAX_FILENAME_LEN);
+                strncpy(link->linkname, attr[i + 1], NAME_MAX);
                 linkname_set = 1;
                 continue;
             }
 
             if (!strcmp("id", attr[i])) {
-                link->sonic.id = CALLOC(MAX_FILENAME_LEN + 1, sizeof(char));
-                strncpy(link->sonic.id, attr[i + 1], MAX_FILENAME_LEN);
+                link->sonic.id = CALLOC(NAME_MAX + 1, sizeof(char));
+                strncpy(link->sonic.id, attr[i + 1], NAME_MAX);
                 id_set = 1;
                 continue;
             }
