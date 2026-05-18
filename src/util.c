@@ -31,15 +31,14 @@
 
 char *path_append(const char *path, const char *filename)
 {
+    size_t ul = strnlen(path, PATH_MAX);
     int needs_separator = 0;
-    if ((path[strnlen(path, MAX_PATH_LEN) - 1] != '/')
-        && (filename[0] != '/')) {
+    if (ul > 0 && (path[ul - 1] != '/') && (filename[0] != '/')) {
         needs_separator = 1;
     }
 
     char *str;
-    size_t ul = strnlen(path, MAX_PATH_LEN);
-    size_t sl = strnlen(filename, MAX_FILENAME_LEN);
+    size_t sl = strnlen(filename, NAME_MAX);
     str = CALLOC(ul + sl + needs_separator + 1, sizeof(char));
     strncpy(str, path, ul);
     if (needs_separator) {
@@ -227,7 +226,7 @@ char *generate_salt(void)
 
 char *generate_md5sum(const char *str)
 {
-    size_t len = strnlen(str, MAX_PATH_LEN);
+    size_t len = strnlen(str, PATH_MAX);
     char *out = CALLOC(MD5_HASH_LEN + 1, sizeof(char));
 
     EVP_MD_CTX *mdctx;
@@ -270,9 +269,11 @@ void FREE_wrapper(void *ptr)
 
 char *str_to_hex(char *s)
 {
-    char *hex = CALLOC((strnlen(s, MAX_PATH_LEN) * 2) + 1, sizeof(char));
-    for (char *c = s, *h = hex; *c; c++, h += 2) {
-        sprintf(h, "%x", *c);
+    size_t len = strnlen(s, PATH_MAX);
+    char *hex = CALLOC((len * 2) + 1, sizeof(char));
+    char *h = hex;
+    for (size_t i = 0; i < len; i++, h += 2) {
+        snprintf(h, 3, "%02x", (unsigned char)s[i]);
     }
     return hex;
 }

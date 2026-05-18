@@ -30,4 +30,3 @@ repos:
         entry: clang-format -i
         language: system
         files: \.(c|h)$
-        require_serial: true

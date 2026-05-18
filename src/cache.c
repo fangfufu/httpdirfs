@@ -48,7 +48,7 @@ char *CacheSystem_get_cache_dir(void)
 
     const char *xdg_cache_home = getenv("XDG_CACHE_HOME");
     if (xdg_cache_home) {
-        cache_dir = strndup(xdg_cache_home, MAX_PATH_LEN);
+        cache_dir = strndup(xdg_cache_home, PATH_MAX);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
@@ -706,7 +706,7 @@ int Cache_create(const char *path)
     lprintf(debug, "Creating cache files for %s.\n", fn);
 
     Cache *cf = Cache_alloc();
-    cf->path = strndup(fn, MAX_PATH_LEN);
+    cf->path = strndup(fn, PATH_MAX);
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
     cf->blksz = CONFIG.data_blksz;
@@ -804,8 +804,8 @@ Cache *Cache_open(const char *fn)
     /*
      * Fill in the fs_path
      */
-    cf->fs_path = CALLOC(MAX_PATH_LEN + 1, sizeof(char));
-    snprintf(cf->fs_path, MAX_PATH_LEN + 1, "%s", fn);
+    cf->fs_path = CALLOC(PATH_MAX + 1, sizeof(char));
+    snprintf(cf->fs_path, PATH_MAX + 1, "%s", fn);
 
     /*
      * Set the path for the local cache file, if we are in sonic mode
@@ -814,7 +814,7 @@ Cache *Cache_open(const char *fn)
         fn = link->sonic.id;
     }
 
-    cf->path = strndup(fn, MAX_PATH_LEN);
+    cf->path = strndup(fn, PATH_MAX);
 
     /*
      * Associate the cache structure with a link

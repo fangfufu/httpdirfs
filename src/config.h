@@ -1,17 +1,6 @@
 #ifndef CONFIG_H
 #define CONFIG_H
-
-/**
- * \brief the maximum length of a path and a URL.
- * \details This corresponds the maximum path length under Ext4.
- */
-#define MAX_PATH_LEN 4096
-
-/**
- * \brief the maximum length of a filename.
- * \details This corresponds the filename length under Ext4.
- */
-#define MAX_FILENAME_LEN 255
+#include <limits.h>
 
 /**
  * \brief the default user agent string

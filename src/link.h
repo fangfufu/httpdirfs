@@ -43,11 +43,11 @@ struct LinkTable {
  */
 struct Link {
     /** \brief The link name in the last level of the URL */
-    char linkname[MAX_FILENAME_LEN + 1];
+    char linkname[NAME_MAX + 1];
     /** \brief This is for storing the unescaped path */
-    char linkpath[MAX_FILENAME_LEN + 1];
+    char linkpath[NAME_MAX + 1];
     /** \brief The full URL of the file */
-    char f_url[MAX_PATH_LEN + 1];
+    char f_url[PATH_MAX + 1];
     /** \brief The type of the link */
     LinkType type;
     /** \brief CURLINFO_CONTENT_LENGTH_DOWNLOAD of the file */

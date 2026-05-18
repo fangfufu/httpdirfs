@@ -190,7 +190,7 @@ static char *get_XDG_CONFIG_HOME(void)
 
     const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
     if (xdg_config_home) {
-        config_dir = STRNDUP(xdg_config_home, MAX_PATH_LEN);
+        config_dir = STRNDUP(xdg_config_home, PATH_MAX);
     } else {
         const char *user_home = getenv("HOME");
         if (user_home) {
