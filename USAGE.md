@@ -1,7 +1,7 @@
 ## HTTPDirFS Usage
 
 As of commit
-[75d31293c791a4249e4bdd93cfa0c43bc1332479](https://github.com/fangfufu/httpdirfs/commit/75d31293c791a4249e4bdd93cfa0c43bc1332479),
+[e86afe825aeca9b8fc28ad226aba50dbf2c26a77](https://github.com/fangfufu/httpdirfs/commit/e86afe825aeca9b8fc28ad226aba50dbf2c26a77),
 HTTPDirFS supports the following usage flags:
 
     usage: ./httpdirfs [options] URL mountpoint
@@ -34,11 +34,6 @@ HTTPDirFS supports the following usage flags:
                                 Note: this setting is ignored if previously
                                 cached data is found for the requested file.
             --http-header       Set one or more HTTP headers
-            --max-seg-count     Set maximum number of download segments a file
-                                can have. (default: 128*1024)
-                                With the default setting, the maximum memory usage
-                                per file is 128KB. This allows caching files up
-                                to 1TB in size using the default segment size.
             --max-conns         Set maximum number of network connections that
                                 libcurl is allowed to make. (default: 10)
             --refresh-timeout   The directories are refreshed after the specified
