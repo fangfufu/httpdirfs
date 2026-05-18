@@ -25,6 +25,8 @@ void Config_init(void)
 
     CONFIG.proxy_password = NULL;
 
+    CONFIG.proxy_cafile = NULL;
+
     CONFIG.proxy_capath = NULL;
 
     CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
