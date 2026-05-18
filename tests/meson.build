@@ -38,3 +38,16 @@ test_link = executable('test_link',
     c_args: c_args
 )
 test('test_link', test_link)
+
+# Integration test (requires FUSE and Python 3)
+integration_test = find_program('integration/run_integration_test.sh',
+                                required: false)
+if integration_test.found()
+    httpdirfs_exe = meson.project_source_root() / 'builddir' / 'httpdirfs'
+    test('integration',
+         integration_test,
+         args: [httpdirfs_exe],
+         timeout: 900,
+         is_parallel: false,
+         suite: 'integration')
+endif
