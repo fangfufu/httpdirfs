@@ -728,7 +728,7 @@ int Cache_create(const char *path)
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
     cf->blksz = CONFIG.data_blksz;
-    cf->segbc = (cf->content_length / cf->blksz) + 1;
+    cf->segbc = (cf->content_length + cf->blksz - 1) / cf->blksz;
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
     Meta_create(cf);
