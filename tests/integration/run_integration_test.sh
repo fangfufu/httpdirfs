@@ -360,7 +360,6 @@ else
         -f \
         --cache \
         --cache-location "${CACHE_DIR}" \
-        --dl-seg-size 7 \
         "${BASE_URL}" \
         "${CACHE_MOUNT_DIR}" &
     CACHE_HTTPDIRFS_PID=$!
