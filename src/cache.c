@@ -228,8 +228,8 @@ static int Meta_read(Cache *cf)
     /* These things really should not be zero! */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
         lprintf(error,
-                "corruption: content_length: %ld, blksz: %d, segbc: %ld\n",
-                cf->content_length, cf->blksz, cf->segbc);
+                "corruption: content_length: %jd, blksz: %d, segbc: %jd\n",
+                (intmax_t)cf->content_length, cf->blksz, (intmax_t)cf->segbc);
         return EBADMSG;
     }
 
@@ -325,8 +325,8 @@ static int Meta_write(Cache *cf)
      * These things really should not be zero!
      */
     if (!cf->content_length || !cf->blksz || !cf->segbc) {
-        lprintf(error, "content_length: %ld, blksz: %d, segbc: %ld\n",
-                cf->content_length, cf->blksz, cf->segbc);
+        lprintf(error, "content_length: %jd, blksz: %d, segbc: %jd\n",
+                (intmax_t)cf->content_length, cf->blksz, (intmax_t)cf->segbc);
     }
 
     fwrite(&cf->time, sizeof(long), 1, fp);
@@ -375,7 +375,7 @@ static void Data_create(Cache *cf)
  * \brief obtain the data file size
  * \return file size on success, -1 on error
  */
-static long Data_size(const char *fn)
+static off_t Data_size(const char *fn)
 {
     char *datafn = path_append(DATA_DIR, fn);
     struct stat st;
@@ -728,7 +728,10 @@ int Cache_create(const char *path)
     cf->time = this_link->time;
     cf->content_length = this_link->content_length;
     cf->blksz = CONFIG.data_blksz;
-    cf->segbc = (cf->content_length + cf->blksz - 1) / cf->blksz;
+    cf->segbc = cf->content_length / cf->blksz;
+    if (cf->content_length % cf->blksz != 0) {
+        cf->segbc += 1;
+    }
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
     Meta_create(cf);
@@ -835,17 +838,21 @@ Cache *Cache_open(const char *fn)
         } else if (Meta_read(cf)) {
             lprintf(error, "metadata error: %s.\n", actual_fn);
             ok = 0;
-        } else if (cf->content_length > Data_size(actual_fn)) {
-            lprintf(error, "metadata inconsistency %s, \
-cf->content_length: %ld, Data_size(fn): %ld.\n",
-                    actual_fn, cf->content_length, Data_size(actual_fn));
-            ok = 0;
-        } else if (cf->time != cf->link->time) {
-            lprintf(warning, "outdated cache file: %s.\n", actual_fn);
-            ok = 0;
-        } else if (Data_open(cf)) {
-            lprintf(error, "cannot open data file %s.\n", actual_fn);
-            ok = 0;
+        } else {
+            off_t d_size = Data_size(actual_fn);
+            if (cf->content_length > d_size) {
+                lprintf(error, "metadata inconsistency %s, \
+cf->content_length: %jd, Data_size(fn): %jd.\n",
+                        actual_fn, (intmax_t)cf->content_length,
+                        (intmax_t)d_size);
+                ok = 0;
+            } else if (cf->time != cf->link->time) {
+                lprintf(warning, "outdated cache file: %s.\n", actual_fn);
+                ok = 0;
+            } else if (Data_open(cf)) {
+                lprintf(error, "cannot open data file %s.\n", actual_fn);
+                ok = 0;
+            }
         }
 
         if (ok) {
@@ -860,7 +867,15 @@ cf->content_length: %ld, Data_size(fn): %ld.\n",
             return cf;
         }
 
-        // Clean up memory and delete files before retry
+        // Clean up opened resources before retry
+        if (cf->mfp) {
+            fclose(cf->mfp);
+            cf->mfp = NULL;
+        }
+        if (cf->dfp) {
+            fclose(cf->dfp);
+            cf->dfp = NULL;
+        }
         Cache_free(cf);
         Cache_delete(fn);
     }

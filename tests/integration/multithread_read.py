@@ -81,8 +81,10 @@ def main():
             sys.exit(1)
 
     # Reassemble and verify
-    full_data = b"".join(results)
-    actual_sha256 = hashlib.sha256(full_data).hexdigest()
+    hasher = hashlib.sha256()
+    for chunk in results:
+        hasher.update(chunk)
+    actual_sha256 = hasher.hexdigest()
 
     if actual_sha256 == expected_sha256:
         print(f"  SHA-256 OK: {actual_sha256}")
