@@ -840,9 +840,13 @@ Cache *Cache_open(const char *fn)
             ok = 0;
         } else {
             off_t d_size = Data_size(actual_fn);
-            if (cf->content_length > d_size) {
-                lprintf(error, "metadata inconsistency %s, \
-cf->content_length: %jd, Data_size(fn): %jd.\n",
+            if (d_size < 0) {
+                lprintf(error, "cannot stat data file %s.\n", actual_fn);
+                ok = 0;
+            } else if (cf->content_length > d_size) {
+                lprintf(error,
+                        "metadata inconsistency %s, "
+                        "cf->content_length: %jd, Data_size(fn): %jd.\n",
                         actual_fn, (intmax_t)cf->content_length,
                         (intmax_t)d_size);
                 ok = 0;
