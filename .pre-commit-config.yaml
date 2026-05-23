@@ -42,6 +42,7 @@ repos:
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
+        stages: [manual]
     -   id: integration-test-clang
         name: Integration Test (Clang)
         entry: >-
@@ -51,3 +52,4 @@ repos:
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
+        stages: [manual]

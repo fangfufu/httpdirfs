@@ -120,11 +120,18 @@ pre-commit run --all-files
 > ```
 
 <!-- prettier-ignore -->
-> [!IMPORTANT]
-> The `integration-test-clang` hook requires `clang` to be installed on the
-> system (e.g., `sudo apt install clang` on Debian/Ubuntu systems). Please
-> ensure that `clang` is installed so the Clang-based integration tests can run
-> successfully during pre-commit checks.
+> [!NOTE]
+> The integration test hooks (`integration-test` and `integration-test-clang`)
+> are configured to run only in the CI (via the `manual` stage) to speed up local
+> pre-commit checks. If you wish to run them locally, you can run them manually
+> using:
+>
+> ```bash
+> pre-commit run --all-files --hook-stage manual
+> ```
+>
+> Note that the `integration-test-clang` hook requires `clang` to be installed on the
+> system (e.g., `sudo apt install clang` on Debian/Ubuntu systems).
 
 ### Running Tests
 
