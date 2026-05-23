@@ -32,7 +32,7 @@ repos:
         files: \.(c|h)$
     -   id: meson-test
         name: Meson Test
-        entry: meson test -C builddir --no-suite integration
+        entry: meson test -C builddir
         language: system
         pass_filenames: false
         files: \.(c|h)$

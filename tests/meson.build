@@ -1,3 +1,7 @@
+add_test_setup('default',
+               exclude_suites: ['integration'],
+               is_default: true)
+
 unity_sub = subproject('unity')
 unity_dep = unity_sub.get_variable('unity_dep')
 
@@ -43,10 +47,9 @@ test('test_link', test_link)
 integration_test = find_program('integration/run_integration_test.sh',
                                 required: false)
 if integration_test.found()
-    httpdirfs_exe = meson.project_source_root() / 'builddir' / 'httpdirfs'
     test('integration',
          integration_test,
-         args: [httpdirfs_exe],
+         args: [httpdirfs],
          timeout: 900,
          is_parallel: false,
          suite: 'integration')

@@ -138,6 +138,12 @@ pre-commit run --all-files
 We support both unit testing and end-to-end system integration testing. The
 tests are configured and managed via Meson.
 
+<!-- prettier-ignore -->
+> [!NOTE]
+> By default, `meson test` only runs the unit tests. The system integration tests
+> are excluded from the default test setup to speed up local test execution and
+> prevent failures in environments without FUSE access.
+
 #### Unit Tests
 
 We use the [Unity Test Project](https://github.com/ThrowTheSwitch/Unity)
@@ -159,8 +165,8 @@ To build and run all unit tests, execute:
 meson test -C builddir
 ```
 
-Meson will automatically compile any modified source and test files before
-running.
+This will run only the unit test suite. Meson will automatically compile any
+modified source and test files before running.
 
 ##### Run a Specific Test
 
