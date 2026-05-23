@@ -8,6 +8,63 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.2.11] - 2026-05-23
+
+### Added
+
+- Add support for `--capath` and `--proxy-capath` configuration options
+  ([da9b0e9](https://github.com/fangfufu/httpdirfs/commit/da9b0e9)).
+- Support `--config=path` to specify a configuration file
+  ([db65bb5](https://github.com/fangfufu/httpdirfs/commit/db65bb5)).
+- Add core unit testing suite using the Unity framework
+  ([e50d690](https://github.com/fangfufu/httpdirfs/commit/e50d690)).
+- Add system integration test suite
+  ([89e5027](https://github.com/fangfufu/httpdirfs/commit/89e5027)).
+- Add a debug memory allocation tracker and hardened memory allocations
+  ([e86afe8](https://github.com/fangfufu/httpdirfs/commit/e86afe8)).
+
+### Changed
+
+- Optimize `Cache_open` by caching file size locally and avoiding redundant
+  system calls to `Data_size`
+  ([10e5208](https://github.com/fangfufu/httpdirfs/commit/10e5208)).
+- Exclude integration tests from default Meson test runs, executing them only in
+  CI or when explicitly requested
+  ([f13559b](https://github.com/fangfufu/httpdirfs/commit/f13559b),
+  [91a8295](https://github.com/fangfufu/httpdirfs/commit/91a8295)).
+- Refactor fatal logging infrastructure
+  ([0753fc4](https://github.com/fangfufu/httpdirfs/commit/0753fc4)).
+- Refactor and enhance the `FREE` macro and fix format specifiers
+  ([ef80e80](https://github.com/fangfufu/httpdirfs/commit/ef80e80)).
+- Replace custom limit macros with standard `limits.h` constants
+  ([f9d4542](https://github.com/fangfufu/httpdirfs/commit/f9d4542)).
+- Run cache tests with multiple block sizes and recreate cache directory between
+  iterations ([6f889ac](https://github.com/fangfufu/httpdirfs/commit/6f889ac),
+  [9fe774a](https://github.com/fangfufu/httpdirfs/commit/9fe774a)).
+- Install clang in build and pre-commit workflow environments, and upload Meson
+  test logs as build artifacts
+  ([d6dd5d8](https://github.com/fangfufu/httpdirfs/commit/d6dd5d8),
+  [4edc45b](https://github.com/fangfufu/httpdirfs/commit/4edc45b)).
+- Update documentation in `src/README.md` (unit/integration test guides) and
+  `USAGE.md` ([4d67613](https://github.com/fangfufu/httpdirfs/commit/4d67613),
+  [bde2dfa](https://github.com/fangfufu/httpdirfs/commit/bde2dfa)).
+
+### Fixed
+
+- Resolve concurrent cache initialization race in `fs_open`
+  ([64e8ea3](https://github.com/fangfufu/httpdirfs/commit/64e8ea3)).
+- Correct off-by-one error in cache segment count calculation
+  ([4cba404](https://github.com/fangfufu/httpdirfs/commit/4cba404)).
+- Prevent unbound `MOUNT_DIR` error in integration test cleanup
+  ([12b8cdd](https://github.com/fangfufu/httpdirfs/commit/12b8cdd)).
+- Check for backtrace in libc before searching for `execinfo` in build
+  configuration
+  ([ded25f9](https://github.com/fangfufu/httpdirfs/commit/ded25f9)).
+- Reset `proxy_cafile` correctly in `Config_init`
+  ([6a88d4d](https://github.com/fangfufu/httpdirfs/commit/6a88d4d)).
+- Handle `Link_download` errors in cache mode
+  ([23ec785](https://github.com/fangfufu/httpdirfs/commit/23ec785)).
+
 ## [1.2.10] - 2026-05-16
 
 ### Fixed
@@ -552,7 +609,8 @@ and this project adheres to
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.10...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.11...master
+[1.2.11]: https://github.com/fangfufu/httpdirfs/compare/1.2.10...1.2.11
 [1.2.10]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...1.2.10
 [1.2.9]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...1.2.9
 [1.2.8]: https://github.com/fangfufu/httpdirfs/compare/1.2.7...1.2.8
