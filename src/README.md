@@ -120,11 +120,108 @@ pre-commit run --all-files
 > ```
 
 <!-- prettier-ignore -->
-> [!IMPORTANT]
-> The `integration-test-clang` hook requires `clang` to be installed on the
-> system (e.g., `sudo apt install clang` on Debian/Ubuntu systems). Please
-> ensure that `clang` is installed so the Clang-based integration tests can run
-> successfully during pre-commit checks.
+> [!NOTE]
+> The integration test hooks (`integration-test` and `integration-test-clang`)
+> are configured to run only in the CI (via the `manual` stage) to speed up local
+> pre-commit checks. If you wish to run them locally, you can run them manually
+> using:
+>
+> ```bash
+> pre-commit run --all-files --hook-stage manual
+> ```
+>
+> Note that the `integration-test-clang` hook requires `clang` to be installed on the
+> system (e.g., `sudo apt install clang` on Debian/Ubuntu systems).
+
+### Running Tests
+
+We support both unit testing and end-to-end system integration testing. The
+tests are configured and managed via Meson.
+
+#### Unit Tests
+
+We use the [Unity Test Project](https://github.com/ThrowTheSwitch/Unity)
+framework for unit testing.
+
+##### Setup
+
+Before running tests, ensure that the build directory is configured:
+
+```bash
+meson setup builddir
+```
+
+##### Run All Unit Tests
+
+To build and run all unit tests, execute:
+
+```bash
+meson test -C builddir
+```
+
+Meson will automatically compile any modified source and test files before
+running.
+
+##### Run a Specific Test
+
+If you only want to execute a specific test suite (e.g., `test_util`), you can
+specify its name:
+
+```bash
+meson test -C builddir test_util
+```
+
+The available test suites are:
+
+- `test_util`
+- `test_cache`
+- `test_config`
+- `test_link`
+
+##### Verbose Output and Debugging
+
+By default, Meson hides test output unless a test fails. To see detailed test
+results, use the following options:
+
+- **Print logs on failure only:**
+  ```bash
+  meson test -C builddir --print-errorlogs
+  ```
+- **Verbose output (all stdout/stderr):**
+  ```bash
+  meson test -C builddir -v
+  ```
+
+#### Integration Tests
+
+The project includes an end-to-end system integration test suite that verifies
+that `httpdirfs` can mount an HTTP directory, traverse subdirectories, verify
+file integrity (via SHA-256), and perform concurrent cached reads.
+
+##### Prerequisites
+
+The integration tests require the following system dependencies:
+
+- **FUSE** (with `/dev/fuse` access)
+- `fusermount3` (or `fusermount`)
+- **Python 3**
+
+##### Run Integration Tests via Meson
+
+To run the integration tests using Meson, execute:
+
+```bash
+meson test -C builddir --suite integration
+```
+
+##### Run Integration Tests Manually
+
+Alternatively, you can run the test runner script directly by providing the path
+to the compiled `httpdirfs` binary:
+
+```bash
+./tests/integration/run_integration_test.sh builddir/httpdirfs
+```
 
 ---
 
@@ -137,6 +234,8 @@ pre-commit run --all-files
 - Fatal errors should use the `fatal` log level.
 - `lprintf(fatal, ...)` will automatically call `exit_failure()`, which prints a
   backtrace and terminates the program.
+
+---
 
 ## Memory Management
 
