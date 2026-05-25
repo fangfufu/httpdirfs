@@ -97,6 +97,15 @@ void test_generate_salt(void)
     FREE(salt2);
 }
 
+void test_realloc_size_zero(void)
+{
+    char *ptr = CALLOC(10, sizeof(char));
+    TEST_ASSERT_NOT_NULL(ptr);
+
+    ptr = REALLOC(ptr, 0);
+    TEST_ASSERT_NULL(ptr);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -104,5 +113,6 @@ int main(void)
     RUN_TEST(test_generate_md5sum);
     RUN_TEST(test_str_to_hex);
     RUN_TEST(test_generate_salt);
+    RUN_TEST(test_realloc_size_zero);
     return UNITY_END();
 }

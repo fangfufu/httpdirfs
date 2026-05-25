@@ -398,7 +398,6 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
         if (!new_ptr && size == 0) {
             pthread_mutex_unlock(&mem_mutex);
             free(found_node);
-            free(ptr);
             log_printf(debug, file, func, line,
                        "REALLOC result: NULL (size 0, freed)\n");
             return NULL;
