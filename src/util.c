@@ -31,8 +31,16 @@
 #define SALT_LEN 36
 
 #ifdef DEBUG
-static MemNode *mem_head = NULL;
+#include <stdint.h>
+#define MEM_HASH_SIZE 8192
+static MemNode *mem_hash_table[MEM_HASH_SIZE] = {NULL};
 static pthread_mutex_t mem_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static inline size_t hash_ptr(const void *ptr)
+{
+    uintptr_t v = (uintptr_t)ptr;
+    return ((v >> 3) ^ (v >> 16)) & (MEM_HASH_SIZE - 1);
+}
 #endif
 
 char *path_append(const char *path, const char *filename)
@@ -290,8 +298,9 @@ static void *malloc_wrapper_internal(size_t size, const char *file,
         node->line = line;
 
         pthread_mutex_lock(&mem_mutex);
-        node->next = mem_head;
-        mem_head = node;
+        size_t idx = hash_ptr(ptr);
+        node->next = mem_hash_table[idx];
+        mem_hash_table[idx] = node;
         pthread_mutex_unlock(&mem_mutex);
     }
 #endif
@@ -325,8 +334,9 @@ void *CALLOC_wrapper(size_t nmemb, size_t size, const char *file,
         node->line = line;
 
         pthread_mutex_lock(&mem_mutex);
-        node->next = mem_head;
-        mem_head = node;
+        size_t idx = hash_ptr(ptr);
+        node->next = mem_hash_table[idx];
+        mem_hash_table[idx] = node;
         pthread_mutex_unlock(&mem_mutex);
     }
 #endif
@@ -371,7 +381,8 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
 
     // Look up in tracker
     pthread_mutex_lock(&mem_mutex);
-    MemNode **curr = &mem_head;
+    size_t idx = hash_ptr(ptr);
+    MemNode **curr = &mem_hash_table[idx];
     MemNode *found_node = NULL;
     while (*curr) {
         if ((*curr)->ptr == ptr) {
@@ -383,11 +394,12 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
     }
 
     if (found_node) {
+        pthread_mutex_unlock(&mem_mutex);
         void *new_ptr = realloc(ptr, size);
         if (!new_ptr && size != 0) {
-            // Re-link the node before releasing lock and failing
-            found_node->next = mem_head;
-            mem_head = found_node;
+            pthread_mutex_lock(&mem_mutex);
+            found_node->next = mem_hash_table[idx];
+            mem_hash_table[idx] = found_node;
             pthread_mutex_unlock(&mem_mutex);
 
             fatal_log_printf(file, func, line, "realloc failed: %s!\n",
@@ -396,7 +408,6 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
         }
 
         if (!new_ptr && size == 0) {
-            pthread_mutex_unlock(&mem_mutex);
             free(found_node);
             log_printf(debug, file, func, line,
                        "REALLOC result: NULL (size 0, freed)\n");
@@ -408,8 +419,10 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
             found_node->func = func;
             found_node->line = line;
 
-            found_node->next = mem_head;
-            mem_head = found_node;
+            pthread_mutex_lock(&mem_mutex);
+            size_t new_idx = hash_ptr(new_ptr);
+            found_node->next = mem_hash_table[new_idx];
+            mem_hash_table[new_idx] = found_node;
             pthread_mutex_unlock(&mem_mutex);
 
             log_printf(debug, file, func, line, "REALLOC result: %p\n",
@@ -449,8 +462,9 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
             node->line = line;
 
             pthread_mutex_lock(&mem_mutex);
-            node->next = mem_head;
-            mem_head = node;
+            size_t new_idx = hash_ptr(new_ptr);
+            node->next = mem_hash_table[new_idx];
+            mem_hash_table[new_idx] = node;
             pthread_mutex_unlock(&mem_mutex);
 
             log_printf(debug, file, func, line,
@@ -491,8 +505,9 @@ char *REALPATH_wrapper(const char *path, char *resolved_path, const char *file,
         node->line = line;
 
         pthread_mutex_lock(&mem_mutex);
-        node->next = mem_head;
-        mem_head = node;
+        size_t idx = hash_ptr(res);
+        node->next = mem_hash_table[idx];
+        mem_hash_table[idx] = node;
         pthread_mutex_unlock(&mem_mutex);
     }
 #else
@@ -511,7 +526,8 @@ void FREE_wrapper(void *ptr, const char *file, const char *func, int line)
 
 #ifdef DEBUG
     pthread_mutex_lock(&mem_mutex);
-    MemNode **curr = &mem_head;
+    size_t idx = hash_ptr(ptr);
+    MemNode **curr = &mem_hash_table[idx];
     MemNode *found_node = NULL;
     while (*curr) {
         if ((*curr)->ptr == ptr) {
@@ -544,14 +560,16 @@ void mem_cleanup(void)
 {
 #ifdef DEBUG
     pthread_mutex_lock(&mem_mutex);
-    MemNode *curr = mem_head;
-    while (curr) {
-        MemNode *next = curr->next;
-        free(curr->ptr);
-        free(curr);
-        curr = next;
+    for (size_t i = 0; i < MEM_HASH_SIZE; i++) {
+        MemNode *curr = mem_hash_table[i];
+        while (curr) {
+            MemNode *next = curr->next;
+            free(curr->ptr);
+            free(curr);
+            curr = next;
+        }
+        mem_hash_table[i] = NULL;
     }
-    mem_head = NULL;
     pthread_mutex_unlock(&mem_mutex);
     pthread_mutex_destroy(&mem_mutex);
 #endif

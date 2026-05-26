@@ -106,6 +106,52 @@ void test_realloc_size_zero(void)
     TEST_ASSERT_NULL(ptr);
 }
 
+void test_memory_tracking(void)
+{
+    // Test CALLOC wrapper
+    int *arr = CALLOC(10, sizeof(int));
+    TEST_ASSERT_NOT_NULL(arr);
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL_INT(0, arr[i]);
+        arr[i] = i;
+    }
+
+    // Test REALLOC with size expansion
+    // Allocate a large filler block to consume adjacent heap space
+    int *filler = CALLOC(100000, sizeof(int));
+    TEST_ASSERT_NOT_NULL(filler);
+
+    arr = REALLOC(arr, 200000 * sizeof(int));
+    TEST_ASSERT_NOT_NULL(arr);
+    // Note: relocation may or may not occur; both are valid REALLOC behavior
+
+    for (int i = 0; i < 10; i++) {
+        TEST_ASSERT_EQUAL_INT(i, arr[i]);
+    }
+
+    // Test STRDUP / STRNDUP
+    char *s = STRDUP("httpdirfs_test");
+    TEST_ASSERT_NOT_NULL(s);
+    TEST_ASSERT_EQUAL_STRING("httpdirfs_test", s);
+
+    char *s2 = STRNDUP(s, 9);
+    TEST_ASSERT_NOT_NULL(s2);
+    TEST_ASSERT_EQUAL_STRING("httpdirfs", s2);
+
+    // Test FREE wrapper
+    FREE(filler);
+    TEST_ASSERT_NULL(filler);
+
+    FREE(arr);
+    TEST_ASSERT_NULL(arr);
+
+    FREE(s);
+    TEST_ASSERT_NULL(s);
+
+    FREE(s2);
+    TEST_ASSERT_NULL(s2);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -114,5 +160,6 @@ int main(void)
     RUN_TEST(test_str_to_hex);
     RUN_TEST(test_generate_salt);
     RUN_TEST(test_realloc_size_zero);
+    RUN_TEST(test_memory_tracking);
     return UNITY_END();
 }
