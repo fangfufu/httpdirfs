@@ -972,9 +972,7 @@ LinkTable *path_to_LinkTable(const char *path)
             new_table->orphaned = 0;
             next_table = new_table;
         } else {
-            PTHREAD_MUTEX_UNLOCK(&link_lock);
             LinkTable_free(new_table);
-            PTHREAD_MUTEX_LOCK(&link_lock);
             next_table = link->next_table;
             next_table->refcount++;
             next_table->orphaned = 0;
@@ -1097,9 +1095,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                         linktbl->refcount++;
                         next_table = new_table;
                     } else {
-                        PTHREAD_MUTEX_UNLOCK(&link_lock);
                         LinkTable_free(new_table);
-                        PTHREAD_MUTEX_LOCK(&link_lock);
                         next_table = linktbl->links[i]->next_table;
                     }
                     linktbl->refcount--;
