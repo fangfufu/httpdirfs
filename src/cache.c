@@ -1196,7 +1196,7 @@ retry:
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
         while ((ad = ActiveDownload_find(cf, dl_offset)) != NULL) {
-            if (ad->ts
+            if (ad->ts && ad->ts->data
                 && ad->ts->curr_size
                        >= (size_t)(offset_start - dl_offset + len)) {
                 memcpy(output_buf, ad->ts->data + (offset_start - dl_offset),
