@@ -758,11 +758,11 @@ void Cache_delete(const char *fn)
 
     char *metafn = path_append(META_DIR, fn);
     char *datafn = path_append(DATA_DIR, fn);
-    if (!access(metafn, F_OK) && unlink(metafn)) {
+    if (unlink(metafn) && errno != ENOENT) {
         lprintf(error, "unlink(): %s\n", strerror(errno));
     }
 
-    if (!access(datafn, F_OK) && unlink(datafn)) {
+    if (unlink(datafn) && errno != ENOENT) {
         lprintf(error, "unlink(): %s\n", strerror(errno));
     }
     FREE(metafn);
