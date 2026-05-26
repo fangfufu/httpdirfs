@@ -73,8 +73,10 @@ static int fs_getattr(const char *path, struct stat *stbuf,
             stbuf->st_blocks = (link->content_length) / 512;
             break;
         default:
+            LinkTable_unref(link->parent_table);
             return -ENOENT;
         }
+        LinkTable_unref(link->parent_table);
     }
     stbuf->st_uid = getuid();
     stbuf->st_gid = getgid();
@@ -105,6 +107,7 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     }
     lprintf(debug, "%s found.\n", path);
     if ((fi->flags & O_RDWR) != O_RDONLY) {
+        LinkTable_unref(link->parent_table);
         return -EROFS;
     }
     if (CACHE_SYSTEM_INIT) {
@@ -115,33 +118,47 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
          */
         if (!fi->fh) {
             lprintf(fatal, "Cache file creation failure for %s.\n", path);
+            LinkTable_unref(link->parent_table);
             return -ENOENT;
         }
+    }
+    LinkTable_unref(link->parent_table);
+    return 0;
+}
+
+static int fs_opendir(const char *path, struct fuse_file_info *fi)
+{
+    LinkTable *linktbl = path_to_LinkTable(path);
+    if (!linktbl) {
+        return -ENOENT;
+    }
+    fi->fh = (uint64_t)linktbl;
+    return 0;
+}
+
+static int fs_releasedir(const char *path, struct fuse_file_info *fi)
+{
+    LinkTable *linktbl = (LinkTable *)fi->fh;
+    if (linktbl) {
+        if (strcmp(path, "/") != 0) {
+            LinkTable_mark_orphaned(linktbl);
+        }
+        LinkTable_unref(linktbl);
     }
     return 0;
 }
 
 /**
  * \brief read the directory indicated by the path
- * \note
- *  - releasedir() is not implemented, because I don't see why anybody want
- * the LinkTables to be evicted from the memory during the runtime of this
- * program. If you want to evict LinkTables, just unmount the filesystem.
- *  - There is no real need to associate the LinkTable with the fi of each
- * directory data structure. If you want a deep level directory, you need to
- * generate the LinkTables for previous level directories. We might
- * as well maintain our own tree structure.
  */
 static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
                       off_t offset, struct fuse_file_info *fi,
                       enum fuse_readdir_flags fr_flags)
 {
+    (void)path;
     (void)offset;
-    (void)fi;
     (void)fr_flags;
-    LinkTable *linktbl;
-
-    linktbl = path_to_LinkTable(path);
+    LinkTable *linktbl = (LinkTable *)fi->fh;
 
     if (!linktbl) {
         lprintf(debug, "linktbl empty!\n");
@@ -166,7 +183,9 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
 }
 
 static struct fuse_operations fs_oper = {.getattr = fs_getattr,
+                                         .opendir = fs_opendir,
                                          .readdir = fs_readdir,
+                                         .releasedir = fs_releasedir,
                                          .open = fs_open,
                                          .read = fs_read,
                                          .init = fs_init,
