@@ -376,6 +376,11 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
         return malloc_wrapper_internal(size, file, func, line);
     }
 
+    if (size == 0) {
+        FREE_wrapper(ptr, file, func, line);
+        return NULL;
+    }
+
 #ifdef DEBUG
     log_printf(debug, file, func, line, "REALLOC: %p, %zu bytes\n", ptr, size);
 
@@ -396,7 +401,7 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
     if (found_node) {
         pthread_mutex_unlock(&mem_mutex);
         void *new_ptr = realloc(ptr, size);
-        if (!new_ptr && size != 0) {
+        if (!new_ptr) {
             pthread_mutex_lock(&mem_mutex);
             found_node->next = mem_hash_table[idx];
             mem_hash_table[idx] = found_node;
@@ -407,28 +412,20 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
             return NULL;
         }
 
-        if (!new_ptr && size == 0) {
-            free(found_node);
-            log_printf(debug, file, func, line,
-                       "REALLOC result: NULL (size 0, freed)\n");
-            return NULL;
-        } else {
-            found_node->ptr = new_ptr;
-            found_node->size = size;
-            found_node->file = file;
-            found_node->func = func;
-            found_node->line = line;
+        found_node->ptr = new_ptr;
+        found_node->size = size;
+        found_node->file = file;
+        found_node->func = func;
+        found_node->line = line;
 
-            pthread_mutex_lock(&mem_mutex);
-            size_t new_idx = hash_ptr(new_ptr);
-            found_node->next = mem_hash_table[new_idx];
-            mem_hash_table[new_idx] = found_node;
-            pthread_mutex_unlock(&mem_mutex);
+        pthread_mutex_lock(&mem_mutex);
+        size_t new_idx = hash_ptr(new_ptr);
+        found_node->next = mem_hash_table[new_idx];
+        mem_hash_table[new_idx] = found_node;
+        pthread_mutex_unlock(&mem_mutex);
 
-            log_printf(debug, file, func, line, "REALLOC result: %p\n",
-                       new_ptr);
-            return new_ptr;
-        }
+        log_printf(debug, file, func, line, "REALLOC result: %p\n", new_ptr);
+        return new_ptr;
     }
     pthread_mutex_unlock(&mem_mutex);
 
@@ -437,46 +434,35 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
                ptr);
 
     void *new_ptr = realloc(ptr, size);
-    if (!new_ptr && size != 0) {
+    if (!new_ptr) {
         fatal_log_printf(file, func, line, "realloc failed: %s!\n",
                          strerror(errno));
+        return NULL;
     }
 
-    if (new_ptr || size == 0) {
-        if (!new_ptr && size == 0) {
-            log_printf(debug, file, func, line,
-                       "REALLOC result: %p (size 0, not found, unchanged)\n",
-                       new_ptr);
-            return new_ptr;
-        } else {
-            MemNode *node = calloc(1, sizeof(MemNode));
-            if (!node) {
-                fatal_log_printf(file, func, line,
-                                 "Could not allocate MemNode: %s!\n",
-                                 strerror(errno));
-            }
-            node->ptr = new_ptr;
-            node->size = size;
-            node->file = file;
-            node->func = func;
-            node->line = line;
-
-            pthread_mutex_lock(&mem_mutex);
-            size_t new_idx = hash_ptr(new_ptr);
-            node->next = mem_hash_table[new_idx];
-            mem_hash_table[new_idx] = node;
-            pthread_mutex_unlock(&mem_mutex);
-
-            log_printf(debug, file, func, line,
-                       "REALLOC result: %p (adopted)\n", new_ptr);
-            return new_ptr;
-        }
+    MemNode *node = calloc(1, sizeof(MemNode));
+    if (!node) {
+        fatal_log_printf(file, func, line, "Could not allocate MemNode: %s!\n",
+                         strerror(errno));
     }
+    node->ptr = new_ptr;
+    node->size = size;
+    node->file = file;
+    node->func = func;
+    node->line = line;
 
-    return NULL;
+    pthread_mutex_lock(&mem_mutex);
+    size_t new_idx = hash_ptr(new_ptr);
+    node->next = mem_hash_table[new_idx];
+    mem_hash_table[new_idx] = node;
+    pthread_mutex_unlock(&mem_mutex);
+
+    log_printf(debug, file, func, line, "REALLOC result: %p (adopted)\n",
+               new_ptr);
+    return new_ptr;
 #else
     void *new_ptr = realloc(ptr, size);
-    if (!new_ptr && size != 0) {
+    if (!new_ptr) {
         fatal_log_printf(file, func, line, "realloc failed: %s!\n",
                          strerror(errno));
     }
