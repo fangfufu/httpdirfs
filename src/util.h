@@ -8,6 +8,16 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdint.h>
+
+#ifdef __APPLE__
+typedef struct {
+    pthread_mutex_t mutex;
+    pthread_cond_t cond;
+    int count;
+} sys_sem_t;
+#else
+typedef sem_t sys_sem_t;
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -56,7 +66,7 @@ void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
 /**
  * \brief wrapper for sem_init(), with error handling
  * */
-void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
+void sem_init_wrapper(sys_sem_t *sem, int pshared, unsigned int value,
                       const char *file, const char *func, int line);
 #define SEM_INIT(sem, pshared, value)                                          \
     sem_init_wrapper(sem, pshared, value, __FILE__, __func__, __LINE__)
@@ -64,21 +74,32 @@ void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
 /**
  * \brief wrapper for sem_destroy(), with error handling
  */
-void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
+void sem_destroy_wrapper(sys_sem_t *sem, const char *file, const char *func,
                          int line);
 #define SEM_DESTROY(sem) sem_destroy_wrapper(sem, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for sem_wait(), with error handling
  */
-void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem);
+void sem_wait_wrapper(const char *file, const char *func, int line,
+                      sys_sem_t *sem);
 #define SEM_WAIT(sem) sem_wait_wrapper(__FILE__, __func__, __LINE__, sem)
 
 /**
  * \brief wrapper for sem_post(), with error handling
  */
-void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem);
+void sem_post_wrapper(const char *file, const char *func, int line,
+                      sys_sem_t *sem);
 #define SEM_POST(sem) sem_post_wrapper(__FILE__, __func__, __LINE__, sem)
+
+/**
+ * \brief wrapper for sem_trywait(), with cross-platform support and error
+ * handling
+ */
+int sys_sem_trywait_wrapper(const char *file, const char *func, int line,
+                            sys_sem_t *sem);
+#define SEM_TRYWAIT(sem)                                                       \
+    sys_sem_trywait_wrapper(__FILE__, __func__, __LINE__, sem)
 
 /**
  * \brief wrapper for pthread_cond_init(), with error handling

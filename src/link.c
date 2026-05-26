@@ -27,7 +27,7 @@ int ROOT_LINK_OFFSET = 0;
  * \details This allows LinkTable generation to be run exclusively. This
  * effectively gives LinkTable generation priority over file transfer.
  */
-static pthread_mutex_t link_lock;
+static pthread_mutex_t link_lock = PTHREAD_MUTEX_INITIALIZER;
 static void make_link_relative(const char *page_url, char *link_url);
 
 /**
@@ -316,7 +316,6 @@ static LinkTable *single_LinkTable_new(const char *url)
 
 LinkTable *LinkSystem_init(const char *url)
 {
-    PTHREAD_MUTEX_INIT(&link_lock, NULL);
     size_t len = strnlen(url, PATH_MAX);
     /*
      * --------- Set the length of the root link -----------
