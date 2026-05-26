@@ -33,18 +33,18 @@ repos:
     -   id: meson-test
         name: Meson Test
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/release ]; then
-          meson setup .pre-commit-builds/release; fi &&
-          meson test -C .pre-commit-builds/release'
+          bash -c 'if [ ! -d .pre-commit-builds/gcc-release ]; then
+          CC=gcc meson setup .pre-commit-builds/gcc-release; fi &&
+          meson test -C .pre-commit-builds/gcc-release'
         language: system
         pass_filenames: false
         files: \.(c|h)$
-    -   id: all-tests
-        name: All Tests
+    -   id: all-tests-gcc
+        name: All Tests (GCC)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/release ]; then
-          meson setup .pre-commit-builds/release; fi &&
-          meson test -C .pre-commit-builds/release
+          bash -c 'if [ ! -d .pre-commit-builds/gcc-release ]; then
+          CC=gcc meson setup .pre-commit-builds/gcc-release; fi &&
+          meson test -C .pre-commit-builds/gcc-release
           --suite unit_test
           --suite integration_short
           --suite integration_long
@@ -53,12 +53,12 @@ repos:
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
-    -   id: all-tests-debug
-        name: All Tests (Debug)
+    -   id: all-tests-gcc-debug
+        name: All Tests (GCC Debug)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/debug ]; then
-          meson setup .pre-commit-builds/debug --buildtype=debug; fi &&
-          meson test -C .pre-commit-builds/debug
+          bash -c 'if [ ! -d .pre-commit-builds/gcc-debug ]; then
+          CC=gcc meson setup .pre-commit-builds/gcc-debug --buildtype=debug; fi &&
+          meson test -C .pre-commit-builds/gcc-debug
           --suite unit_test
           --suite integration_short
           --suite integration_long

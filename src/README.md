@@ -130,11 +130,11 @@ pre-commit run --all-files
 > your changes:**
 >
 > ```bash
-> # Run all tests using the default compiler (GCC)
-> pre-commit run all-tests --hook-stage manual --all-files
+> # Run all tests using GCC
+> pre-commit run all-tests-gcc --hook-stage manual --all-files
 >
 > # Run all tests (GCC Debug)
-> pre-commit run all-tests-debug --hook-stage manual --all-files
+> pre-commit run all-tests-gcc-debug --hook-stage manual --all-files
 >
 > # Run all tests using Clang
 > pre-commit run all-tests-clang --hook-stage manual --all-files
@@ -191,10 +191,10 @@ memory leaks locally:
 
 ```bash
 # Run GCC-based compilation and all tests (unit_test, integration_short, integration_long)
-pre-commit run all-tests --hook-stage manual --all-files
+pre-commit run all-tests-gcc --hook-stage manual --all-files
 
 # Run GCC-based compilation in Debug mode (with leak detection enabled) and all tests
-pre-commit run all-tests-debug --hook-stage manual --all-files
+pre-commit run all-tests-gcc-debug --hook-stage manual --all-files
 
 # Run Clang-based compilation and all tests
 pre-commit run all-tests-clang --hook-stage manual --all-files
