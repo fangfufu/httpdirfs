@@ -8,6 +8,69 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Implement shutdown memory leak detection in `DEBUG` builds, recursively
+  traversing the virtual filesystem at shutdown to tear down resources and
+  verify that no memory leaks exist
+  ([30d7d10](https://github.com/fangfufu/httpdirfs/commit/30d7d10)).
+- Add FUSE `.opendir` and `.releasedir` handlers to safely evict directories
+  (`LinkTable`s) from memory when they are no longer in use, using an atomic
+  reference-counting strategy to prevent crashes in other subsystems
+  ([2fff24a](https://github.com/fangfufu/httpdirfs/commit/2fff24a)).
+- Introduce a comprehensive unit test suite `test_memory_tracking` to validate
+  correct allocation, reallocation, and free behavior of debug allocator
+  wrappers ([9b38614](https://github.com/fangfufu/httpdirfs/commit/9b38614)).
+
+### Changed
+
+- Optimize memory tracking in debug allocator wrappers by replacing the $O(N)$
+  linear linked list with a statically sized 8192-slot hash table with chaining
+  ([9b38614](https://github.com/fangfufu/httpdirfs/commit/9b38614)).
+- Optimize string sanitization loop in `sanitise_LinkTable` by replacing
+  `strlen()` with a null-terminator check, eliminating $O(N^2)$ overhead
+  ([c8fbf51](https://github.com/fangfufu/httpdirfs/commit/c8fbf51)).
+- Refactor test suites into granular profiles (`unit_test` for C unit tests,
+  `integration_short` for fast integration tests, and `integration_long` for
+  intensive tests) and align documentation in `src/README.md`
+  ([39963f7](https://github.com/fangfufu/httpdirfs/commit/39963f7)).
+- Revise pre-commit hook configurations to isolate builds, add debug-based
+  verification (`meson-test-debug`), restrict the automatic hook to fast unit
+  tests, and provide manual pre-push hooks (`all-tests` and `all-tests-clang`)
+  ([39963f7](https://github.com/fangfufu/httpdirfs/commit/39963f7),
+  [76fa30b](https://github.com/fangfufu/httpdirfs/commit/76fa30b),
+  [9ad044e](https://github.com/fangfufu/httpdirfs/commit/9ad044e),
+  [89ac572](https://github.com/fangfufu/httpdirfs/commit/89ac572),
+  [af4ee30](https://github.com/fangfufu/httpdirfs/commit/af4ee30)).
+- Expand the GitHub Actions build matrix on Ubuntu and macOS to execute the test
+  suite under both debug and release configurations in parallel
+  ([1554ed3](https://github.com/fangfufu/httpdirfs/commit/1554ed3)).
+- Upgrade GitHub Actions workflows to use the latest major runner and dependency
+  actions version
+  ([68dd7bb](https://github.com/fangfufu/httpdirfs/commit/68dd7bb),
+  [f819603](https://github.com/fangfufu/httpdirfs/commit/f819603)).
+
+### Fixed
+
+- Intercept size-zero allocations early in `REALLOC_wrapper` by freeing the
+  pointer and returning `NULL` to resolve a double-free on glibc and standardize
+  behavior on BSD/macOS where `realloc(ptr, 0)` returns a non-NULL sentinel
+  pointer ([1e1b11d](https://github.com/fangfufu/httpdirfs/commit/1e1b11d),
+  [d6e3040](https://github.com/fangfufu/httpdirfs/commit/d6e3040)).
+- Fix potential crashes by adding defensive `NULL` checks on `this_link` in
+  `Cache_create`
+  ([796fbb9](https://github.com/fangfufu/httpdirfs/commit/796fbb9)).
+- Fix directory eviction concurrency issues by holding `link_lock` when freeing
+  duplicate local `LinkTable` directories
+  ([29f51ff](https://github.com/fangfufu/httpdirfs/commit/29f51ff)).
+- Resolve memory leak in `generate_md5sum` by properly freeing the
+  OpenSSL-allocated `md5_digest` via `OPENSSL_free`
+  ([0d7a07e](https://github.com/fangfufu/httpdirfs/commit/0d7a07e)).
+- Resolve compiler warning and build issue on macOS CI by replacing
+  GCC/Clang-specific `__attribute__((noreturn))` with the C11 standard
+  `_Noreturn` keyword in `log.h` and `util.h`
+  ([5ed8167](https://github.com/fangfufu/httpdirfs/commit/5ed8167)).
+
 ## [1.2.11] - 2026-05-23
 
 ### Added
