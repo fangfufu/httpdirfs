@@ -213,6 +213,63 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
     }
 }
 
+void pthread_cond_init_wrapper(pthread_cond_t *cond,
+                               const pthread_condattr_t *attr, const char *file,
+                               const char *func, int line,
+                               const char *cond_name)
+{
+    log_printf(debug, file, func, line, "%lx pthread_cond_init: %p, %p, %s\n",
+               (unsigned long)pthread_self(), (void *)cond, (const void *)attr,
+               cond_name);
+    int ret = pthread_cond_init(cond, attr);
+    if (ret) {
+        fatal_log_printf(file, func, line, "%lx pthread_cond_init: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+}
+
+void pthread_cond_destroy_wrapper(pthread_cond_t *cond, const char *file,
+                                  const char *func, int line,
+                                  const char *cond_name)
+{
+    log_printf(debug, file, func, line, "%lx pthread_cond_destroy: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)cond, cond_name);
+    int ret = pthread_cond_destroy(cond);
+    if (ret) {
+        fatal_log_printf(file, func, line, "%lx pthread_cond_destroy: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+}
+
+void pthread_cond_broadcast_wrapper(const char *file, const char *func,
+                                    int line, pthread_cond_t *cond,
+                                    const char *cond_name)
+{
+    log_printf(debug, file, func, line, "%lx pthread_cond_broadcast: %p, %s\n",
+               (unsigned long)pthread_self(), (void *)cond, cond_name);
+    int ret = pthread_cond_broadcast(cond);
+    if (ret) {
+        fatal_log_printf(file, func, line,
+                         "%lx pthread_cond_broadcast: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+}
+
+void pthread_cond_wait_wrapper(const char *file, const char *func, int line,
+                               pthread_cond_t *cond, pthread_mutex_t *mutex,
+                               const char *cond_name, const char *mutex_name)
+{
+    log_printf(debug, file, func, line,
+               "%lx pthread_cond_wait: %p (%s), %p (%s)\n",
+               (unsigned long)pthread_self(), (void *)cond, cond_name,
+               (void *)mutex, mutex_name);
+    int ret = pthread_cond_wait(cond, mutex);
+    if (ret) {
+        fatal_log_printf(file, func, line, "%lx pthread_cond_wait: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+}
+
 void exit_failure(void)
 {
     int nptrs;

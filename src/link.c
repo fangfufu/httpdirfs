@@ -1135,9 +1135,7 @@ TransferStruct Link_download_full(Link *link)
     char *url = link->f_url;
     CURL *curl = Link_to_curl(link);
 
-    TransferStruct ts;
-    ts.curr_size = 0;
-    ts.data = NULL;
+    TransferStruct ts = {0};
     ts.type = DATA;
     ts.transferring = 1;
 
@@ -1272,10 +1270,11 @@ bug report, please include the following HTTP header information:\n%s\n",
     return recv;
 }
 
-long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
+long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
+                   Cache *cf)
 {
-    TransferStruct ts;
-    TransferStruct header;
+    TransferStruct ts = {0};
+    TransferStruct header = {0};
     curl_off_t recv_sz;
 
     size_t request_end = offset + req_size;
@@ -1291,9 +1290,20 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
         ts.data = NULL;
         ts.type = DATA;
         ts.transferring = 1;
+        ts.cache_ptr = cf;
+
+        if (cf) {
+            PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+            if (cf->active_dl_offset == offset) {
+                cf->active_dl_ts = &ts;
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
+            }
+            PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        }
 
         header.curr_size = 0;
         header.data = NULL;
+        header.cache_ptr = NULL;
 
         CURL *curl
             = Link_download_curl_setup(link, req_size, offset, &header, &ts);
@@ -1303,6 +1313,17 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
         recv_sz = Link_download_cleanup(curl, &header);
 
         if (recv_sz < 0) {
+            if (cf) {
+                PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+                ts.transferring = 0;
+                if (cf->active_dl_ts == &ts) {
+                    cf->active_dl_ts = NULL;
+                }
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
+                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+            } else {
+                ts.transferring = 0;
+            }
             FREE(ts.data);
             if (recv_sz == -EAGAIN) {
                 lprintf(warning, "HTTP temporary failure, retrying...\n");
@@ -1316,6 +1337,17 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
             lprintf(error,
                     "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
                     req_size, recv_sz);
+            if (cf) {
+                PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+                ts.transferring = 0;
+                if (cf->active_dl_ts == &ts) {
+                    cf->active_dl_ts = NULL;
+                }
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
+                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+            } else {
+                ts.transferring = 0;
+            }
             FREE(ts.data);
             sleep(CONFIG.http_wait_sec);
             continue;
@@ -1324,6 +1356,18 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
         /* success */
         break;
     } while (1);
+
+    if (cf) {
+        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+        ts.transferring = 0;
+        if (cf->active_dl_ts == &ts) {
+            cf->active_dl_ts = NULL;
+        }
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+    } else {
+        ts.transferring = 0;
+    }
 
     memmove(output_buf, ts.data, recv_sz);
     FREE(ts.data);
@@ -1344,7 +1388,7 @@ long path_download(const char *path, char *output_buf, size_t req_size,
         return -ENOENT;
     }
 
-    long res = Link_download(link, output_buf, req_size, offset);
+    long res = Link_download(link, output_buf, req_size, offset, NULL);
     LinkTable_unref(link->parent_table);
     return res;
 }

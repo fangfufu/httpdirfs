@@ -21,6 +21,8 @@ struct TransferStruct {
     volatile int transferring;
     /** \brief The link associated with the transfer */
     Link *link;
+    /** \brief The Cache structure associated with the transfer */
+    Cache *cache_ptr;
 };
 
 /**
