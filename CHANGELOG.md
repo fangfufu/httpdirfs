@@ -31,6 +31,10 @@ and this project adheres to
 
 ### Changed
 
+- Optimize GitHub Actions workflows by separating short and long integration
+  tests and removing redundant manual pre-commit hook stages to avoid duplicate,
+  slow sequential CI execution
+  ([86b0e8e](https://github.com/fangfufu/httpdirfs/commit/86b0e8e)).
 - Refactor synchronization and memory wrappers (mutex, semaphore, condvar, and
   allocator) to remove trailing name string parameters and clean up debug log
   statements ([efb8c24](https://github.com/fangfufu/httpdirfs/commit/efb8c24)).
