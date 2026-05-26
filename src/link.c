@@ -1135,9 +1135,7 @@ TransferStruct Link_download_full(Link *link)
     char *url = link->f_url;
     CURL *curl = Link_to_curl(link);
 
-    TransferStruct ts;
-    ts.curr_size = 0;
-    ts.data = NULL;
+    TransferStruct ts = {0};
     ts.type = DATA;
     ts.transferring = 1;
 
@@ -1274,8 +1272,8 @@ bug report, please include the following HTTP header information:\n%s\n",
 
 long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset)
 {
-    TransferStruct ts;
-    TransferStruct header;
+    TransferStruct ts = {0};
+    TransferStruct header = {0};
     curl_off_t recv_sz;
 
     size_t request_end = offset + req_size;
