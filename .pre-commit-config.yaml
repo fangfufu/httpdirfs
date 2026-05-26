@@ -33,9 +33,9 @@ repos:
     -   id: meson-test
         name: Meson Test
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/gcc-release ]; then
-          CC=gcc meson setup .pre-commit-builds/gcc-release; fi &&
-          meson test -C .pre-commit-builds/gcc-release'
+          bash -c 'if [ ! -d .pre-commit-builds/default-release ]; then
+          meson setup .pre-commit-builds/default-release; fi &&
+          meson test -C .pre-commit-builds/default-release'
         language: system
         pass_filenames: false
         files: \.(c|h)$
