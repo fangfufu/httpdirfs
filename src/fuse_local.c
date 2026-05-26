@@ -110,6 +110,14 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EROFS;
     }
     if (CACHE_SYSTEM_INIT) {
+        if (link->content_length <= 0) {
+            lprintf(error,
+                    "Zero-byte or negative size files are not supported in "
+                    "cache system: %s\n",
+                    path);
+            LinkTable_unref(link->parent_table);
+            return -EINVAL;
+        }
         fi->fh = (uint64_t)Cache_open(path);
         /*
          * The cache definitely cannot be opened for some reason.

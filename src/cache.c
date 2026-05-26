@@ -225,6 +225,11 @@ static int Meta_read(Cache *cf)
         return EIO;
     }
 
+    if (!cf->link) {
+        lprintf(error, "cf->link is NULL in Meta_read\n");
+        return EINVAL;
+    }
+
     long disk_time;
     off_t disk_content_length;
 
@@ -236,8 +241,11 @@ static int Meta_read(Cache *cf)
         return EIO;
     }
 
-    /* These things really should not be zero! */
-    if (!disk_content_length || !cf->blksz || !cf->segbc) {
+    /*
+     * We do not support zero-byte files in the on-disk cache files.
+     * Both disk_content_length and cf->segbc must be strictly positive.
+     */
+    if (disk_content_length <= 0 || cf->blksz <= 0 || cf->segbc <= 0) {
         lprintf(error,
                 "corruption: content_length: %jd, blksz: %d, segbc: %jd\n",
                 (intmax_t)disk_content_length, cf->blksz, (intmax_t)cf->segbc);
@@ -246,11 +254,6 @@ static int Meta_read(Cache *cf)
 
     if (cf->blksz != CONFIG.data_blksz) {
         lprintf(warning, "Warning: cf->blksz != CONFIG.data_blksz\n");
-    }
-
-    if (disk_content_length <= 0 || cf->blksz <= 0) {
-        lprintf(error, "Error: invalid metadata sizes\n");
-        return EBADMSG;
     }
 
     if (disk_content_length > INT64_MAX - cf->blksz) {
@@ -265,7 +268,7 @@ static int Meta_read(Cache *cf)
         return EBADMSG;
     }
 
-    if (disk_content_length != (off_t)cf->link->content_length) {
+    if ((uintmax_t)disk_content_length != (uintmax_t)cf->link->content_length) {
         lprintf(warning, "cache size mismatch: %s (disk: %jd, link: %zu)\n",
                 cf->path, (intmax_t)disk_content_length,
                 cf->link->content_length);
@@ -282,8 +285,9 @@ static int Meta_read(Cache *cf)
         max_segbc = INT_MAX;
     }
 
-    if (cf->segbc <= 0 || cf->segbc > max_segbc) {
-        lprintf(error, "Error: invalid segbc size: %ld\n", cf->segbc);
+    if (cf->segbc != max_segbc) {
+        lprintf(error, "Error: invalid segbc size: %ld (expected: %ld)\n",
+                cf->segbc, (long)max_segbc);
         return EBADMSG;
     }
 
@@ -346,13 +350,35 @@ static int Meta_write(Cache *cf)
         return -1;
     }
 
+    if (!cf->link) {
+        lprintf(error, "cf->link is NULL in Meta_write\n");
+        return -1;
+    }
+
     /*
-     * These things really should not be zero!
+     * We do not support zero-byte files. Both write_content_length and
+     * cf->segbc must be strictly positive.
      */
     off_t write_content_length = (off_t)cf->link->content_length;
-    if (!write_content_length || !cf->blksz || !cf->segbc) {
-        lprintf(error, "content_length: %jd, blksz: %d, segbc: %jd\n",
-                (intmax_t)write_content_length, cf->blksz, (intmax_t)cf->segbc);
+    long expected_segbc = 0;
+    if (cf->blksz > 0 && write_content_length > 0) {
+        expected_segbc = write_content_length / cf->blksz;
+        if (write_content_length % cf->blksz != 0) {
+            expected_segbc += 1;
+        }
+        if (expected_segbc > INT_MAX) {
+            expected_segbc = INT_MAX;
+        }
+    }
+    if (write_content_length <= 0
+        || (size_t)write_content_length != cf->link->content_length
+        || cf->blksz <= 0 || cf->segbc != expected_segbc || cf->segbc <= 0) {
+        lprintf(error,
+                "invalid metadata for write: content_length: %jd, blksz: %d, "
+                "segbc: %ld (expected: %ld)\n",
+                (intmax_t)write_content_length, cf->blksz, cf->segbc,
+                expected_segbc);
+        return -1;
     }
 
     fwrite(&cf->link->time, sizeof(long), 1, fp);
@@ -389,7 +415,16 @@ static void Data_create(Cache *cf)
     if (fd == -1) {
         lprintf(fatal, "open(): %s\n", strerror(errno));
     }
-    if (ftruncate(fd, (off_t)cf->link->content_length)) {
+    if (!cf->link) {
+        lprintf(fatal, "cf->link is NULL in Data_create\n");
+    }
+    off_t truncate_size = (off_t)cf->link->content_length;
+    if (truncate_size < 0
+        || (size_t)truncate_size != cf->link->content_length) {
+        lprintf(fatal, "File size too large for system off_t: %zu\n",
+                cf->link->content_length);
+    }
+    if (ftruncate(fd, truncate_size)) {
         lprintf(warning, "ftruncate(): %s\n", strerror(errno));
     }
     if (close(fd)) {
@@ -426,6 +461,23 @@ static off_t Data_size(const char *fn)
  */
 static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 {
+    if (!cf->link) {
+        lprintf(error, "cf->link is NULL in Data_read\n");
+        return -EINVAL;
+    }
+
+    off_t total_len = (off_t)cf->link->content_length;
+    if (total_len < 0 || (size_t)total_len != cf->link->content_length) {
+        lprintf(error, "content_length overflow in Data_read\n");
+        return -EINVAL;
+    }
+
+    if (len < 0) {
+        lprintf(error, "requested to read negative bytes: %jd\n",
+                (intmax_t)len);
+        return -EINVAL;
+    }
+
     if (len == 0) {
         lprintf(error, "requested to read 0 byte!\n");
         return -EINVAL;
@@ -437,6 +489,12 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 
     long byte_read = 0;
 
+    if (offset < 0 || offset >= (off_t)cf->link->content_length) {
+        goto end;
+    } else if (len > (off_t)cf->link->content_length - offset) {
+        len = (off_t)cf->link->content_length - offset;
+    }
+
     /*
      * Seek to the right location
      */
@@ -447,16 +505,6 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         lprintf(error, "fseeko(): %s\n", strerror(errno));
         byte_read = -EIO;
         goto end;
-    }
-
-    /*
-     * Calculate how much to read
-     */
-    if (offset + len > (off_t)cf->link->content_length) {
-        len -= offset + len - (off_t)cf->link->content_length;
-        if (len < 0) {
-            goto end;
-        }
     }
 
     byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
@@ -495,11 +543,10 @@ end:
  */
 static long Data_write(Cache *cf, const uint8_t *buf, off_t len, off_t offset)
 {
-    if (len == 0) {
-        /*
-         * We should permit empty files
-         */
-        return 0;
+    if (len <= 0) {
+        lprintf(error, "requested to write 0 or negative bytes: %jd\n",
+                (intmax_t)len);
+        return -EINVAL;
     }
 
     lprintf(cache_lock_debug, "thread %lx: locking seek_lock;\n",
@@ -665,21 +712,29 @@ static int Cache_exist(const char *fn)
 {
     char *metafn = path_append(META_DIR, fn);
     char *datafn = path_append(DATA_DIR, fn);
-    /*
-     * access() returns 0 on success
-     */
-    int no_meta = access(metafn, F_OK);
-    int no_data = access(datafn, F_OK);
 
-    if (no_meta ^ no_data) {
-        lprintf(warning, "Cache file partially missing.\n");
-        if (no_meta) {
-            if (unlink(datafn)) {
+    struct stat metast;
+    struct stat datast;
+    int no_meta = stat(metafn, &metast);
+    int no_data = stat(datafn, &datast);
+
+    if (no_meta == 0 && metast.st_size == 0) {
+        no_meta = -1;
+    }
+    if (no_data == 0 && datast.st_size == 0) {
+        no_data = -1;
+    }
+
+    if ((no_meta == 0) != (no_data == 0)) {
+        lprintf(warning,
+                "Cache file partially missing or invalid (zero-length).\n");
+        if (no_meta != 0) {
+            if (unlink(datafn) && errno != ENOENT) {
                 lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
         }
-        if (no_data) {
-            if (unlink(metafn)) {
+        if (no_data != 0) {
+            if (unlink(metafn) && errno != ENOENT) {
                 lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
         }
@@ -688,7 +743,7 @@ static int Cache_exist(const char *fn)
     FREE(metafn);
     FREE(datafn);
 
-    return no_meta | no_data;
+    return (no_meta != 0) || (no_data != 0);
 }
 
 /**
@@ -792,6 +847,12 @@ int Cache_create(const char *path)
         return 1;
     }
 
+    if (this_link->content_length <= 0) {
+        lprintf(error, "Zero-length files are not supported in cache system\n");
+        LinkTable_unref(this_link->parent_table);
+        return 1;
+    }
+
     char *fn;
 
     if (CONFIG.mode == NORMAL) {
@@ -811,6 +872,9 @@ int Cache_create(const char *path)
     cf->segbc = this_link->content_length / cf->blksz;
     if (this_link->content_length % cf->blksz != 0) {
         cf->segbc += 1;
+    }
+    if (cf->segbc > INT_MAX) {
+        cf->segbc = INT_MAX;
     }
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
@@ -884,6 +948,15 @@ Cache *Cache_open(const char *fn)
         actual_fn = link->sonic.id;
     }
 
+    if (link->content_length <= 0) {
+        lprintf(error, "Zero-length files are not supported in cache system\n");
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
+        PTHREAD_MUTEX_UNLOCK(&cf_lock);
+        LinkTable_unref(link->parent_table);
+        return NULL;
+    }
+
     // Try up to 2 times. If opening fails on the first attempt (outdated,
     // corrupt, etc.), we delete the cache and try creating and opening a fresh
     // one.
@@ -923,7 +996,8 @@ Cache *Cache_open(const char *fn)
             if (d_size < 0) {
                 lprintf(error, "cannot stat data file %s.\n", actual_fn);
                 ok = 0;
-            } else if ((off_t)cf->link->content_length > d_size) {
+            } else if ((uintmax_t)cf->link->content_length
+                       > (uintmax_t)d_size) {
                 lprintf(error,
                         "metadata inconsistency %s, "
                         "cf->link->content_length: %jd, Data_size(fn): %jd.\n",
@@ -994,15 +1068,15 @@ void Cache_close(Cache *cf)
             (unsigned long)pthread_self(), cf->path);
     SEM_WAIT(&cf->bgt_sem);
 
-    if (Meta_write(cf)) {
+    if (cf->mfp && Meta_write(cf)) {
         lprintf(error, "Meta_write() error.");
     }
 
-    if (fclose(cf->mfp)) {
+    if (cf->mfp && fclose(cf->mfp)) {
         lprintf(error, "cannot close metadata: %s.\n", strerror(errno));
     }
 
-    if (fclose(cf->dfp)) {
+    if (cf->dfp && fclose(cf->dfp)) {
         lprintf(error, "cannot close data file %s.\n", strerror(errno));
     }
 
@@ -1081,8 +1155,9 @@ static void *Cache_bgdl(void *arg)
 
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
     if ((recv == cf->blksz)
-        || (dl_offset
-            == ((off_t)cf->link->content_length / cf->blksz * cf->blksz))) {
+        || ((uintmax_t)dl_offset
+            == (cf->link->content_length / (size_t)cf->blksz
+                * (size_t)cf->blksz))) {
         if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
             Seg_set(cf, dl_offset, 1);
         }
@@ -1183,6 +1258,16 @@ static void Cache_bgdl_launcher(Cache *cf, off_t dl_offset)
 static long Cache_read_segment(Cache *cf, char *const output_buf,
                                const off_t len, const off_t offset_start)
 {
+    if (!cf->link) {
+        lprintf(error, "cf->link is NULL in Cache_read_segment\n");
+        return -EINVAL;
+    }
+
+    if (cf->link->content_length <= 0 || offset_start < 0
+        || offset_start >= (off_t)cf->link->content_length) {
+        return 0;
+    }
+
     long send;
     off_t dl_offset = offset_start / cf->blksz * cf->blksz;
     int ret;
@@ -1284,8 +1369,9 @@ sync_dl:
         return recv;
     }
     if ((recv == cf->blksz)
-        || (dl_offset
-            == ((off_t)cf->link->content_length / cf->blksz * cf->blksz))) {
+        || ((uintmax_t)dl_offset
+            == (cf->link->content_length / (size_t)cf->blksz
+                * (size_t)cf->blksz))) {
         if (recv < (offset_start - dl_offset) + len) {
             lprintf(error,
                     "received %ld bytes, but required at least %ld bytes\n",
@@ -1335,7 +1421,7 @@ bgdl: {
 }
     off_t next_dl_offset = dl_offset + cf->blksz;
     int next_seg_missing = 0;
-    if (next_dl_offset < (off_t)cf->link->content_length) {
+    if ((uintmax_t)next_dl_offset < (uintmax_t)cf->link->content_length) {
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
         next_seg_missing = !Seg_exist(cf, next_dl_offset);
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1368,6 +1454,23 @@ bgdl: {
 long Cache_read(Cache *cf, char *const output_buf, off_t len,
                 const off_t offset_start)
 {
+    if (!cf || !cf->link) {
+        lprintf(error, "Invalid cache or link in Cache_read\n");
+        return -EINVAL;
+    }
+
+    if (offset_start < 0 || offset_start >= (off_t)cf->link->content_length) {
+        return 0;
+    }
+
+    if (len > (off_t)cf->link->content_length - offset_start) {
+        len = (off_t)cf->link->content_length - offset_start;
+    }
+
+    if (len <= 0) {
+        return 0;
+    }
+
     off_t send = 0;
     for (off_t start = offset_start, end; len > 0;
          len -= end - start, start = end) {
@@ -1381,6 +1484,9 @@ long Cache_read(Cache *cf, char *const output_buf, off_t len,
             return seg_send;
         }
         send += seg_send;
+        if (seg_send < end - start) {
+            break;
+        }
     }
     return send;
 }
