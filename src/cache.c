@@ -358,7 +358,7 @@ static int Meta_write(Cache *cf)
      * cf->segbc must be strictly positive.
      */
     off_t write_content_length = (off_t)cf->link->content_length;
-    long expected_segbc = 0;
+    off_t expected_segbc = 0;
     if (cf->blksz > 0 && write_content_length > 0) {
         expected_segbc = write_content_length / cf->blksz;
         if (expected_segbc >= INT_MAX) {
@@ -866,11 +866,14 @@ int Cache_create(const char *path)
     cf->path = STRNDUP(fn, PATH_MAX);
     cf->link = this_link;
     cf->blksz = CONFIG.data_blksz;
-    cf->segbc = this_link->content_length / cf->blksz;
-    if (cf->segbc >= INT_MAX) {
+    size_t calculated_segbc = this_link->content_length / cf->blksz;
+    if (calculated_segbc >= INT_MAX) {
         cf->segbc = INT_MAX;
-    } else if (this_link->content_length % cf->blksz != 0) {
-        cf->segbc += 1;
+    } else {
+        cf->segbc = (long)calculated_segbc;
+        if (this_link->content_length % cf->blksz != 0) {
+            cf->segbc += 1;
+        }
     }
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
@@ -1464,6 +1467,12 @@ long Cache_read(Cache *cf, char *const output_buf, off_t len,
 {
     if (!cf || !cf->link) {
         lprintf(error, "Invalid cache or link in Cache_read\n");
+        return -EINVAL;
+    }
+
+    if (len < 0) {
+        lprintf(error, "requested to read negative bytes: %jd\n",
+                (intmax_t)len);
         return -EINVAL;
     }
 
