@@ -32,18 +32,37 @@ repos:
         files: \.(c|h)$
     -   id: meson-test
         name: Meson Test
-        entry: meson test -C builddir
+        entry: >-
+          bash -c 'if [ ! -d .pre-commit-builds/release ]; then
+          meson setup .pre-commit-builds/release; fi &&
+          meson test -C .pre-commit-builds/release'
         language: system
         pass_filenames: false
         files: \.(c|h)$
     -   id: all-tests
         name: All Tests
         entry: >-
-          meson test -C builddir
+          bash -c 'if [ ! -d .pre-commit-builds/release ]; then
+          meson setup .pre-commit-builds/release; fi &&
+          meson test -C .pre-commit-builds/release
           --suite unit_test
           --suite integration_short
           --suite integration_long
-          --verbose
+          --verbose'
+        language: system
+        pass_filenames: false
+        files: \.(c|h|py|sh)$
+        stages: [manual]
+    -   id: all-tests-debug
+        name: All Tests (Debug)
+        entry: >-
+          bash -c 'if [ ! -d .pre-commit-builds/debug ]; then
+          meson setup .pre-commit-builds/debug --buildtype=debug; fi &&
+          meson test -C .pre-commit-builds/debug
+          --suite unit_test
+          --suite integration_short
+          --suite integration_long
+          --verbose'
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
@@ -51,9 +70,23 @@ repos:
     -   id: all-tests-clang
         name: All Tests (Clang)
         entry: >-
-          bash -c 'if [ ! -d builddir_clang ]; then
-          CC=clang meson setup builddir_clang; fi &&
-          meson test -C builddir_clang
+          bash -c 'if [ ! -d .pre-commit-builds/clang-release ]; then
+          CC=clang meson setup .pre-commit-builds/clang-release; fi &&
+          meson test -C .pre-commit-builds/clang-release
+          --suite unit_test
+          --suite integration_short
+          --suite integration_long
+          --verbose'
+        language: system
+        pass_filenames: false
+        files: \.(c|h|py|sh)$
+        stages: [manual]
+    -   id: all-tests-clang-debug
+        name: All Tests (Clang Debug)
+        entry: >-
+          bash -c 'if [ ! -d .pre-commit-builds/clang-debug ]; then
+          CC=clang meson setup .pre-commit-builds/clang-debug --buildtype=debug; fi &&
+          meson test -C .pre-commit-builds/clang-debug
           --suite unit_test
           --suite integration_short
           --suite integration_long

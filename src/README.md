@@ -133,10 +133,16 @@ pre-commit run --all-files
 > # Run all tests using the default compiler (GCC)
 > pre-commit run all-tests --hook-stage manual --all-files
 >
+> # Run all tests (GCC Debug)
+> pre-commit run all-tests-debug --hook-stage manual --all-files
+>
 > # Run all tests using Clang
 > pre-commit run all-tests-clang --hook-stage manual --all-files
+>
+> # Run all tests (Clang Debug)
+> pre-commit run all-tests-clang-debug --hook-stage manual --all-files
 > ```
-> Note that `all-tests-clang` requires `clang` to be installed (e.g.,
+> Note that the Clang-based hooks require `clang` to be installed (e.g.,
 > `sudo apt install clang` on Debian/Ubuntu systems).
 
 ### Running Tests
@@ -180,15 +186,21 @@ configurations:
 ##### 3. Required Pre-Push Validation
 
 Before pushing changes, developers are **required** to manually run the full
-suite using the manual pre-commit hooks to catch potential cache regressions
-locally:
+suite using the manual pre-commit hooks to catch potential cache regressions and
+memory leaks locally:
 
 ```bash
 # Run GCC-based compilation and all tests (unit_test, integration_short, integration_long)
 pre-commit run all-tests --hook-stage manual --all-files
 
+# Run GCC-based compilation in Debug mode (with leak detection enabled) and all tests
+pre-commit run all-tests-debug --hook-stage manual --all-files
+
 # Run Clang-based compilation and all tests
 pre-commit run all-tests-clang --hook-stage manual --all-files
+
+# Run Clang-based compilation in Debug mode (with leak detection enabled) and all tests
+pre-commit run all-tests-clang-debug --hook-stage manual --all-files
 ```
 
 ---
