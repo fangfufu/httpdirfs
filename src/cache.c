@@ -1097,7 +1097,13 @@ void Cache_close(Cache *cf)
  */
 static int Seg_exist(Cache *cf, off_t offset)
 {
+    if (cf->segbc <= 0 || cf->blksz <= 0) {
+        return 0;
+    }
     off_t byte = offset / cf->blksz;
+    if (byte < 0 || byte >= cf->segbc) {
+        return 0;
+    }
     return cf->seg[byte];
 }
 
@@ -1110,7 +1116,13 @@ static int Seg_exist(Cache *cf, off_t offset)
  */
 static void Seg_set(Cache *cf, off_t offset, int i)
 {
+    if (cf->segbc <= 0 || cf->blksz <= 0) {
+        return;
+    }
     off_t byte = offset / cf->blksz;
+    if (byte < 0 || byte >= cf->segbc) {
+        return;
+    }
     cf->seg[byte] = i;
 }
 

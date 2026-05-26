@@ -1280,12 +1280,12 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
     TransferStruct header = {0};
     curl_off_t recv_sz;
 
-    size_t request_end = offset + req_size;
-    if (request_end > link->content_length) {
-        lprintf(info, "requested size larger than remaining size, request_end: \
-%lu, content-length: %ld\n",
-                request_end, link->content_length);
-        req_size = link->content_length - offset;
+    size_t remaining = link->content_length - (size_t)offset;
+    if (req_size > remaining) {
+        lprintf(info, "requested size larger than remaining size, req_size: \
+%zu, remaining: %zu\n",
+                req_size, remaining);
+        req_size = remaining;
     }
 
     do {
