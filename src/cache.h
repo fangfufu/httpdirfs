@@ -86,6 +86,11 @@ extern char *META_DIR;
 void CacheSystem_init(const char *path, int url_supplied);
 
 /**
+ * \brief clean up the cache system, freeing meta and data directories
+ */
+void CacheSystem_cleanup(void);
+
+/**
  * \brief clear the content of the cache directory
  */
 void CacheSystem_clear(void);

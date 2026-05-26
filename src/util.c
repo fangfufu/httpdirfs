@@ -3,6 +3,11 @@
 #include "config.h"
 #include "log.h"
 
+#ifdef DEBUG
+#include "link.h"
+#include "cache.h"
+#endif
+
 #include <curl/curl.h>
 #include <openssl/evp.h>
 #include <uuid/uuid.h>
@@ -547,7 +552,59 @@ void FREE_wrapper(void *ptr, const char *file, const char *func, int line)
 void mem_cleanup(void)
 {
 #ifdef DEBUG
+    // 1. Traverse and tear down the whole filesystem recursively
+    if (ROOT_LINK_TBL) {
+        LinkTable_free(ROOT_LINK_TBL);
+        ROOT_LINK_TBL = NULL;
+    }
+
+    // 2. Clean up any other heap-allocated cache directories
+    CacheSystem_cleanup();
+
+    // 3. Clean up CONFIG heap strings
+    Config_cleanup();
+
+    // 4. Consult the memory allocation tracker to check for leaks
     pthread_mutex_lock(&mem_mutex);
+    int leak_count = 0;
+    for (size_t i = 0; i < MEM_HASH_SIZE; i++) {
+        MemNode *curr = mem_hash_table[i];
+        while (curr) {
+            leak_count++;
+            curr = curr->next;
+        }
+    }
+
+    if (leak_count > 0) {
+        lprintf(error, "======================================================="
+                       "===============\n");
+        lprintf(error, "                     MEMORY LEAK REPORT\n");
+        lprintf(error, "======================================================="
+                       "===============\n");
+        for (size_t i = 0; i < MEM_HASH_SIZE; i++) {
+            MemNode *curr = mem_hash_table[i];
+            while (curr) {
+                lprintf(error, "[LEAK] Address: %p | Size: %zu bytes\n", curr->ptr,
+                        curr->size);
+                lprintf(error, "       Allocated at: %s:%d in %s()\n", curr->file,
+                        curr->line, curr->func);
+                lprintf(error, "---------------------------------------------------"
+                               "-------------------\n");
+                curr = curr->next;
+            }
+        }
+        lprintf(error, "Total Leaks: %d\n", leak_count);
+        lprintf(error, "======================================================="
+                       "===============\n");
+    } else {
+        lprintf(info, "========================================================"
+                      "==============\n");
+        lprintf(info, "No memory leaks detected!\n");
+        lprintf(info, "========================================================"
+                      "==============\n");
+    }
+
+    // Now forcefully free whatever was leaked so OS exit is completely clean
     for (size_t i = 0; i < MEM_HASH_SIZE; i++) {
         MemNode *curr = mem_hash_table[i];
         while (curr) {
