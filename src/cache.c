@@ -225,8 +225,11 @@ static int Meta_read(Cache *cf)
         return EIO;
     }
 
-    if (1 != fread(&cf->time, sizeof(long), 1, fp)
-        || 1 != fread(&cf->content_length, sizeof(off_t), 1, fp)
+    long disk_time;
+    off_t disk_content_length;
+
+    if (1 != fread(&disk_time, sizeof(long), 1, fp)
+        || 1 != fread(&disk_content_length, sizeof(off_t), 1, fp)
         || 1 != fread(&cf->blksz, sizeof(int), 1, fp)
         || 1 != fread(&cf->segbc, sizeof(long), 1, fp) || ferror(fp)) {
         lprintf(error, "error reading core metadata %s!\n", cf->path);
@@ -234,10 +237,10 @@ static int Meta_read(Cache *cf)
     }
 
     /* These things really should not be zero! */
-    if (!cf->content_length || !cf->blksz || !cf->segbc) {
+    if (!disk_content_length || !cf->blksz || !cf->segbc) {
         lprintf(error,
                 "corruption: content_length: %jd, blksz: %d, segbc: %jd\n",
-                (intmax_t)cf->content_length, cf->blksz, (intmax_t)cf->segbc);
+                (intmax_t)disk_content_length, cf->blksz, (intmax_t)cf->segbc);
         return EBADMSG;
     }
 
@@ -245,19 +248,33 @@ static int Meta_read(Cache *cf)
         lprintf(warning, "Warning: cf->blksz != CONFIG.data_blksz\n");
     }
 
-    if (cf->content_length <= 0 || cf->blksz <= 0) {
+    if (disk_content_length <= 0 || cf->blksz <= 0) {
         lprintf(error, "Error: invalid metadata sizes\n");
         return EBADMSG;
     }
 
-    if (cf->content_length > INT64_MAX - cf->blksz) {
+    if (disk_content_length > INT64_MAX - cf->blksz) {
         lprintf(error, "Error: segbc upper bound overflow\n");
         return EBADMSG;
     }
 
-    off_t max_segbc = cf->content_length / cf->blksz;
+    /* Verify cached metadata matches the live Link metadata */
+    if (disk_time != cf->link->time) {
+        lprintf(warning, "outdated cache file: %s (disk: %ld, link: %ld)\n",
+                cf->path, disk_time, cf->link->time);
+        return EBADMSG;
+    }
 
-    if ((cf->content_length % cf->blksz) != 0) {
+    if (disk_content_length != (off_t)cf->link->content_length) {
+        lprintf(warning, "cache size mismatch: %s (disk: %jd, link: %zu)\n",
+                cf->path, (intmax_t)disk_content_length,
+                cf->link->content_length);
+        return EBADMSG;
+    }
+
+    off_t max_segbc = disk_content_length / cf->blksz;
+
+    if ((disk_content_length % cf->blksz) != 0) {
         max_segbc += 1;
     }
 
@@ -332,13 +349,14 @@ static int Meta_write(Cache *cf)
     /*
      * These things really should not be zero!
      */
-    if (!cf->content_length || !cf->blksz || !cf->segbc) {
+    off_t write_content_length = (off_t)cf->link->content_length;
+    if (!write_content_length || !cf->blksz || !cf->segbc) {
         lprintf(error, "content_length: %jd, blksz: %d, segbc: %jd\n",
-                (intmax_t)cf->content_length, cf->blksz, (intmax_t)cf->segbc);
+                (intmax_t)write_content_length, cf->blksz, (intmax_t)cf->segbc);
     }
 
-    fwrite(&cf->time, sizeof(long), 1, fp);
-    fwrite(&cf->content_length, sizeof(off_t), 1, fp);
+    fwrite(&cf->link->time, sizeof(long), 1, fp);
+    fwrite(&write_content_length, sizeof(off_t), 1, fp);
     fwrite(&cf->blksz, sizeof(int), 1, fp);
     fwrite(&cf->segbc, sizeof(long), 1, fp);
     fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
@@ -371,7 +389,7 @@ static void Data_create(Cache *cf)
     if (fd == -1) {
         lprintf(fatal, "open(): %s\n", strerror(errno));
     }
-    if (ftruncate(fd, cf->content_length)) {
+    if (ftruncate(fd, (off_t)cf->link->content_length)) {
         lprintf(warning, "ftruncate(): %s\n", strerror(errno));
     }
     if (close(fd)) {
@@ -434,8 +452,8 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
     /*
      * Calculate how much to read
      */
-    if (offset + len > cf->content_length) {
-        len -= offset + len - cf->content_length;
+    if (offset + len > (off_t)cf->link->content_length) {
+        len -= offset + len - (off_t)cf->link->content_length;
         if (len < 0) {
             goto end;
         }
@@ -623,10 +641,6 @@ static void Cache_free(Cache *cf)
         FREE(cf->seg);
     }
 
-    if (cf->fs_path) {
-        FREE(cf->fs_path);
-    }
-
     ActiveDownload *ad = cf->active_dls;
     while (ad) {
         ActiveDownload *next = ad->next;
@@ -792,11 +806,10 @@ int Cache_create(const char *path)
     }
     Cache *cf = Cache_alloc();
     cf->path = STRNDUP(fn, PATH_MAX);
-    cf->time = this_link->time;
-    cf->content_length = this_link->content_length;
+    cf->link = this_link;
     cf->blksz = CONFIG.data_blksz;
-    cf->segbc = cf->content_length / cf->blksz;
-    if (cf->content_length % cf->blksz != 0) {
+    cf->segbc = this_link->content_length / cf->blksz;
+    if (this_link->content_length % cf->blksz != 0) {
         cf->segbc += 1;
     }
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
@@ -891,12 +904,6 @@ Cache *Cache_open(const char *fn)
          */
         Cache *cf = Cache_alloc();
 
-        /*
-         * Fill in the fs_path
-         */
-        cf->fs_path = CALLOC(PATH_MAX + 1, sizeof(char));
-        snprintf(cf->fs_path, PATH_MAX + 1, "%s", fn);
-
         cf->path = STRNDUP(actual_fn, PATH_MAX);
 
         /*
@@ -916,15 +923,12 @@ Cache *Cache_open(const char *fn)
             if (d_size < 0) {
                 lprintf(error, "cannot stat data file %s.\n", actual_fn);
                 ok = 0;
-            } else if (cf->content_length > d_size) {
+            } else if ((off_t)cf->link->content_length > d_size) {
                 lprintf(error,
                         "metadata inconsistency %s, "
-                        "cf->content_length: %jd, Data_size(fn): %jd.\n",
-                        actual_fn, (intmax_t)cf->content_length,
+                        "cf->link->content_length: %jd, Data_size(fn): %jd.\n",
+                        actual_fn, (intmax_t)cf->link->content_length,
                         (intmax_t)d_size);
-                ok = 0;
-            } else if (cf->time != cf->link->time) {
-                lprintf(warning, "outdated cache file: %s.\n", actual_fn);
                 ok = 0;
             } else if (Data_open(cf)) {
                 lprintf(error, "cannot open data file %s.\n", actual_fn);
@@ -1077,7 +1081,8 @@ static void *Cache_bgdl(void *arg)
 
     PTHREAD_MUTEX_LOCK(&cf->w_lock);
     if ((recv == cf->blksz)
-        || (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
+        || (dl_offset
+            == ((off_t)cf->link->content_length / cf->blksz * cf->blksz))) {
         if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
             Seg_set(cf, dl_offset, 1);
         }
@@ -1279,7 +1284,8 @@ sync_dl:
         return recv;
     }
     if ((recv == cf->blksz)
-        || (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
+        || (dl_offset
+            == ((off_t)cf->link->content_length / cf->blksz * cf->blksz))) {
         if (recv < (offset_start - dl_offset) + len) {
             lprintf(error,
                     "received %ld bytes, but required at least %ld bytes\n",
@@ -1329,7 +1335,7 @@ bgdl: {
 }
     off_t next_dl_offset = dl_offset + cf->blksz;
     int next_seg_missing = 0;
-    if (next_dl_offset < cf->content_length) {
+    if (next_dl_offset < (off_t)cf->link->content_length) {
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
         next_seg_missing = !Seg_exist(cf, next_dl_offset);
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
