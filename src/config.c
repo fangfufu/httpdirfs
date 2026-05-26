@@ -68,3 +68,23 @@ void Config_init(void)
     CONFIG.sonic_insecure = 0;
     atexit(mem_cleanup);
 }
+
+void Config_cleanup(void)
+{
+    FREE(CONFIG.http_username);
+    FREE(CONFIG.http_password);
+    FREE(CONFIG.proxy);
+    FREE(CONFIG.proxy_username);
+    FREE(CONFIG.proxy_password);
+    FREE(CONFIG.proxy_cafile);
+    FREE(CONFIG.proxy_capath);
+    if (CONFIG.user_agent
+        && strcmp(CONFIG.user_agent, DEFAULT_USER_AGENT) != 0) {
+        FREE(CONFIG.user_agent);
+    }
+    FREE(CONFIG.cafile);
+    FREE(CONFIG.capath);
+    FREE(CONFIG.cache_dir);
+    FREE(CONFIG.sonic_username);
+    FREE(CONFIG.sonic_password);
+}

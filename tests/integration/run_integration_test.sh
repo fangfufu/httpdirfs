@@ -21,8 +21,37 @@ set -euo pipefail
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HTTPDIRFS_BIN="${1:-}"
 HTTP_PORT="${HTTPDIRFS_TEST_PORT:-0}"
+
+# Parse options
+MODE="all"
+HTTPDIRFS_BIN=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --short)
+            MODE="short"
+            shift
+            ;;
+        --long)
+            MODE="long"
+            shift
+            ;;
+        -*)
+            echo -e "\033[0;31m[ERROR]\033[0m Unknown option: $1" >&2
+            exit 1
+            ;;
+        *)
+            if [[ -z "${HTTPDIRFS_BIN}" ]]; then
+                HTTPDIRFS_BIN="$1"
+            else
+                echo -e "\033[0;31m[ERROR]\033[0m Multiple binary paths specified or extra arguments: $*" >&2
+                exit 1
+            fi
+            shift
+            ;;
+    esac
+done
 
 # Colours for output
 RED='\033[0;31m'
@@ -115,6 +144,8 @@ SERVE_DIR="${WORK_DIR}/serve"
 MOUNT_DIR="${WORK_DIR}/mnt"
 CACHE_MOUNT_DIR="${WORK_DIR}/cache_mnt"
 CACHE_DIR="${WORK_DIR}/cache"
+MANIFEST="${SERVE_DIR}/manifest.json"
+MOUNT_TIMEOUT=15
 
 mkdir -p "${SERVE_DIR}" "${MOUNT_DIR}" "${CACHE_MOUNT_DIR}" "${CACHE_DIR}"
 
@@ -123,8 +154,13 @@ log_info "httpdirfs binary: ${HTTPDIRFS_BIN}"
 
 # ─── Step 1: Generate test files ────────────────────────────────────────────
 
-log_info "Generating test files (including 1 GB large file)..."
-python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}" --large
+if [[ "${MODE}" == "short" ]]; then
+    log_info "Generating test files (excluding 1 GB large file)..."
+    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}"
+else
+    log_info "Generating test files (including 1 GB large file)..."
+    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}" --large
+fi
 
 # ─── Step 2: Start HTTP server with Range support ───────────────────────────
 
@@ -175,6 +211,7 @@ fi
 
 BASE_URL="http://127.0.0.1:${ACTUAL_PORT}/"
 
+if [[ "${MODE}" != "long" ]]; then
 # ─── Step 3: Mount with httpdirfs (non-cache mode) ─────────────────────────
 
 log_info "Mounting with httpdirfs (non-cache mode)..."
@@ -186,7 +223,6 @@ log_info "Mounting with httpdirfs (non-cache mode)..."
 HTTPDIRFS_PID=$!
 
 # Wait for the mount to become available
-MOUNT_TIMEOUT=15
 for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     if mountpoint -q "${MOUNT_DIR}" 2>/dev/null; then
         break
@@ -334,9 +370,11 @@ log_info "Unmounting non-cache mount..."
 do_unmount "${MOUNT_DIR}"
 wait "${HTTPDIRFS_PID}" 2>/dev/null || true
 log_info "Unmounted successfully."
+fi
 
 # ─── Step 6: Cache mode with multithreaded reads ────────────────────────────
 
+if [[ "${MODE}" != "short" ]]; then
 log_info "=== Cache mode tests ==="
 
 # Get the large file's expected SHA-256 from the manifest
@@ -425,6 +463,7 @@ else
         wait "${CACHE_HTTPDIRFS_PID}" 2>/dev/null || true
         log_info "Cache mount (blksz=${BLKSZ}M) unmounted."
     done
+fi
 fi
 
 

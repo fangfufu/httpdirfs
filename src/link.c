@@ -367,6 +367,7 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links = (Link **)REALLOC(
         (void *)linktbl->links, ((size_t)linktbl->size + 1) * sizeof(Link *));
     linktbl->links[linktbl->size] = link;
+    link->parent_table = linktbl;
     linktbl->size++;
 }
 
@@ -570,6 +571,52 @@ static void LinkTable_fill(LinkTable *linktbl)
         curl_free(unescaped_linkname);
     }
     LinkTable_uninitialised_fill(linktbl);
+}
+
+void LinkTable_ref(LinkTable *tbl)
+{
+    if (!tbl) {
+        return;
+    }
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    tbl->refcount++;
+    tbl->orphaned = 0;
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+}
+
+void LinkTable_mark_orphaned(LinkTable *tbl)
+{
+    if (!tbl) {
+        return;
+    }
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    tbl->orphaned = 1;
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+}
+
+void LinkTable_unref(LinkTable *tbl)
+{
+    if (!tbl) {
+        return;
+    }
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    tbl->refcount--;
+    if (tbl->refcount == 0 && tbl->orphaned) {
+        LinkTable *parent = tbl->parent_tbl;
+        Link *parent_link = tbl->parent_link;
+        if (parent_link) {
+            parent_link->next_table = NULL;
+        }
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
+
+        LinkTable_free(tbl);
+
+        if (parent) {
+            LinkTable_unref(parent);
+        }
+        return;
+    }
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
 }
 
 void LinkTable_free(LinkTable *linktbl)
@@ -838,6 +885,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
 
     for (int i = 0; i < sz; i++) {
         linktbl->links[i] = CALLOC(1, sizeof(Link));
+        linktbl->links[i]->parent_table = linktbl;
         if (fread(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp)
                 != NAME_MAX
             || fread(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp)
@@ -866,47 +914,78 @@ LinkTable *path_to_LinkTable(const char *path)
 {
     Link *link = NULL;
     Link *tmp_link = NULL;
-    Link link_cpy = {0};
     LinkTable *next_table = NULL;
 
     if (!strcmp(path, "/")) {
         next_table = ROOT_LINK_TBL;
-        link_cpy = *next_table->links[0];
-        tmp_link = &link_cpy;
+        LinkTable_ref(next_table);
+        return next_table;
     } else {
         link = path_to_Link(path);
         if (!link) {
             return NULL;
         }
         tmp_link = link;
+
+        PTHREAD_MUTEX_LOCK(&link_lock);
         next_table = link->next_table;
+        if (next_table) {
+            next_table->refcount++;
+            next_table->orphaned = 0;
+        }
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
     }
 
     if (!next_table) {
+        LinkTable *new_table = NULL;
         if (CONFIG.mode == NORMAL) {
-            next_table = LinkTable_new(tmp_link->f_url);
+            new_table = LinkTable_new(tmp_link->f_url);
         } else if (CONFIG.mode == SINGLE) {
-            next_table = single_LinkTable_new(tmp_link->f_url);
+            new_table = single_LinkTable_new(tmp_link->f_url);
         } else if (CONFIG.mode == SONIC) {
             if (!CONFIG.sonic_id3) {
-                next_table = sonic_LinkTable_new_index(tmp_link->sonic.id);
+                new_table = sonic_LinkTable_new_index(tmp_link->sonic.id);
             } else {
-                next_table = sonic_LinkTable_new_id3(tmp_link->sonic.depth,
-                                                     tmp_link->sonic.id);
+                new_table = sonic_LinkTable_new_id3(tmp_link->sonic.depth,
+                                                    tmp_link->sonic.id);
             }
         } else {
             lprintf(fatal, "Invalid CONFIG.mode: %d\n", CONFIG.mode);
         }
+
+        if (!new_table) {
+            if (link) {
+                LinkTable_unref(link->parent_table);
+            }
+            return NULL;
+        }
+
+        PTHREAD_MUTEX_LOCK(&link_lock);
+        if (!link->next_table) {
+            link->next_table = new_table;
+            new_table->parent_tbl = link->parent_table;
+            new_table->parent_link = link;
+            if (new_table->parent_tbl) {
+                new_table->parent_tbl->refcount++;
+            }
+            new_table->refcount++;
+            new_table->orphaned = 0;
+            next_table = new_table;
+        } else {
+            LinkTable_free(new_table);
+            next_table = link->next_table;
+            next_table->refcount++;
+            next_table->orphaned = 0;
+        }
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
+
+        if (CONFIG.invalid_refresh) {
+            LinkTable_uninitialised_fill(next_table);
+        }
     }
 
     if (link) {
-        link->next_table = next_table;
-    } else {
-        ROOT_LINK_TBL = next_table;
-    }
-
-    if (CONFIG.invalid_refresh) {
-        LinkTable_uninitialised_fill(next_table);
+        LinkTable_unref(link->parent_table);
     }
 
     return next_table;
@@ -971,22 +1050,56 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                  */
                 LinkTable *next_table = linktbl->links[i]->next_table;
                 if (!next_table) {
+                    linktbl->refcount++;
+                    PTHREAD_MUTEX_UNLOCK(&link_lock);
+                    LinkTable *new_table = NULL;
                     if (CONFIG.mode == NORMAL) {
-                        next_table = LinkTable_new(linktbl->links[i]->f_url);
+                        new_table = LinkTable_new(linktbl->links[i]->f_url);
                     } else if (CONFIG.mode == SONIC) {
                         if (!CONFIG.sonic_id3) {
-                            next_table = sonic_LinkTable_new_index(
+                            new_table = sonic_LinkTable_new_index(
                                 linktbl->links[i]->sonic.id);
                         } else {
-                            next_table = sonic_LinkTable_new_id3(
+                            new_table = sonic_LinkTable_new_id3(
                                 linktbl->links[i]->sonic.depth,
                                 linktbl->links[i]->sonic.id);
                         }
                     } else {
                         lprintf(fatal, "Invalid CONFIG.mode\n");
                     }
+
+                    if (!new_table) {
+                        PTHREAD_MUTEX_LOCK(&link_lock);
+                        linktbl->refcount--;
+                        if (linktbl->refcount == 0 && linktbl->orphaned) {
+                            LinkTable *parent = linktbl->parent_tbl;
+                            Link *parent_link = linktbl->parent_link;
+                            if (parent_link) {
+                                parent_link->next_table = NULL;
+                            }
+                            PTHREAD_MUTEX_UNLOCK(&link_lock);
+                            LinkTable_free(linktbl);
+                            if (parent) {
+                                LinkTable_unref(parent);
+                            }
+                            PTHREAD_MUTEX_LOCK(&link_lock);
+                        }
+                        return NULL;
+                    }
+
+                    PTHREAD_MUTEX_LOCK(&link_lock);
+                    if (!linktbl->links[i]->next_table) {
+                        linktbl->links[i]->next_table = new_table;
+                        new_table->parent_tbl = linktbl;
+                        new_table->parent_link = linktbl->links[i];
+                        linktbl->refcount++;
+                        next_table = new_table;
+                    } else {
+                        LinkTable_free(new_table);
+                        next_table = linktbl->links[i]->next_table;
+                    }
+                    linktbl->refcount--;
                 }
-                linktbl->links[i]->next_table = next_table;
                 return path_to_Link_recursive(next_path, next_table);
             }
         }
@@ -1006,6 +1119,10 @@ Link *path_to_Link(const char *path)
     }
     Link *link = path_to_Link_recursive(new_path, ROOT_LINK_TBL);
     FREE(new_path);
+
+    if (link && link->parent_table) {
+        link->parent_table->refcount++;
+    }
 
     lprintf(link_lock_debug, "thread %lx: unlocking link_lock;\n",
             (unsigned long)pthread_self());
@@ -1227,7 +1344,9 @@ long path_download(const char *path, char *output_buf, size_t req_size,
         return -ENOENT;
     }
 
-    return Link_download(link, output_buf, req_size, offset);
+    long res = Link_download(link, output_buf, req_size, offset);
+    LinkTable_unref(link->parent_table);
+    return res;
 }
 
 static void make_link_relative(const char *page_url, char *link_url)

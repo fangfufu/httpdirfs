@@ -36,12 +36,18 @@ struct LinkTable {
     int size;
     time_t index_time;
     Link **links;
+    int refcount;
+    int orphaned;
+    struct LinkTable *parent_tbl;
+    Link *parent_link;
 };
 
 /**
  * \brief Link type data structure
  */
 struct Link {
+    /** \brief The parent LinkTable of this link */
+    struct LinkTable *parent_table;
     /** \brief The link name in the last level of the URL */
     char linkname[NAME_MAX + 1];
     /** \brief This is for storing the unescaped path */
@@ -137,6 +143,21 @@ LinkTable *LinkTable_alloc(const char *url);
  * \brief free a LinkTable
  */
 void LinkTable_free(LinkTable *linktbl);
+
+/**
+ * \brief increment the reference count of a LinkTable
+ */
+void LinkTable_ref(LinkTable *tbl);
+
+/**
+ * \brief decrement the reference count of a LinkTable
+ */
+void LinkTable_unref(LinkTable *tbl);
+
+/**
+ * \brief mark a LinkTable as orphaned so it can be evicted
+ */
+void LinkTable_mark_orphaned(LinkTable *tbl);
 
 /**
  * \brief print a LinkTable

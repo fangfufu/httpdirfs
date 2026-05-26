@@ -1,5 +1,5 @@
 add_test_setup('default',
-               exclude_suites: ['integration'],
+               exclude_suites: ['integration_long'],
                is_default: true)
 
 unity_sub = subproject('unity')
@@ -14,7 +14,7 @@ test_util = executable('test_util',
     include_directories: include_directories('../src'),
     c_args: c_args
 )
-test('test_util', test_util)
+test('test_util', test_util, suite: 'unit_test')
 
 test_cache = executable('test_cache',
     sources: ['test_cache.c'],
@@ -23,7 +23,7 @@ test_cache = executable('test_cache',
     include_directories: include_directories('../src'),
     c_args: c_args
 )
-test('test_cache', test_cache)
+test('test_cache', test_cache, suite: 'unit_test')
 
 test_config = executable('test_config',
     sources: ['test_config.c'],
@@ -32,7 +32,7 @@ test_config = executable('test_config',
     include_directories: include_directories('../src'),
     c_args: c_args
 )
-test('test_config', test_config)
+test('test_config', test_config, suite: 'unit_test')
 
 test_link = executable('test_link',
     sources: ['test_link.c'],
@@ -41,16 +41,23 @@ test_link = executable('test_link',
     include_directories: include_directories('../src'),
     c_args: c_args
 )
-test('test_link', test_link)
+test('test_link', test_link, suite: 'unit_test')
 
 # Integration test (requires FUSE and Python 3)
 integration_test = find_program('integration/run_integration_test.sh',
                                 required: false)
 if integration_test.found()
-    test('integration',
+    test('integration_short',
          integration_test,
-         args: [httpdirfs],
+         args: ['--short', httpdirfs],
+         timeout: 300,
+         is_parallel: false,
+         suite: 'integration_short')
+
+    test('integration_long',
+         integration_test,
+         args: ['--long', httpdirfs],
          timeout: 900,
          is_parallel: false,
-         suite: 'integration')
+         suite: 'integration_long')
 endif

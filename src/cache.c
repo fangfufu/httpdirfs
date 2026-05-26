@@ -172,6 +172,16 @@ void CacheSystem_init(const char *path, int url_supplied)
     CACHE_SYSTEM_INIT = 1;
 }
 
+void CacheSystem_cleanup(void)
+{
+    if (CACHE_SYSTEM_INIT) {
+        FREE(META_DIR);
+        FREE(DATA_DIR);
+        PTHREAD_MUTEX_DESTROY(&cf_lock);
+        CACHE_SYSTEM_INIT = 0;
+    }
+}
+
 static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
                    struct FTW *ftwbuf)
 {
@@ -622,8 +632,11 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
+    Link *link = path_to_Link(fn);
     if (CONFIG.mode == SONIC) {
-        Link *link = path_to_Link(fn);
+        if (!link) {
+            return;
+        }
         fn = link->sonic.id;
     }
 
@@ -638,6 +651,9 @@ void Cache_delete(const char *fn)
     }
     FREE(metafn);
     FREE(datafn);
+    if (link) {
+        LinkTable_unref(link->parent_table);
+    }
 }
 
 /**
@@ -708,6 +724,9 @@ static void Meta_create(Cache *cf)
 int Cache_create(const char *path)
 {
     Link *this_link = path_to_Link(path);
+    if (!this_link) {
+        return 1;
+    }
 
     char *fn;
 
@@ -766,6 +785,10 @@ int Cache_create(const char *path)
         curl_free(fn);
     }
 
+    if (this_link) {
+        LinkTable_unref(this_link->parent_table);
+    }
+
     return res;
 }
 
@@ -791,6 +814,7 @@ Cache *Cache_open(const char *fn)
         lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
                 (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
+        LinkTable_unref(link->parent_table);
         return link->cache_ptr;
     }
 
@@ -809,6 +833,7 @@ Cache *Cache_open(const char *fn)
                 lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
                         (unsigned long)pthread_self());
                 PTHREAD_MUTEX_UNLOCK(&cf_lock);
+                LinkTable_unref(link->parent_table);
                 return NULL;
             }
         }
@@ -887,6 +912,7 @@ Cache *Cache_open(const char *fn)
     lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
+    LinkTable_unref(link->parent_table);
     return NULL;
 }
 
@@ -928,12 +954,14 @@ void Cache_close(Cache *cf)
         lprintf(error, "cannot close data file %s.\n", strerror(errno));
     }
 
-    cf->link->cache_ptr = NULL;
+    Link *link = cf->link;
+    link->cache_ptr = NULL;
 
     lprintf(cache_lock_debug,
             "thread %lx: unlocking cf_lock, cache closed: %s\n",
             (unsigned long)pthread_self(), cf->path);
     Cache_free(cf);
+    LinkTable_unref(link->parent_table);
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
 }
 

@@ -120,34 +120,92 @@ pre-commit run --all-files
 > ```
 
 <!-- prettier-ignore -->
-> [!NOTE]
-> The integration test hooks (`integration-test` and `integration-test-clang`)
-> are configured to run only in the CI (via the `manual` stage) to speed up local
-> pre-commit checks. If you wish to run them locally, you can run them manually
-> using:
+> [!IMPORTANT]
+> **Manual Hooks Requirement Before Pushing:**
+> While basic unit tests and short integration tests run automatically on every
+> commit, the slow/intensive integration tests (`integration_long`) are placed
+> in the `manual` stage to keep the default local commit feedback loop fast.
+>
+> **You are required to manually run the full test suite hooks before pushing
+> your changes:**
 >
 > ```bash
-> pre-commit run --all-files --hook-stage manual
-> ```
+> # Run all tests using GCC
+> pre-commit run all-tests-gcc --hook-stage manual --all-files
 >
-> Note that the `integration-test-clang` hook requires `clang` to be installed on the
-> system (e.g., `sudo apt install clang` on Debian/Ubuntu systems).
+> # Run all tests (GCC Debug)
+> pre-commit run all-tests-gcc-debug --hook-stage manual --all-files
+>
+> # Run all tests using Clang
+> pre-commit run all-tests-clang --hook-stage manual --all-files
+>
+> # Run all tests (Clang Debug)
+> pre-commit run all-tests-clang-debug --hook-stage manual --all-files
+> ```
+> Note that the Clang-based hooks require `clang` to be installed (e.g.,
+> `sudo apt install clang` on Debian/Ubuntu systems).
 
 ### Running Tests
 
-We support both unit testing and end-to-end system integration testing. The
-tests are configured and managed via Meson.
+We support three test suites configured and managed via Meson:
 
-<!-- prettier-ignore -->
-> [!NOTE]
-> By default, `meson test` only runs the unit tests. The system integration tests
-> are excluded from the default test setup to speed up local test execution and
-> prevent failures in environments without FUSE access.
+1. **`unit_test`**: Runs all C-level unit tests (`test_util`, `test_cache`,
+   `test_config`, `test_link`).
+2. **`integration_short`**: Runs fast integration tests (excludes the large 1 GB
+   file) verifying core mounting, directory traversal, read-only structures, and
+   integrity. Completes in **~3 seconds**.
+3. **`integration_long`**: Runs resource-intensive cache integration tests
+   involving concurrent multithreaded reads of a 1 GB file. Completes in **~25
+   seconds**.
 
-#### Unit Tests
+#### Test Execution Environments
 
-We use the [Unity Test Project](https://github.com/ThrowTheSwitch/Unity)
-framework for unit testing.
+##### 1. Default/Local Pre-Commit Behavior
+
+To speed up local development feedback, only the fast tests are executed by
+default.
+
+- **Command**: Running a plain `meson test -C builddir` or triggering the
+  default local `git commit` hook.
+- **Behavior**: Runs the `unit_test` and `integration_short` suites. The
+  `integration_long` suite is explicitly excluded by default via the default
+  test setup in `tests/meson.build`.
+
+##### 2. CI Pipeline Behavior
+
+The GitHub Actions workflow (`build.yml`) validates the entire test suite on
+every pull request and push to the master branch using GCC and Clang
+configurations:
+
+- **Unit tests step**: `meson test -C builddir --no-suite integration` (runs
+  only the `unit_test` suite)
+- **Integration tests step**:
+  `meson test -C builddir --suite integration --verbose` (runs both
+  `integration_short` and `integration_long` suites)
+
+##### 3. Required Pre-Push Validation
+
+Before pushing changes, developers are **required** to manually run the full
+suite using the manual pre-commit hooks to catch potential cache regressions and
+memory leaks locally:
+
+```bash
+# Run GCC-based compilation and all tests (unit_test, integration_short, integration_long)
+pre-commit run all-tests-gcc --hook-stage manual --all-files
+
+# Run GCC-based compilation in Debug mode (with leak detection enabled) and all tests
+pre-commit run all-tests-gcc-debug --hook-stage manual --all-files
+
+# Run Clang-based compilation and all tests
+pre-commit run all-tests-clang --hook-stage manual --all-files
+
+# Run Clang-based compilation in Debug mode (with leak detection enabled) and all tests
+pre-commit run all-tests-clang-debug --hook-stage manual --all-files
+```
+
+---
+
+#### Running Specific Suites Manually via Meson
 
 ##### Setup
 
@@ -157,32 +215,34 @@ Before running tests, ensure that the build directory is configured:
 meson setup builddir
 ```
 
-##### Run All Unit Tests
+##### Run Unit Tests Individually
 
-To build and run all unit tests, execute:
+If you want to run only the unit tests:
 
 ```bash
-meson test -C builddir
+meson test -C builddir --suite unit_test
 ```
 
-This will run only the unit test suite. Meson will automatically compile any
-modified source and test files before running.
-
-##### Run a Specific Test
-
-If you only want to execute a specific test suite (e.g., `test_util`), you can
-specify its name:
+You can also execute specific unit tests by target name:
 
 ```bash
 meson test -C builddir test_util
+meson test -C builddir test_cache
+meson test -C builddir test_config
+meson test -C builddir test_link
 ```
 
-The available test suites are:
+##### Run Short Integration Tests Individually
 
-- `test_util`
-- `test_cache`
-- `test_config`
-- `test_link`
+```bash
+meson test -C builddir --suite integration_short
+```
+
+##### Run Long Integration Tests Individually
+
+```bash
+meson test -C builddir --suite integration_long
+```
 
 ##### Verbose Output and Debugging
 
@@ -198,13 +258,7 @@ results, use the following options:
   meson test -C builddir -v
   ```
 
-#### Integration Tests
-
-The project includes an end-to-end system integration test suite that verifies
-that `httpdirfs` can mount an HTTP directory, traverse subdirectories, verify
-file integrity (via SHA-256), and perform concurrent cached reads.
-
-##### Prerequisites
+#### Integration Tests Runner Prerequisites
 
 The integration tests require the following system dependencies:
 
@@ -212,21 +266,17 @@ The integration tests require the following system dependencies:
 - `fusermount3` (or `fusermount`)
 - **Python 3**
 
-##### Run Integration Tests via Meson
-
-To run the integration tests using Meson, execute:
-
-```bash
-meson test -C builddir --suite integration
-```
-
 ##### Run Integration Tests Manually
 
 Alternatively, you can run the test runner script directly by providing the path
-to the compiled `httpdirfs` binary:
+to the compiled `httpdirfs` binary and the desired mode flag:
 
 ```bash
-./tests/integration/run_integration_test.sh builddir/httpdirfs
+# Run short integration tests
+./tests/integration/run_integration_test.sh --short builddir/httpdirfs
+
+# Run long integration tests
+./tests/integration/run_integration_test.sh --long builddir/httpdirfs
 ```
 
 ---
