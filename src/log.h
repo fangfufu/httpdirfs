@@ -39,9 +39,9 @@ void log_printf(LogType type, const char *file, const char *func, int line,
  * \brief Fatal log printf
  * \details This is for printing fatal error messages and exiting
  */
-void fatal_log_printf(const char *file, const char *func, int line,
-                      const char *format, ...) __attribute__((noreturn))
-__attribute__((format(printf, 4, 5)));
+_Noreturn void fatal_log_printf(const char *file, const char *func, int line,
+                                const char *format, ...)
+    __attribute__((format(printf, 4, 5)));
 
 /**
  * \brief Log type printf

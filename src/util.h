@@ -89,7 +89,7 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
 /**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling
  */
-void exit_failure(void) __attribute__((noreturn));
+_Noreturn void exit_failure(void);
 
 /**
  * \brief erase a string from the terminal
