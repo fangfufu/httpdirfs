@@ -134,7 +134,111 @@ void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
     }
 }
 
-void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
+#ifdef __APPLE__
+
+void sem_init_wrapper(sys_sem_t *sem, int pshared, unsigned int value,
+                      const char *file, const char *func, int line)
+{
+    (void)pshared;
+    int ret = pthread_mutex_init(&sem->mutex, NULL);
+    if (ret) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_mutex_init for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+    ret = pthread_cond_init(&sem->cond, NULL);
+    if (ret) {
+        pthread_mutex_destroy(&sem->mutex);
+        fatal_log_printf(file, func, line,
+                         "%lx pthread_cond_init for semaphore failed: %d, %s\n",
+                         (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+    sem->count = (int)value;
+}
+
+void sem_destroy_wrapper(sys_sem_t *sem, const char *file, const char *func,
+                         int line)
+{
+    int ret = pthread_mutex_destroy(&sem->mutex);
+    if (ret) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_mutex_destroy for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+    ret = pthread_cond_destroy(&sem->cond);
+    if (ret) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_cond_destroy for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+}
+
+void sem_wait_wrapper(const char *file, const char *func, int line,
+                      sys_sem_t *sem)
+{
+    int ret = pthread_mutex_lock(&sem->mutex);
+    if (ret) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_mutex_lock for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+    while (sem->count <= 0) {
+        ret = pthread_cond_wait(&sem->cond, &sem->mutex);
+        if (ret) {
+            pthread_mutex_unlock(&sem->mutex);
+            fatal_log_printf(
+                file, func, line,
+                "%lx pthread_cond_wait for semaphore failed: %d, %s\n",
+                (unsigned long)pthread_self(), ret, strerror(ret));
+        }
+    }
+    sem->count--;
+    pthread_mutex_unlock(&sem->mutex);
+}
+
+void sem_post_wrapper(const char *file, const char *func, int line,
+                      sys_sem_t *sem)
+{
+    int ret = pthread_mutex_lock(&sem->mutex);
+    if (ret) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_mutex_lock for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+    sem->count++;
+    ret = pthread_cond_signal(&sem->cond);
+    if (ret) {
+        pthread_mutex_unlock(&sem->mutex);
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_cond_signal for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), ret, strerror(ret));
+    }
+    pthread_mutex_unlock(&sem->mutex);
+}
+
+int sys_sem_trywait(sys_sem_t *sem)
+{
+    int ret = 0;
+    pthread_mutex_lock(&sem->mutex);
+    if (sem->count > 0) {
+        sem->count--;
+    } else {
+        errno = EAGAIN;
+        ret = -1;
+    }
+    pthread_mutex_unlock(&sem->mutex);
+    return ret;
+}
+
+#else
+
+void sem_init_wrapper(sys_sem_t *sem, int pshared, unsigned int value,
                       const char *file, const char *func, int line)
 {
     int i;
@@ -147,7 +251,7 @@ void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
     }
 }
 
-void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
+void sem_destroy_wrapper(sys_sem_t *sem, const char *file, const char *func,
                          int line)
 {
     int i;
@@ -160,7 +264,8 @@ void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
     }
 }
 
-void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem)
+void sem_wait_wrapper(const char *file, const char *func, int line,
+                      sys_sem_t *sem)
 {
     int i;
     i = sem_wait(sem);
@@ -172,7 +277,8 @@ void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem)
     }
 }
 
-void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem)
+void sem_post_wrapper(const char *file, const char *func, int line,
+                      sys_sem_t *sem)
 {
     int i;
     i = sem_post(sem);
@@ -183,6 +289,13 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem)
                          strerror(saved_errno));
     }
 }
+
+int sys_sem_trywait(sys_sem_t *sem)
+{
+    return sem_trywait(sem);
+}
+
+#endif
 
 void pthread_cond_init_wrapper(pthread_cond_t *cond,
                                const pthread_condattr_t *attr, const char *file,

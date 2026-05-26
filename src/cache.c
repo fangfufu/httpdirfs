@@ -1307,7 +1307,7 @@ retry:
      * slot is available (bgt_sem > 0). This acts as a throttle on concurrent
      * background prefetches.
      */
-    ret = sem_trywait(&cf->bgt_sem);
+    ret = SEM_TRYWAIT(&cf->bgt_sem);
     if (ret == 0) {
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         /*
@@ -1421,7 +1421,7 @@ bgdl: {
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
     }
     if (next_seg_missing) {
-        ret = sem_trywait(&cf->bgt_sem);
+        ret = SEM_TRYWAIT(&cf->bgt_sem);
         if (!ret) {
             PTHREAD_MUTEX_LOCK(&cf->w_lock);
             next_seg_missing = !Seg_exist(cf, next_dl_offset);

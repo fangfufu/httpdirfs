@@ -15,6 +15,8 @@ typedef struct Cache Cache;
 #include "link.h"
 #include "network.h"
 
+#include "util.h"
+
 struct TransferStruct;
 
 typedef struct ActiveDownload {
@@ -61,7 +63,7 @@ struct Cache {
     pthread_mutex_t w_lock;
 
     /** \brief semaphore for the background thread */
-    sem_t bgt_sem;
+    sys_sem_t bgt_sem;
 
     /** \brief mutex lock for background download progress */
     pthread_mutex_t dl_lock;
