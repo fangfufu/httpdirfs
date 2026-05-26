@@ -177,11 +177,14 @@ The GitHub Actions workflow (`build.yml`) validates the entire test suite on
 every pull request and push to the master branch using GCC and Clang
 configurations:
 
-- **Unit tests step**: `meson test -C builddir --no-suite integration` (runs
-  only the `unit_test` suite)
-- **Integration tests step**:
-  `meson test -C builddir --suite integration --verbose` (runs both
-  `integration_short` and `integration_long` suites)
+- **Unit tests step**: `meson test -C builddir --no-suite integration --verbose`
+  (runs only the `unit_test` suite)
+- **Integration tests (short) step**:
+  `meson test -C builddir --suite integration_short --verbose` (runs fast
+  integration tests)
+- **Integration tests (long) step**:
+  `meson test -C builddir --suite integration_long --verbose` (runs
+  resource-intensive integration tests)
 
 ##### 3. Required Pre-Push Validation
 

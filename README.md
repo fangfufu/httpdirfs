@@ -220,13 +220,10 @@ URL of the HTTP directory.
 Once a segment of the file has been downloaded once, it won't be downloaded
 again.
 
-Please note that due to the way the permanent cache system is implemented. The
-maximum download speed is around 15MiB/s, as measured using my localhost as the
-web server. However after you have accessed a file once, accessing it again will
-be the same speed as accessing your hard drive.
-
-If you have any patches to make the initial download go faster, please submit a
-pull request.
+HTTPDirFS features concurrent downloading and asynchronous early-return
+prefetching in cache mode. Once a file has been accessed and cached, subsequent
+reads are served directly from your hard drive or SSD, achieving local storage
+speeds.
 
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
