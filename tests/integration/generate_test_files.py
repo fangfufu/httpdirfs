@@ -69,63 +69,79 @@ def format_size(size):
 
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <output_directory> [--large]",
+        print(f"Usage: {sys.argv[0]} <output_directory> [--short | --long | --all | --large]",
               file=sys.stderr)
         sys.exit(1)
 
     output_dir = sys.argv[1]
-    include_large = "--large" in sys.argv
+
+    # Parse options
+    is_short = True
+    is_large = False
+
+    if "--short" in sys.argv:
+        is_short = True
+        is_large = False
+    elif "--long" in sys.argv:
+        is_short = False
+        is_large = True
+    elif "--large" in sys.argv or "--all" in sys.argv:
+        is_short = True
+        is_large = True
+
     os.makedirs(output_dir, exist_ok=True)
 
     rng = random.Random(RNG_SEED)
 
-    # Filenames that exercise interesting edge cases.  Each file gets a
-    # random size between 1 KB and 10 MB.
-    filenames = [
-        # Basic ASCII filenames
-        "simple.txt",
-        "UPPERCASE.DAT",
+    test_files = []
+    if is_short:
+        # Filenames that exercise interesting edge cases.  Each file gets a
+        # random size between 1 KB and 10 MB.
+        filenames = [
+            # Basic ASCII filenames
+            "simple.txt",
+            "UPPERCASE.DAT",
 
-        # Filenames with spaces
-        "file with spaces.txt",
-        "multiple   spaces   here.bin",
+            # Filenames with spaces
+            "file with spaces.txt",
+            "multiple   spaces   here.bin",
 
-        # Non-alphanumeric characters that are valid in URLs
-        "file-with-dashes.txt",
-        "file_with_underscores.txt",
-        "file.multiple.dots.txt",
-        "file~tilde.txt",
+            # Non-alphanumeric characters that are valid in URLs
+            "file-with-dashes.txt",
+            "file_with_underscores.txt",
+            "file.multiple.dots.txt",
+            "file~tilde.txt",
 
-        # Percent-encoded characters in HTTP (common edge cases)
-        "parens(1).txt",
-        "brackets[2].txt",
-        "curly{3}.txt",
-        "hash#tag.txt",
-        "at@sign.txt",
-        "plus+plus.txt",
-        "equals=value.txt",
-        "comma,separated.txt",
-        "semi;colon.txt",
-        "exclaim!mark.txt",
-        "single'quote.txt",
+            # Percent-encoded characters in HTTP (common edge cases)
+            "parens(1).txt",
+            "brackets[2].txt",
+            "curly{3}.txt",
+            "hash#tag.txt",
+            "at@sign.txt",
+            "plus+plus.txt",
+            "equals=value.txt",
+            "comma,separated.txt",
+            "semi;colon.txt",
+            "exclaim!mark.txt",
+            "single'quote.txt",
 
-        # Mixed case and numbers
-        "CamelCase123.txt",
-        "MiXeD_cAsE-456.dat",
+            # Mixed case and numbers
+            "CamelCase123.txt",
+            "MiXeD_cAsE-456.dat",
 
-        # Longer filenames
-        "a" * 200 + ".txt",
-    ]
+            # Longer filenames
+            "a" * 200 + ".txt",
+        ]
 
-    # Build (filename, size) pairs with random sizes
-    test_files = [(name, random_size(rng)) for name in filenames]
+        # Build (filename, size) pairs with random sizes
+        test_files = [(name, random_size(rng)) for name in filenames]
 
-    # Keep a few deterministic edge-case sizes
-    test_files.append(("empty_file.txt", 0))
-    test_files.append(("tiny.txt", 1))
+        # Keep a few deterministic edge-case sizes
+        test_files.append(("empty_file.txt", 0))
+        test_files.append(("tiny.txt", 1))
 
-    # Add the 1 GB file for cache system testing when --large is given
-    if include_large:
+    # Add the 1 GB file for cache system testing when is_large is given
+    if is_large:
         test_files.append(("large_1g.bin", 1024 * 1024 * 1024))
 
     manifest = {}
@@ -141,28 +157,29 @@ def main():
         print(f"  Created: {filename} ({format_size(size)},"
               f" sha256={checksum[:16]}...)")
 
-    # Also create a subdirectory with files (random sizes too)
-    subdir = os.path.join(output_dir, "subdir with spaces")
-    os.makedirs(subdir, exist_ok=True)
+    if is_short:
+        # Also create a subdirectory with files (random sizes too)
+        subdir = os.path.join(output_dir, "subdir with spaces")
+        os.makedirs(subdir, exist_ok=True)
 
-    subdir_filenames = [
-        "nested file.txt",
-        "deep-data.bin",
-    ]
+        subdir_filenames = [
+            "nested file.txt",
+            "deep-data.bin",
+        ]
 
-    for filename in subdir_filenames:
-        size = random_size(rng)
-        filepath = os.path.join(subdir, filename)
-        seed_name = f"subdir/{filename}"
-        checksum = write_deterministic_file(filepath, seed_name, size)
+        for filename in subdir_filenames:
+            size = random_size(rng)
+            filepath = os.path.join(subdir, filename)
+            seed_name = f"subdir/{filename}"
+            checksum = write_deterministic_file(filepath, seed_name, size)
 
-        relative = os.path.join("subdir with spaces", filename)
-        manifest[relative] = {
-            "size": size,
-            "sha256": checksum,
-        }
-        print(f"  Created: {relative} ({format_size(size)},"
-              f" sha256={checksum[:16]}...)")
+            relative = os.path.join("subdir with spaces", filename)
+            manifest[relative] = {
+                "size": size,
+                "sha256": checksum,
+            }
+            print(f"  Created: {relative} ({format_size(size)},"
+                  f" sha256={checksum[:16]}...)")
 
     # Write manifest
     manifest_path = os.path.join(output_dir, "manifest.json")

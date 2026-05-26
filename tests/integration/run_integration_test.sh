@@ -156,10 +156,13 @@ log_info "httpdirfs binary: ${HTTPDIRFS_BIN}"
 
 if [[ "${MODE}" == "short" ]]; then
     log_info "Generating test files (excluding 1 GB large file)..."
-    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}"
+    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}" --short
+elif [[ "${MODE}" == "long" ]]; then
+    log_info "Generating test files (1 GB large file only)..."
+    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}" --long
 else
-    log_info "Generating test files (including 1 GB large file)..."
-    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}" --large
+    log_info "Generating all test files (including 1 GB large file)..."
+    python3 "${SCRIPT_DIR}/generate_test_files.py" "${SERVE_DIR}" --all
 fi
 
 # ─── Step 2: Start HTTP server with Range support ───────────────────────────
@@ -201,7 +204,11 @@ if ! curl -sf "http://127.0.0.1:${ACTUAL_PORT}/" >/dev/null 2>&1; then
 fi
 
 # Verify Range support works
-RANGE_TEST=$(curl -sf -r 0-3 "http://127.0.0.1:${ACTUAL_PORT}/simple.txt" \
+TEST_FILE="simple.txt"
+if [[ "${MODE}" == "long" ]]; then
+    TEST_FILE="large_1g.bin"
+fi
+RANGE_TEST=$(curl -sf -r 0-3 "http://127.0.0.1:${ACTUAL_PORT}/${TEST_FILE}" \
     -w "%{http_code}" -o /dev/null 2>/dev/null)
 if [[ "${RANGE_TEST}" == "206" ]]; then
     log_info "HTTP server supports Range requests (206 Partial Content)."
