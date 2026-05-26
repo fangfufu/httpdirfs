@@ -93,10 +93,13 @@ void sem_post_wrapper(const char *file, const char *func, int line,
 #define SEM_POST(sem) sem_post_wrapper(__FILE__, __func__, __LINE__, sem)
 
 /**
- * \brief wrapper for sem_trywait(), with cross-platform support
+ * \brief wrapper for sem_trywait(), with cross-platform support and error
+ * handling
  */
-int sys_sem_trywait(sys_sem_t *sem);
-#define SEM_TRYWAIT(sem) sys_sem_trywait(sem)
+int sys_sem_trywait_wrapper(const char *file, const char *func, int line,
+                            sys_sem_t *sem);
+#define SEM_TRYWAIT(sem)                                                       \
+    sys_sem_trywait_wrapper(__FILE__, __func__, __LINE__, sem)
 
 /**
  * \brief wrapper for pthread_cond_init(), with error handling

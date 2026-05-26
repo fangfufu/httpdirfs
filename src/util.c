@@ -222,17 +222,30 @@ void sem_post_wrapper(const char *file, const char *func, int line,
     pthread_mutex_unlock(&sem->mutex);
 }
 
-int sys_sem_trywait(sys_sem_t *sem)
+int sys_sem_trywait_wrapper(const char *file, const char *func, int line,
+                            sys_sem_t *sem)
 {
     int ret = 0;
-    pthread_mutex_lock(&sem->mutex);
+    int err = pthread_mutex_lock(&sem->mutex);
+    if (err) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_mutex_lock for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), err, strerror(err));
+    }
     if (sem->count > 0) {
         sem->count--;
     } else {
         errno = EAGAIN;
         ret = -1;
     }
-    pthread_mutex_unlock(&sem->mutex);
+    err = pthread_mutex_unlock(&sem->mutex);
+    if (err) {
+        fatal_log_printf(
+            file, func, line,
+            "%lx pthread_mutex_unlock for semaphore failed: %d, %s\n",
+            (unsigned long)pthread_self(), err, strerror(err));
+    }
     return ret;
 }
 
@@ -290,9 +303,19 @@ void sem_post_wrapper(const char *file, const char *func, int line,
     }
 }
 
-int sys_sem_trywait(sys_sem_t *sem)
+int sys_sem_trywait_wrapper(const char *file, const char *func, int line,
+                            sys_sem_t *sem)
 {
-    return sem_trywait(sem);
+    int i = sem_trywait(sem);
+    if (i) {
+        int saved_errno = errno;
+        if (saved_errno != EAGAIN) {
+            fatal_log_printf(file, func, line, "%lx sem_trywait: %d, %s\n",
+                             (unsigned long)pthread_self(), saved_errno,
+                             strerror(saved_errno));
+        }
+    }
+    return i;
 }
 
 #endif
