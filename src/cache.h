@@ -50,10 +50,6 @@ struct Cache {
     char *path;
     /** \brief the Link associated with this cache data set */
     Link *link;
-    /** \brief the modified time of the file */
-    long time;
-    /** \brief the size of the file */
-    off_t content_length;
     /** \brief the block size of the data file */
     int blksz;
     /** \brief segment array byte count */
@@ -75,9 +71,6 @@ struct Cache {
     pthread_cond_t dl_cond;
     /** \brief active downloads list */
     ActiveDownload *active_dls;
-
-    /** \brief the FUSE filesystem path to the remote file*/
-    char *fs_path;
 };
 
 /**
