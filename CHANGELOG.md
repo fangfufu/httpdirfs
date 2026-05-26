@@ -21,6 +21,13 @@ and this project adheres to
 - Introduce a comprehensive unit test suite `test_memory_tracking` to validate
   correct allocation, reallocation, and free behavior of debug allocator
   wrappers ([9b38614](https://github.com/fangfufu/httpdirfs/commit/9b38614)).
+- Implement asynchronous early-return download support in cache mode to improve
+  read performance during ongoing background downloads
+  ([0fb2d06](https://github.com/fangfufu/httpdirfs/commit/0fb2d06)).
+- Introduce robust logging and error-checking wrappers for pthread condition
+  variable APIs (`PTHREAD_COND_INIT`, `PTHREAD_COND_DESTROY`,
+  `PTHREAD_COND_BROADCAST`, and `PTHREAD_COND_WAIT`)
+  ([af0e263](https://github.com/fangfufu/httpdirfs/commit/af0e263)).
 
 ### Changed
 
@@ -60,6 +67,9 @@ and this project adheres to
 - Fix potential crashes by adding defensive `NULL` checks on `this_link` in
   `Cache_create`
   ([796fbb9](https://github.com/fangfufu/httpdirfs/commit/796fbb9)).
+- Fix potential crashes by zero-initializing stack-allocated `TransferStruct`
+  variables (`ts` and `header`) in `Link_download` and `Link_download_full`
+  ([1943f8e](https://github.com/fangfufu/httpdirfs/commit/1943f8e)).
 - Fix directory eviction concurrency issues by holding `link_lock` when freeing
   duplicate local `LinkTable` directories
   ([29f51ff](https://github.com/fangfufu/httpdirfs/commit/29f51ff)).
