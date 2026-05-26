@@ -1,5 +1,6 @@
 #ifndef CACHE_H
 #define CACHE_H
+#include <sys/types.h>
 
 /**
  * \file cache.h
@@ -15,6 +16,12 @@ typedef struct Cache Cache;
 #include "network.h"
 
 struct TransferStruct;
+
+typedef struct ActiveDownload {
+    off_t offset;
+    struct TransferStruct *ts;
+    struct ActiveDownload *next;
+} ActiveDownload;
 
 #include <stdio.h>
 #include <stdint.h>
@@ -59,17 +66,13 @@ struct Cache {
 
     /** \brief semaphore for the background thread */
     sem_t bgt_sem;
-    /** \brief the offset of the next segment to be downloaded in background*/
-    off_t next_dl_offset;
 
     /** \brief mutex lock for background download progress */
     pthread_mutex_t dl_lock;
     /** \brief condition variable for background download progress */
     pthread_cond_t dl_cond;
-    /** \brief the active TransferStruct for the background download */
-    struct TransferStruct *active_dl_ts;
-    /** \brief the offset currently being downloaded in background */
-    off_t active_dl_offset;
+    /** \brief active downloads list */
+    ActiveDownload *active_dls;
 
     /** \brief the FUSE filesystem path to the remote file*/
     char *fs_path;
@@ -161,4 +164,13 @@ void Cache_delete(const char *fn);
  * \note Called by fs_read(), verified to be working
  */
 long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset_start);
+
+/**
+ * \brief Searches the active downloads linked list for a matching offset.
+ * \param[in] cf The cache instance.
+ * \param[in] offset The offset to search for.
+ * \return The active download structure if found, otherwise NULL.
+ * \note Must be called while holding cf->dl_lock.
+ */
+ActiveDownload *ActiveDownload_find(Cache *cf, off_t offset);
 #endif

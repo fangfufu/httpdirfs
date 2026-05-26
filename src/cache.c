@@ -541,6 +541,52 @@ int CacheDir_create(const char *dirn)
     FREE(metadirn);
     return res;
 }
+ActiveDownload *ActiveDownload_find(Cache *cf, off_t offset)
+{
+    ActiveDownload *ad = cf->active_dls;
+    while (ad) {
+        if (ad->offset == offset) {
+            return ad;
+        }
+        ad = ad->next;
+    }
+    return NULL;
+}
+
+/**
+ * \brief Allocates and prepends a new ActiveDownload tracker to the list.
+ * \param[in] cf The cache instance.
+ * \param[in] offset The offset to track.
+ * \note Must be called while holding cf->dl_lock.
+ */
+static void ActiveDownload_add(Cache *cf, off_t offset)
+{
+    ActiveDownload *ad = CALLOC(1, sizeof(ActiveDownload));
+    ad->offset = offset;
+    ad->ts = NULL;
+    ad->next = cf->active_dls;
+    cf->active_dls = ad;
+}
+
+/**
+ * \brief Removes and frees the ActiveDownload tracker for the given offset.
+ * \param[in] cf The cache instance.
+ * \param[in] offset The offset to untrack.
+ * \note Must be called while holding cf->dl_lock.
+ */
+static void ActiveDownload_remove(Cache *cf, off_t offset)
+{
+    ActiveDownload **curr = &cf->active_dls;
+    while (*curr) {
+        if ((*curr)->offset == offset) {
+            ActiveDownload *temp = *curr;
+            *curr = (*curr)->next;
+            FREE(temp);
+            return;
+        }
+        curr = &(*curr)->next;
+    }
+}
 
 /**
  * \brief Allocate a new cache data structure
@@ -552,8 +598,7 @@ static Cache *Cache_alloc(void)
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->dl_lock, NULL);
     PTHREAD_COND_INIT(&cf->dl_cond, NULL);
-    cf->active_dl_offset = -1;
-    cf->active_dl_ts = NULL;
+    cf->active_dls = NULL;
     cf->cache_opened = 1;
     SEM_INIT(&cf->bgt_sem, 0, 1);
     return cf;
@@ -580,6 +625,13 @@ static void Cache_free(Cache *cf)
 
     if (cf->fs_path) {
         FREE(cf->fs_path);
+    }
+
+    ActiveDownload *ad = cf->active_dls;
+    while (ad) {
+        ActiveDownload *next = ad->next;
+        FREE(ad);
+        ad = next;
     }
 
     FREE(cf);
@@ -985,18 +1037,26 @@ static void Seg_set(Cache *cf, off_t offset, int i)
 }
 
 /**
+ * \brief Arguments passed to the background download thread.
+ */
+typedef struct BgdlArg {
+    Cache *cf;       /**< The cache instance. */
+    off_t dl_offset; /**< The segment offset to download. */
+} BgdlArg;
+
+/**
  * \brief Background download function
  * \details If we are requesting the data from the second half of the current
  * segment, we can spawn a pthread using this function to download the next
  * segment.
+ * \param[in] arg A pointer to a BgdlArg structure.
  */
 static void *Cache_bgdl(void *arg)
 {
-    Cache *cf = (Cache *)arg;
-
-    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-    off_t dl_offset = cf->next_dl_offset;
-    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+    BgdlArg *bg_arg = (BgdlArg *)arg;
+    Cache *cf = bg_arg->cf;
+    off_t dl_offset = bg_arg->dl_offset;
+    FREE(bg_arg);
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     long recv
@@ -1008,10 +1068,8 @@ static void *Cache_bgdl(void *arg)
                 (unsigned long)pthread_self(), recv);
         FREE(recv_buf);
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-        if (cf->active_dl_offset == dl_offset) {
-            cf->active_dl_offset = -1;
-            PTHREAD_COND_BROADCAST(&cf->dl_cond);
-        }
+        ActiveDownload_remove(cf, dl_offset);
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         SEM_POST(&cf->bgt_sem);
         pthread_exit(NULL);
@@ -1034,10 +1092,8 @@ static void *Cache_bgdl(void *arg)
     FREE(recv_buf);
 
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-    if (cf->active_dl_offset == dl_offset) {
-        cf->active_dl_offset = -1;
-        PTHREAD_COND_BROADCAST(&cf->dl_cond);
-    }
+    ActiveDownload_remove(cf, dl_offset);
+    PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     SEM_POST(&cf->bgt_sem);
@@ -1045,7 +1101,12 @@ static void *Cache_bgdl(void *arg)
     pthread_exit(NULL);
 }
 
-static void Cache_bgdl_launcher(Cache *cf)
+/**
+ * \brief Spawns a background thread to download the next segment.
+ * \param[in] cf The cache instance.
+ * \param[in] dl_offset The offset of the segment to download.
+ */
+static void Cache_bgdl_launcher(Cache *cf, off_t dl_offset)
 {
     pthread_t thread;
     pthread_attr_t attr;
@@ -1059,7 +1120,12 @@ static void Cache_bgdl_launcher(Cache *cf)
                 strerror(errno));
     }
 
-    if (pthread_create(&thread, &attr, Cache_bgdl, cf)) {
+    BgdlArg *arg = CALLOC(1, sizeof(BgdlArg));
+    arg->cf = cf;
+    arg->dl_offset = dl_offset;
+
+    if (pthread_create(&thread, &attr, Cache_bgdl, arg)) {
+        FREE(arg);
         lprintf(fatal, "pthread_create(): %d, %s\n", errno, strerror(errno));
     }
 
@@ -1069,6 +1135,46 @@ static void Cache_bgdl_launcher(Cache *cf)
     }
 }
 
+/**
+ * \brief Reads a segment of size 'len' starting at 'offset_start'.
+ * \param[in] cf The cache instance.
+ * \param[out] output_buf Output buffer to read data into.
+ * \param[in] len Length of the data to read.
+ * \param[in] offset_start The offset to start reading from.
+ * \return The number of bytes read, or negative on error.
+ *
+ * \details Concurrency Architecture & State Machine:
+ * ----------------------------------------
+ * This function supports multiple concurrent segment downloads to allow
+ * parallel FUSE reading. To prevent race conditions, memory leaks, and
+ * duplicate downloads:
+ *
+ * 1. Mutual Exclusion & Locking:
+ *    - `w_lock` guards writing to the cache files (`dfp`/`mfp`) and checking
+ * segment existence.
+ *    - `dl_lock` guards access to `active_dls`, which tracks currently active
+ * downloads.
+ *    - Ordering: ALWAYS lock `w_lock` before `dl_lock` to avoid deadlocks.
+ *
+ * 2. Active Download Tracking (`active_dls`):
+ *    - A linked list of `ActiveDownload` nodes tracks the offsets currently
+ * being downloaded.
+ *    - If a segment is not cached but is already being downloaded by another
+ * thread, subsequent FUSE threads will detect the node and wait via
+ * `PTHREAD_COND_WAIT` on `dl_cond`.
+ *
+ * 3. Early-Return Copy:
+ *    - While waiting, threads can perform early returns by copying data
+ * directly from the in-progress `TransferStruct`'s memory buffer (`ts->data`)
+ * once enough bytes have been received.
+ *
+ * 4. Double-Checked Locking:
+ *    - Because locks must be released when launching threads or checking
+ * semaphores, other threads could concurrently insert download trackers. We use
+ * double-checked locking inside the background thread launcher and `sync_dl`
+ * fallback path to verify that the download is still not tracked before
+ * allocating a new node.
+ */
 static long Cache_read_segment(Cache *cf, char *const output_buf,
                                const off_t len, const off_t offset_start)
 {
@@ -1085,15 +1191,15 @@ retry:
     }
 
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-    if (cf->active_dl_offset == dl_offset) {
+    ActiveDownload *ad = ActiveDownload_find(cf, dl_offset);
+    if (ad != NULL) {
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-        while (cf->active_dl_offset == dl_offset) {
-            if (cf->active_dl_ts
-                && cf->active_dl_ts->curr_size
+        while ((ad = ActiveDownload_find(cf, dl_offset)) != NULL) {
+            if (ad->ts && ad->ts->data
+                && ad->ts->curr_size
                        >= (size_t)(offset_start - dl_offset + len)) {
-                memcpy(output_buf,
-                       cf->active_dl_ts->data + (offset_start - dl_offset),
+                memcpy(output_buf, ad->ts->data + (offset_start - dl_offset),
                        len);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 send = len;
@@ -1112,29 +1218,46 @@ retry:
     }
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
+    /*
+     * Attempt to launch a background download thread if the background thread
+     * slot is available (bgt_sem > 0). This acts as a throttle on concurrent
+     * background prefetches.
+     */
     ret = sem_trywait(&cf->bgt_sem);
     if (ret == 0) {
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-        if (cf->active_dl_offset == -1) {
-            cf->active_dl_offset = dl_offset;
-            cf->next_dl_offset = dl_offset;
-            cf->active_dl_ts = NULL;
+        /*
+         * Double-checked locking: Re-verify that another thread hasn't already
+         * added this offset to the active downloads list while we were
+         * unlocked.
+         */
+        ActiveDownload *bg_ad = ActiveDownload_find(cf, dl_offset);
+        if (bg_ad == NULL) {
+            ActiveDownload_add(cf, dl_offset);
             PTHREAD_COND_BROADCAST(&cf->dl_cond);
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-            Cache_bgdl_launcher(cf);
+            Cache_bgdl_launcher(cf, dl_offset);
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
             goto retry;
         }
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-        SEM_POST(&cf->bgt_sem);
+        SEM_POST(&cf->bgt_sem); /* Back off and release the slot */
     }
 
 sync_dl:
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-    if (cf->active_dl_offset == -1) {
-        cf->active_dl_offset = dl_offset;
+    /*
+     * Double-checked locking: Verify that another thread hasn't concurrently
+     * started a download for this offset. If it has, back off, release the
+     * locks, and retry to join the wait loop.
+     */
+    ActiveDownload *sync_ad = ActiveDownload_find(cf, dl_offset);
+    if (sync_ad != NULL) {
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+        goto retry;
     }
-    cf->active_dl_ts = NULL;
+    ActiveDownload_add(cf, dl_offset);
     PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
@@ -1148,10 +1271,8 @@ sync_dl:
 
     if (recv < 0) {
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-        if (cf->active_dl_offset == dl_offset) {
-            cf->active_dl_offset = -1;
-            PTHREAD_COND_BROADCAST(&cf->dl_cond);
-        }
+        ActiveDownload_remove(cf, dl_offset);
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1164,10 +1285,8 @@ sync_dl:
                     "received %ld bytes, but required at least %ld bytes\n",
                     recv, (long)((offset_start - dl_offset) + len));
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-            if (cf->active_dl_offset == dl_offset) {
-                cf->active_dl_offset = -1;
-                PTHREAD_COND_BROADCAST(&cf->dl_cond);
-            }
+            ActiveDownload_remove(cf, dl_offset);
+            PTHREAD_COND_BROADCAST(&cf->dl_cond);
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             FREE(recv_buf);
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1182,10 +1301,8 @@ sync_dl:
                 "error.\n",
                 recv, cf->blksz);
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-        if (cf->active_dl_offset == dl_offset) {
-            cf->active_dl_offset = -1;
-            PTHREAD_COND_BROADCAST(&cf->dl_cond);
-        }
+        ActiveDownload_remove(cf, dl_offset);
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1193,10 +1310,8 @@ sync_dl:
     }
 
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-    if (cf->active_dl_offset == dl_offset) {
-        cf->active_dl_offset = -1;
-        PTHREAD_COND_BROADCAST(&cf->dl_cond);
-    }
+    ActiveDownload_remove(cf, dl_offset);
+    PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
     send = len;
     if (offset_start < dl_offset
@@ -1213,19 +1328,29 @@ sync_dl:
 bgdl: {
 }
     off_t next_dl_offset = dl_offset + cf->blksz;
-    if (!Seg_exist(cf, next_dl_offset) && next_dl_offset < cf->content_length) {
+    int next_seg_missing = 0;
+    if (next_dl_offset < cf->content_length) {
+        PTHREAD_MUTEX_LOCK(&cf->w_lock);
+        next_seg_missing = !Seg_exist(cf, next_dl_offset);
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+    }
+    if (next_seg_missing) {
         ret = sem_trywait(&cf->bgt_sem);
         if (!ret) {
+            PTHREAD_MUTEX_LOCK(&cf->w_lock);
+            next_seg_missing = !Seg_exist(cf, next_dl_offset);
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-            if (cf->active_dl_offset == -1) {
-                cf->active_dl_offset = next_dl_offset;
-                cf->next_dl_offset = next_dl_offset;
-                cf->active_dl_ts = NULL;
+            const ActiveDownload *next_ad
+                = ActiveDownload_find(cf, next_dl_offset);
+            if (next_seg_missing && next_ad == NULL) {
+                ActiveDownload_add(cf, next_dl_offset);
                 PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-                Cache_bgdl_launcher(cf);
+                PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+                Cache_bgdl_launcher(cf, next_dl_offset);
             } else {
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+                PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
                 SEM_POST(&cf->bgt_sem);
             }
         }
