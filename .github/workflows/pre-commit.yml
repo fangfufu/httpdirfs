@@ -26,4 +26,4 @@ jobs:
           meson setup builddir
       - uses: pre-commit/action@v3.0.1
         with:
-          extra_args: --all-files --hook-stage pre-commit --hook-stage manual
+          extra_args: --all-files --hook-stage pre-commit

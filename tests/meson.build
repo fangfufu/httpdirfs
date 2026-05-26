@@ -52,12 +52,12 @@ if integration_test.found()
          args: ['--short', httpdirfs],
          timeout: 300,
          is_parallel: false,
-         suite: ['integration', 'integration_short'])
+         suite: 'integration_short')
 
     test('integration_long',
          integration_test,
          args: ['--long', httpdirfs],
          timeout: 900,
          is_parallel: false,
-         suite: ['integration', 'integration_long'])
+         suite: 'integration_long')
 endif
