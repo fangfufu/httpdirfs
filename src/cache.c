@@ -1337,15 +1337,20 @@ bgdl: {
     if (next_seg_missing) {
         ret = sem_trywait(&cf->bgt_sem);
         if (!ret) {
+            PTHREAD_MUTEX_LOCK(&cf->w_lock);
+            next_seg_missing = !Seg_exist(cf, next_dl_offset);
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-            ActiveDownload *next_ad = ActiveDownload_find(cf, next_dl_offset);
-            if (next_ad == NULL) {
+            const ActiveDownload *next_ad
+                = ActiveDownload_find(cf, next_dl_offset);
+            if (next_seg_missing && next_ad == NULL) {
                 ActiveDownload_add(cf, next_dl_offset);
                 PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+                PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
                 Cache_bgdl_launcher(cf, next_dl_offset);
             } else {
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+                PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
                 SEM_POST(&cf->bgt_sem);
             }
         }
