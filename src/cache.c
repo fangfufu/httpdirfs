@@ -556,7 +556,7 @@ static Cache *Cache_alloc(void)
     PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->dl_lock, NULL);
-    pthread_cond_init(&cf->dl_cond, NULL);
+    PTHREAD_COND_INIT(&cf->dl_cond, NULL);
     cf->active_dl_offset = -1;
     cf->active_dl_ts = NULL;
     cf->cache_opened = 1;
@@ -572,7 +572,7 @@ static void Cache_free(Cache *cf)
     PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
     PTHREAD_MUTEX_DESTROY(&cf->w_lock);
     PTHREAD_MUTEX_DESTROY(&cf->dl_lock);
-    pthread_cond_destroy(&cf->dl_cond);
+    PTHREAD_COND_DESTROY(&cf->dl_cond);
     SEM_DESTROY(&cf->bgt_sem);
 
     if (cf->path) {
@@ -1022,7 +1022,7 @@ static void *Cache_bgdl(void *arg)
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         if (cf->active_dl_offset == dl_offset) {
             cf->active_dl_offset = -1;
-            pthread_cond_broadcast(&cf->dl_cond);
+            PTHREAD_COND_BROADCAST(&cf->dl_cond);
         }
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         SEM_POST(&cf->bgt_sem);
@@ -1048,7 +1048,7 @@ static void *Cache_bgdl(void *arg)
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
     if (cf->active_dl_offset == dl_offset) {
         cf->active_dl_offset = -1;
-        pthread_cond_broadcast(&cf->dl_cond);
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
     }
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
@@ -1111,7 +1111,7 @@ retry:
                 send = len;
                 goto bgdl;
             }
-            pthread_cond_wait(&cf->dl_cond, &cf->dl_lock);
+            PTHREAD_COND_WAIT(&cf->dl_cond, &cf->dl_lock);
         }
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
@@ -1131,7 +1131,7 @@ retry:
             cf->active_dl_offset = dl_offset;
             cf->next_dl_offset = dl_offset;
             cf->active_dl_ts = NULL;
-            pthread_cond_broadcast(&cf->dl_cond);
+            PTHREAD_COND_BROADCAST(&cf->dl_cond);
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             Cache_bgdl_launcher(cf);
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1147,7 +1147,7 @@ sync_dl:
         cf->active_dl_offset = dl_offset;
     }
     cf->active_dl_ts = NULL;
-    pthread_cond_broadcast(&cf->dl_cond);
+    PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1162,7 +1162,7 @@ sync_dl:
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         if (cf->active_dl_offset == dl_offset) {
             cf->active_dl_offset = -1;
-            pthread_cond_broadcast(&cf->dl_cond);
+            PTHREAD_COND_BROADCAST(&cf->dl_cond);
         }
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
@@ -1178,7 +1178,7 @@ sync_dl:
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
             if (cf->active_dl_offset == dl_offset) {
                 cf->active_dl_offset = -1;
-                pthread_cond_broadcast(&cf->dl_cond);
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
             }
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             FREE(recv_buf);
@@ -1196,7 +1196,7 @@ sync_dl:
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         if (cf->active_dl_offset == dl_offset) {
             cf->active_dl_offset = -1;
-            pthread_cond_broadcast(&cf->dl_cond);
+            PTHREAD_COND_BROADCAST(&cf->dl_cond);
         }
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
@@ -1207,7 +1207,7 @@ sync_dl:
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
     if (cf->active_dl_offset == dl_offset) {
         cf->active_dl_offset = -1;
-        pthread_cond_broadcast(&cf->dl_cond);
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
     }
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
     send = len;
@@ -1233,7 +1233,7 @@ bgdl: {
                 cf->active_dl_offset = next_dl_offset;
                 cf->next_dl_offset = next_dl_offset;
                 cf->active_dl_ts = NULL;
-                pthread_cond_broadcast(&cf->dl_cond);
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 Cache_bgdl_launcher(cf);
             } else {

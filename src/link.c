@@ -1296,7 +1296,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
             if (cf->active_dl_offset == offset) {
                 cf->active_dl_ts = &ts;
-                pthread_cond_broadcast(&cf->dl_cond);
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
             }
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         }
@@ -1319,7 +1319,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
                 if (cf->active_dl_ts == &ts) {
                     cf->active_dl_ts = NULL;
                 }
-                pthread_cond_broadcast(&cf->dl_cond);
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             } else {
                 ts.transferring = 0;
@@ -1343,7 +1343,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
                 if (cf->active_dl_ts == &ts) {
                     cf->active_dl_ts = NULL;
                 }
-                pthread_cond_broadcast(&cf->dl_cond);
+                PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             } else {
                 ts.transferring = 0;
@@ -1363,7 +1363,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
         if (cf->active_dl_ts == &ts) {
             cf->active_dl_ts = NULL;
         }
-        pthread_cond_broadcast(&cf->dl_cond);
+        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
     } else {
         ts.transferring = 0;
