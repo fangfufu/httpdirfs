@@ -277,12 +277,10 @@ static int Meta_read(Cache *cf)
 
     off_t max_segbc = disk_content_length / cf->blksz;
 
-    if ((disk_content_length % cf->blksz) != 0) {
-        max_segbc += 1;
-    }
-
-    if (max_segbc > INT_MAX) {
+    if (max_segbc >= INT_MAX) {
         max_segbc = INT_MAX;
+    } else if ((disk_content_length % cf->blksz) != 0) {
+        max_segbc += 1;
     }
 
     if (cf->segbc != max_segbc) {
@@ -363,11 +361,10 @@ static int Meta_write(Cache *cf)
     long expected_segbc = 0;
     if (cf->blksz > 0 && write_content_length > 0) {
         expected_segbc = write_content_length / cf->blksz;
-        if (write_content_length % cf->blksz != 0) {
-            expected_segbc += 1;
-        }
-        if (expected_segbc > INT_MAX) {
+        if (expected_segbc >= INT_MAX) {
             expected_segbc = INT_MAX;
+        } else if (write_content_length % cf->blksz != 0) {
+            expected_segbc += 1;
         }
     }
     if (write_content_length <= 0
@@ -489,10 +486,10 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 
     long byte_read = 0;
 
-    if (offset < 0 || offset >= (off_t)cf->link->content_length) {
+    if (offset < 0 || offset >= total_len) {
         goto end;
-    } else if (len > (off_t)cf->link->content_length - offset) {
-        len = (off_t)cf->link->content_length - offset;
+    } else if (len > total_len - offset) {
+        len = total_len - offset;
     }
 
     /*
@@ -870,11 +867,10 @@ int Cache_create(const char *path)
     cf->link = this_link;
     cf->blksz = CONFIG.data_blksz;
     cf->segbc = this_link->content_length / cf->blksz;
-    if (this_link->content_length % cf->blksz != 0) {
-        cf->segbc += 1;
-    }
-    if (cf->segbc > INT_MAX) {
+    if (cf->segbc >= INT_MAX) {
         cf->segbc = INT_MAX;
+    } else if (this_link->content_length % cf->blksz != 0) {
+        cf->segbc += 1;
     }
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
@@ -1097,7 +1093,13 @@ void Cache_close(Cache *cf)
  */
 static int Seg_exist(Cache *cf, off_t offset)
 {
+    if (cf->segbc <= 0 || cf->blksz <= 0) {
+        return 0;
+    }
     off_t byte = offset / cf->blksz;
+    if (byte < 0 || byte >= cf->segbc) {
+        return 0;
+    }
     return cf->seg[byte];
 }
 
@@ -1110,7 +1112,13 @@ static int Seg_exist(Cache *cf, off_t offset)
  */
 static void Seg_set(Cache *cf, off_t offset, int i)
 {
+    if (cf->segbc <= 0 || cf->blksz <= 0) {
+        return;
+    }
     off_t byte = offset / cf->blksz;
+    if (byte < 0 || byte >= cf->segbc) {
+        return;
+    }
     cf->seg[byte] = i;
 }
 
@@ -1264,7 +1272,7 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
     }
 
     if (cf->link->content_length <= 0 || offset_start < 0
-        || offset_start >= (off_t)cf->link->content_length) {
+        || (size_t)offset_start >= cf->link->content_length) {
         return 0;
     }
 
@@ -1459,12 +1467,13 @@ long Cache_read(Cache *cf, char *const output_buf, off_t len,
         return -EINVAL;
     }
 
-    if (offset_start < 0 || offset_start >= (off_t)cf->link->content_length) {
+    if (offset_start < 0 || (size_t)offset_start >= cf->link->content_length) {
         return 0;
     }
 
-    if (len > (off_t)cf->link->content_length - offset_start) {
-        len = (off_t)cf->link->content_length - offset_start;
+    size_t remaining = cf->link->content_length - (size_t)offset_start;
+    if ((size_t)len > remaining) {
+        len = (off_t)remaining;
     }
 
     if (len <= 0) {
