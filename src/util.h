@@ -25,104 +25,93 @@ char *path_append(const char *path, const char *filename);
  */
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
                                 const pthread_mutexattr_t *attr,
-                                const char *file, const char *func, int line,
-                                const char *x_name);
+                                const char *file, const char *func, int line);
 #define PTHREAD_MUTEX_INIT(x, attr)                                            \
-    pthread_mutex_init_wrapper(x, attr, __FILE__, __func__, __LINE__, #x)
+    pthread_mutex_init_wrapper(x, attr, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for pthread_mutex_destroy(), with error handling
  */
 void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
-                                   const char *func, int line,
-                                   const char *x_name);
+                                   const char *func, int line);
 #define PTHREAD_MUTEX_DESTROY(x)                                               \
-    pthread_mutex_destroy_wrapper(x, __FILE__, __func__, __LINE__, #x)
+    pthread_mutex_destroy_wrapper(x, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for pthread_mutex_lock(), with error handling
  */
 void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
-                                pthread_mutex_t *x, const char *x_name);
+                                pthread_mutex_t *x);
 #define PTHREAD_MUTEX_LOCK(x)                                                  \
-    pthread_mutex_lock_wrapper(__FILE__, __func__, __LINE__, x, #x)
+    pthread_mutex_lock_wrapper(__FILE__, __func__, __LINE__, x)
 
 /**
  * \brief wrapper for pthread_mutex_unlock(), with error handling
  */
 void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
-                                  pthread_mutex_t *x, const char *x_name);
+                                  pthread_mutex_t *x);
 #define PTHREAD_MUTEX_UNLOCK(x)                                                \
-    pthread_mutex_unlock_wrapper(__FILE__, __func__, __LINE__, x, #x)
+    pthread_mutex_unlock_wrapper(__FILE__, __func__, __LINE__, x)
 
 /**
  * \brief wrapper for sem_init(), with error handling
  * */
 void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
-                      const char *file, const char *func, int line,
-                      const char *sem_name);
+                      const char *file, const char *func, int line);
 #define SEM_INIT(sem, pshared, value)                                          \
-    sem_init_wrapper(sem, pshared, value, __FILE__, __func__, __LINE__, #sem)
+    sem_init_wrapper(sem, pshared, value, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for sem_destroy(), with error handling
  */
 void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
-                         int line, const char *sem_name);
-#define SEM_DESTROY(sem)                                                       \
-    sem_destroy_wrapper(sem, __FILE__, __func__, __LINE__, #sem)
+                         int line);
+#define SEM_DESTROY(sem) sem_destroy_wrapper(sem, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for sem_wait(), with error handling
  */
-void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
-                      const char *sem_name);
-#define SEM_WAIT(sem) sem_wait_wrapper(__FILE__, __func__, __LINE__, sem, #sem)
+void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem);
+#define SEM_WAIT(sem) sem_wait_wrapper(__FILE__, __func__, __LINE__, sem)
 
 /**
  * \brief wrapper for sem_post(), with error handling
  */
-void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
-                      const char *sem_name);
-#define SEM_POST(sem) sem_post_wrapper(__FILE__, __func__, __LINE__, sem, #sem)
+void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem);
+#define SEM_POST(sem) sem_post_wrapper(__FILE__, __func__, __LINE__, sem)
 
 /**
  * \brief wrapper for pthread_cond_init(), with error handling
  */
 void pthread_cond_init_wrapper(pthread_cond_t *cond,
                                const pthread_condattr_t *attr, const char *file,
-                               const char *func, int line,
-                               const char *cond_name);
+                               const char *func, int line);
 #define PTHREAD_COND_INIT(cond, attr)                                          \
-    pthread_cond_init_wrapper(cond, attr, __FILE__, __func__, __LINE__, #cond)
+    pthread_cond_init_wrapper(cond, attr, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for pthread_cond_destroy(), with error handling
  */
 void pthread_cond_destroy_wrapper(pthread_cond_t *cond, const char *file,
-                                  const char *func, int line,
-                                  const char *cond_name);
+                                  const char *func, int line);
 #define PTHREAD_COND_DESTROY(cond)                                             \
-    pthread_cond_destroy_wrapper(cond, __FILE__, __func__, __LINE__, #cond)
+    pthread_cond_destroy_wrapper(cond, __FILE__, __func__, __LINE__)
 
 /**
  * \brief wrapper for pthread_cond_broadcast(), with error handling
  */
 void pthread_cond_broadcast_wrapper(const char *file, const char *func,
-                                    int line, pthread_cond_t *cond,
-                                    const char *cond_name);
+                                    int line, pthread_cond_t *cond);
 #define PTHREAD_COND_BROADCAST(cond)                                           \
-    pthread_cond_broadcast_wrapper(__FILE__, __func__, __LINE__, cond, #cond)
+    pthread_cond_broadcast_wrapper(__FILE__, __func__, __LINE__, cond)
 
 /**
  * \brief wrapper for pthread_cond_wait(), with error handling
  */
 void pthread_cond_wait_wrapper(const char *file, const char *func, int line,
-                               pthread_cond_t *cond, pthread_mutex_t *mutex,
-                               const char *cond_name, const char *mutex_name);
+                               pthread_cond_t *cond, pthread_mutex_t *mutex);
 #define PTHREAD_COND_WAIT(cond, mutex)                                         \
-    pthread_cond_wait_wrapper(__FILE__, __func__, __LINE__, cond, mutex,       \
-                              #cond, #mutex)
+    pthread_cond_wait_wrapper(__FILE__, __func__, __LINE__, cond, mutex)
 
 /**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling

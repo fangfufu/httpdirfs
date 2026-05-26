@@ -130,8 +130,6 @@ void CacheSystem_init(const char *path, int url_supplied)
         path = CacheSystem_calc_dir(path);
     }
 
-    lprintf(debug, "%s\n", path);
-
     META_DIR = path_append(path, "meta/");
     DATA_DIR = path_append(path, "data/");
     /*
@@ -196,7 +194,6 @@ void CacheSystem_clear(void)
 {
     char *cache_home = CacheSystem_get_cache_dir();
     const char *cache_del;
-    lprintf(debug, "%s\n", cache_home);
     if (CONFIG.cache_dir) {
         cache_del = cache_home;
     } else {
@@ -446,8 +443,6 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
 
     byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
     if (byte_read != len) {
-        lprintf(debug, "fread(): requested %ld, returned %ld!\n", len,
-                byte_read);
         if (feof(cf->dfp)) {
             /*
              * reached EOF
@@ -603,9 +598,7 @@ static void Cache_free(Cache *cf)
 static int Cache_exist(const char *fn)
 {
     char *metafn = path_append(META_DIR, fn);
-    lprintf(debug, "metafn: %s\n", metafn);
     char *datafn = path_append(DATA_DIR, fn);
-    lprintf(debug, "datafn: %s\n", datafn);
     /*
      * access() returns 0 on success
      */
@@ -615,13 +608,11 @@ static int Cache_exist(const char *fn)
     if (no_meta ^ no_data) {
         lprintf(warning, "Cache file partially missing.\n");
         if (no_meta) {
-            lprintf(debug, "Unlinking datafn: %s\n", datafn);
             if (unlink(datafn)) {
                 lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
         }
         if (no_data) {
-            lprintf(debug, "Unlinking metafn: %s\n", metafn);
             if (unlink(metafn)) {
                 lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
@@ -747,8 +738,6 @@ int Cache_create(const char *path)
     } else {
         lprintf(fatal, "Invalid CONFIG.mode\n");
     }
-    lprintf(debug, "Creating cache files for %s.\n", fn);
-
     Cache *cf = Cache_alloc();
     cf->path = STRNDUP(fn, PATH_MAX);
     cf->time = this_link->time;
@@ -1010,7 +999,6 @@ static void *Cache_bgdl(void *arg)
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "thread %lx spawned.\n ", (unsigned long)pthread_self());
     long recv
         = Link_download(cf->link, (char *)recv_buf, cf->blksz, dl_offset, cf);
     if (recv < 0) {

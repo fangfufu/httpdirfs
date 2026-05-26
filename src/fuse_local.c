@@ -105,13 +105,11 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (!link) {
         return -ENOENT;
     }
-    lprintf(debug, "%s found.\n", path);
     if ((fi->flags & O_RDWR) != O_RDONLY) {
         LinkTable_unref(link->parent_table);
         return -EROFS;
     }
     if (CACHE_SYSTEM_INIT) {
-        lprintf(debug, "Cache_open(%s);\n", path);
         fi->fh = (uint64_t)Cache_open(path);
         /*
          * The cache definitely cannot be opened for some reason.
@@ -159,7 +157,6 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     LinkTable *linktbl = (LinkTable *)fi->fh;
 
     if (!linktbl) {
-        lprintf(debug, "linktbl empty!\n");
         return -ENOENT;
     }
 

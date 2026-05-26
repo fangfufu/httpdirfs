@@ -31,6 +31,16 @@ and this project adheres to
 
 ### Changed
 
+- Refactor synchronization and memory wrappers (mutex, semaphore, condvar, and
+  allocator) to remove trailing name string parameters and clean up debug log
+  statements ([efb8c24](https://github.com/fangfufu/httpdirfs/commit/efb8c24)).
+- Remove all debug log statements (`log_printf` and `lprintf` calls under the
+  `debug` log type) across FUSE, cache, and link modules to eliminate tracing
+  overhead ([efb8c24](https://github.com/fangfufu/httpdirfs/commit/efb8c24)).
+- Eliminate unused helper variables (such as the static loop counter inside
+  `LinkTable_new`) that were only required by the removed debug prints,
+  preventing compiler warnings
+  ([efb8c24](https://github.com/fangfufu/httpdirfs/commit/efb8c24)).
 - Optimize memory tracking in debug allocator wrappers by replacing the $O(N)$
   linear linked list with a statically sized 8192-slot hash table with chaining
   ([9b38614](https://github.com/fangfufu/httpdirfs/commit/9b38614)).

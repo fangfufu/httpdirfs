@@ -82,12 +82,8 @@ char *path_append(const char *path, const char *filename)
 
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
                                 const pthread_mutexattr_t *attr,
-                                const char *file, const char *func, int line,
-                                const char *x_name)
+                                const char *file, const char *func, int line)
 {
-    log_printf(debug, file, func, line, "%lx pthread_mutex_init: %p, %p, %s\n",
-               (unsigned long)pthread_self(), (void *)x, (const void *)attr,
-               x_name);
     pthread_mutexattr_t mutex_attr;
     if (attr == NULL) {
         pthread_mutexattr_init(&mutex_attr);
@@ -105,11 +101,8 @@ void pthread_mutex_init_wrapper(pthread_mutex_t *x,
 }
 
 void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
-                                   const char *func, int line,
-                                   const char *x_name)
+                                   const char *func, int line)
 {
-    log_printf(debug, file, func, line, "%lx pthread_mutex_destroy: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)x, x_name);
     int ret;
     ret = pthread_mutex_destroy(x);
     if (ret) {
@@ -120,10 +113,8 @@ void pthread_mutex_destroy_wrapper(pthread_mutex_t *x, const char *file,
 }
 
 void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
-                                  pthread_mutex_t *x, const char *x_name)
+                                  pthread_mutex_t *x)
 {
-    log_printf(debug, file, func, line, "%lx pthread_mutex_unlock: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)x, x_name);
     int i;
     i = pthread_mutex_unlock(x);
     if (i) {
@@ -133,10 +124,8 @@ void pthread_mutex_unlock_wrapper(const char *file, const char *func, int line,
 }
 
 void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
-                                pthread_mutex_t *x, const char *x_name)
+                                pthread_mutex_t *x)
 {
-    log_printf(debug, file, func, line, "%lx pthread_mutex_lock: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)x, x_name);
     int i;
     i = pthread_mutex_lock(x);
     if (i) {
@@ -146,12 +135,8 @@ void pthread_mutex_lock_wrapper(const char *file, const char *func, int line,
 }
 
 void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
-                      const char *file, const char *func, int line,
-                      const char *sem_name)
+                      const char *file, const char *func, int line)
 {
-    log_printf(debug, file, func, line, "%lx sem_init: %p, %d, %u, %s\n",
-               (unsigned long)pthread_self(), (void *)sem, pshared, value,
-               sem_name);
     int i;
     i = sem_init(sem, pshared, value);
     if (i) {
@@ -163,10 +148,8 @@ void sem_init_wrapper(sem_t *sem, int pshared, unsigned int value,
 }
 
 void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
-                         int line, const char *sem_name)
+                         int line)
 {
-    log_printf(debug, file, func, line, "%lx sem_destroy: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)sem, sem_name);
     int i;
     i = sem_destroy(sem);
     if (i) {
@@ -177,17 +160,8 @@ void sem_destroy_wrapper(sem_t *sem, const char *file, const char *func,
     }
 }
 
-void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
-                      const char *sem_name)
+void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem)
 {
-    int j;
-    if (sem_getvalue(sem, &j)) {
-        int saved_errno = errno;
-        fatal_log_printf(file, func, line, "%lx sem_getvalue: %s\n",
-                         (unsigned long)pthread_self(), strerror(saved_errno));
-    }
-    log_printf(debug, file, func, line, "%lx sem_wait: %p, %s, value: %d\n",
-               (unsigned long)pthread_self(), (void *)sem, sem_name, j);
     int i;
     i = sem_wait(sem);
     if (i) {
@@ -198,11 +172,8 @@ void sem_wait_wrapper(const char *file, const char *func, int line, sem_t *sem,
     }
 }
 
-void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
-                      const char *sem_name)
+void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem)
 {
-    log_printf(debug, file, func, line, "%lx sem_post: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)sem, sem_name);
     int i;
     i = sem_post(sem);
     if (i) {
@@ -215,12 +186,8 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
 
 void pthread_cond_init_wrapper(pthread_cond_t *cond,
                                const pthread_condattr_t *attr, const char *file,
-                               const char *func, int line,
-                               const char *cond_name)
+                               const char *func, int line)
 {
-    log_printf(debug, file, func, line, "%lx pthread_cond_init: %p, %p, %s\n",
-               (unsigned long)pthread_self(), (void *)cond, (const void *)attr,
-               cond_name);
     int ret = pthread_cond_init(cond, attr);
     if (ret) {
         fatal_log_printf(file, func, line, "%lx pthread_cond_init: %d, %s\n",
@@ -229,11 +196,8 @@ void pthread_cond_init_wrapper(pthread_cond_t *cond,
 }
 
 void pthread_cond_destroy_wrapper(pthread_cond_t *cond, const char *file,
-                                  const char *func, int line,
-                                  const char *cond_name)
+                                  const char *func, int line)
 {
-    log_printf(debug, file, func, line, "%lx pthread_cond_destroy: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)cond, cond_name);
     int ret = pthread_cond_destroy(cond);
     if (ret) {
         fatal_log_printf(file, func, line, "%lx pthread_cond_destroy: %d, %s\n",
@@ -242,11 +206,8 @@ void pthread_cond_destroy_wrapper(pthread_cond_t *cond, const char *file,
 }
 
 void pthread_cond_broadcast_wrapper(const char *file, const char *func,
-                                    int line, pthread_cond_t *cond,
-                                    const char *cond_name)
+                                    int line, pthread_cond_t *cond)
 {
-    log_printf(debug, file, func, line, "%lx pthread_cond_broadcast: %p, %s\n",
-               (unsigned long)pthread_self(), (void *)cond, cond_name);
     int ret = pthread_cond_broadcast(cond);
     if (ret) {
         fatal_log_printf(file, func, line,
@@ -256,13 +217,8 @@ void pthread_cond_broadcast_wrapper(const char *file, const char *func,
 }
 
 void pthread_cond_wait_wrapper(const char *file, const char *func, int line,
-                               pthread_cond_t *cond, pthread_mutex_t *mutex,
-                               const char *cond_name, const char *mutex_name)
+                               pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
-    log_printf(debug, file, func, line,
-               "%lx pthread_cond_wait: %p (%s), %p (%s)\n",
-               (unsigned long)pthread_self(), (void *)cond, cond_name,
-               (void *)mutex, mutex_name);
     int ret = pthread_cond_wait(cond, mutex);
     if (ret) {
         fatal_log_printf(file, func, line, "%lx pthread_cond_wait: %d, %s\n",
@@ -346,8 +302,6 @@ static void *malloc_wrapper_internal(size_t size, const char *file,
     }
 
 #ifdef DEBUG
-    log_printf(debug, file, func, line, "MALLOC: %p, %zu bytes\n", ptr, size);
-
     if (ptr) {
         MemNode *node = calloc(1, sizeof(MemNode));
         if (!node) {
@@ -381,9 +335,6 @@ void *CALLOC_wrapper(size_t nmemb, size_t size, const char *file,
     }
 
 #ifdef DEBUG
-    log_printf(debug, file, func, line, "CALLOC: %p, %zu bytes\n", ptr,
-               nmemb * size);
-
     if (ptr) {
         MemNode *node = calloc(1, sizeof(MemNode));
         if (!node) {
@@ -446,8 +397,6 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
     }
 
 #ifdef DEBUG
-    log_printf(debug, file, func, line, "REALLOC: %p, %zu bytes\n", ptr, size);
-
     // Look up in tracker
     pthread_mutex_lock(&mem_mutex);
     size_t idx = hash_ptr(ptr);
@@ -488,7 +437,6 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
         mem_hash_table[new_idx] = found_node;
         pthread_mutex_unlock(&mem_mutex);
 
-        log_printf(debug, file, func, line, "REALLOC result: %p\n", new_ptr);
         return new_ptr;
     }
     pthread_mutex_unlock(&mem_mutex);
@@ -521,8 +469,6 @@ void *REALLOC_wrapper(void *ptr, size_t size, const char *file,
     mem_hash_table[new_idx] = node;
     pthread_mutex_unlock(&mem_mutex);
 
-    log_printf(debug, file, func, line, "REALLOC result: %p (adopted)\n",
-               new_ptr);
     return new_ptr;
 #else
     void *new_ptr = realloc(ptr, size);
@@ -540,8 +486,6 @@ char *REALPATH_wrapper(const char *path, char *resolved_path, const char *file,
     char *res = realpath(path, resolved_path);
 #ifdef DEBUG
     if (res && !resolved_path) {
-        log_printf(debug, file, func, line, "REALPATH: %p\n", (void *)res);
-
         MemNode *node = calloc(1, sizeof(MemNode));
         if (!node) {
             fatal_log_printf(file, func, line,
@@ -591,7 +535,6 @@ void FREE_wrapper(void *ptr, const char *file, const char *func, int line)
 
     if (found_node) {
         free(found_node);
-        log_printf(debug, file, func, line, "FREE: %p\n", ptr);
         free(ptr);
         return;
     }

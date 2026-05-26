@@ -57,7 +57,6 @@ static Link *Link_new(const char *linkname, LinkType type)
 
 static CURL *Link_to_curl(Link *link)
 {
-    lprintf(debug, "%s\n", link->f_url);
     CURL *curl = curl_easy_init();
     if (!curl) {
         lprintf(fatal, "curl_easy_init() failed!\n");
@@ -192,7 +191,6 @@ static CURL *Link_to_curl(Link *link)
 
 static void Link_req_file_stat(Link *this_link)
 {
-    lprintf(debug, "%s\n", this_link->f_url);
     CURL *curl = Link_to_curl(this_link);
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     if (ret) {
@@ -233,7 +231,6 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
     }
     int u;
     char s[STATUS_LEN];
-    lprintf(debug, " ... ");
 
     /*
      * Start all uninitialized requests once
@@ -249,7 +246,6 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
     }
 
     if (total_uninitialized == 0) {
-        lprintf(debug, "Done!\n");
         return;
     }
 
@@ -373,7 +369,6 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
 
 static LinkType linkname_to_LinkType(const char *linkname)
 {
-    lprintf(debug, "linkname: %s\n", linkname);
     if (linkname[0] == '\0' || linkname[0] == '/') {
         return LINK_INVALID;
     }
@@ -436,8 +431,6 @@ static int linknames_equal(const char *str_a, const char *str_b)
     }
 
 end:
-    lprintf(debug, "linknames comparison: a: %s, b: %s, comp_len: %zu %s\n",
-            str_a, str_b, comp_len, identical ? ", identical!" : "");
     return identical;
 }
 
@@ -537,7 +530,6 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
 static void LinkTable_fill(LinkTable *linktbl)
 {
     Link *head_link = linktbl->links[0];
-    lprintf(debug, "Filling %s\n", head_link->f_url);
     for (int i = 1; i < linktbl->size; i++) {
         Link *this_link = linktbl->links[i];
         /* Some web sites use characters in their href attributes that really
@@ -716,7 +708,6 @@ LinkTable *LinkTable_new(const char *url)
     if (!linktbl) {
         linktbl = LinkTable_alloc(url);
         linktbl->index_time = time(NULL);
-        lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
 
         /*
          * start downloading the base URL
@@ -744,10 +735,6 @@ LinkTable *LinkTable_new(const char *url)
             lprintf(error, "Failed to save the LinkTable!\n");
         }
     }
-
-    static unsigned long long i = 0;
-    lprintf(debug, "Calling LinkTable_new for the %llu time!\n", i);
-    i++;
 
     free(unescaped_path);
     LinkTable_print(linktbl);
@@ -786,7 +773,6 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
         return -1;
     }
 
-    lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
     if (fwrite(&linktbl->size, sizeof(int), 1, fp) != 1
         || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to save the header of %s!\n", path);
@@ -826,7 +812,6 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     FREE(metadirn);
 
     if (!fp) {
-        lprintf(debug, "Linktable at %s does not exist.", path);
         FREE(path);
         return NULL;
     }
@@ -877,8 +862,6 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     }
 
     linktbl->size = sz;
-    lprintf(debug, "linktbl->index_time: %ld\n", (long)linktbl->index_time);
-
     linktbl->links
         = (Link **)CALLOC( // NOLINT(clang-analyzer-optin.taint.TaintedAlloc)
             sz, sizeof(Link *));
@@ -1201,8 +1184,6 @@ static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
 
     char range_str[64];
     snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    lprintf(debug, "%s: %s\n", link->linkname, range_str);
-
     CURL *curl = Link_to_curl(link);
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header);
     if (ret) {
