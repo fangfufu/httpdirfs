@@ -2,6 +2,7 @@
 
 #include "config.h"
 #include "log.h"
+#include "memcache.h"
 #include "util.h"
 #include <curl/curl.h>
 
@@ -554,6 +555,10 @@ static Cache *Cache_alloc(void)
     Cache *cf = CALLOC(1, sizeof(Cache));
     PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
+    PTHREAD_MUTEX_INIT(&cf->dl_lock, NULL);
+    pthread_cond_init(&cf->dl_cond, NULL);
+    cf->active_dl_offset = -1;
+    cf->active_dl_ts = NULL;
     cf->cache_opened = 1;
     SEM_INIT(&cf->bgt_sem, 0, 1);
     return cf;
@@ -566,6 +571,8 @@ static void Cache_free(Cache *cf)
 {
     PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
     PTHREAD_MUTEX_DESTROY(&cf->w_lock);
+    PTHREAD_MUTEX_DESTROY(&cf->dl_lock);
+    pthread_cond_destroy(&cf->dl_cond);
     SEM_DESTROY(&cf->bgt_sem);
 
     if (cf->path) {
@@ -998,32 +1005,35 @@ static void *Cache_bgdl(void *arg)
 {
     Cache *cf = (Cache *)arg;
 
-    lprintf(cache_lock_debug, "thread %lx: locking w_lock;\n",
-            (unsigned long)pthread_self());
-    PTHREAD_MUTEX_LOCK(&cf->w_lock);
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    off_t dl_offset = cf->next_dl_offset;
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
     lprintf(debug, "thread %lx spawned.\n ", (unsigned long)pthread_self());
-    long recv = Link_download(cf->link, (char *)recv_buf, cf->blksz,
-                              cf->next_dl_offset);
+    long recv
+        = Link_download(cf->link, (char *)recv_buf, cf->blksz, dl_offset, cf);
     if (recv < 0) {
         lprintf(error,
                 "thread %lx received %ld bytes, "
                 "which doesn't make sense\n",
                 (unsigned long)pthread_self(), recv);
         FREE(recv_buf);
-        lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+        if (cf->active_dl_offset == dl_offset) {
+            cf->active_dl_offset = -1;
+            pthread_cond_broadcast(&cf->dl_cond);
+        }
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         SEM_POST(&cf->bgt_sem);
         pthread_exit(NULL);
     }
 
+    PTHREAD_MUTEX_LOCK(&cf->w_lock);
     if ((recv == cf->blksz)
-        || (cf->next_dl_offset
-            == (cf->content_length / cf->blksz * cf->blksz))) {
-        if (Data_write(cf, recv_buf, recv, cf->next_dl_offset) == recv) {
-            Seg_set(cf, cf->next_dl_offset, 1);
+        || (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
+        if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
+            Seg_set(cf, dl_offset, 1);
         }
     } else {
         lprintf(error,
@@ -1031,12 +1041,17 @@ static void *Cache_bgdl(void *arg)
                 "error.\n",
                 recv, cf->blksz);
     }
+    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
     FREE(recv_buf);
 
-    lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
-            (unsigned long)pthread_self());
-    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    if (cf->active_dl_offset == dl_offset) {
+        cf->active_dl_offset = -1;
+        pthread_cond_broadcast(&cf->dl_cond);
+    }
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
     SEM_POST(&cf->bgt_sem);
 
     pthread_exit(NULL);
@@ -1070,68 +1085,106 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
                                const off_t len, const off_t offset_start)
 {
     long send;
-
-    /*
-     * The offset of the segment to be downloaded
-     */
     off_t dl_offset = offset_start / cf->blksz * cf->blksz;
+    int ret;
 
-    /*
-     * ------------- Check if the segment already exists --------------
-     */
+retry:
+    PTHREAD_MUTEX_LOCK(&cf->w_lock);
     if (Seg_exist(cf, dl_offset)) {
         send = Data_read(cf, (uint8_t *)output_buf, len, offset_start);
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
         goto bgdl;
-    } else {
-        /*
-         * Wait for any other download thread to finish
-         */
-
-        lprintf(cache_lock_debug, "thread %lx: locking w_lock;\n",
-                (unsigned long)pthread_self());
-        PTHREAD_MUTEX_LOCK(&cf->w_lock);
-
-        if (Seg_exist(cf, dl_offset)) {
-            /*
-             * The segment now exists - it was downloaded by another
-             * download thread. Send it off and unlock the I/O
-             */
-            send = Data_read(cf, (uint8_t *)output_buf, len, offset_start);
-
-            lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
-                    (unsigned long)pthread_self());
-            PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
-
-            goto bgdl;
-        }
     }
 
-    /*
-     * ------------------ Download the segment ---------------------
-     */
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    if (cf->active_dl_offset == dl_offset) {
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+
+        while (cf->active_dl_offset == dl_offset) {
+            if (cf->active_dl_ts
+                && cf->active_dl_ts->curr_size
+                       >= (size_t)(offset_start - dl_offset + len)) {
+                memcpy(output_buf,
+                       cf->active_dl_ts->data + (offset_start - dl_offset),
+                       len);
+                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+                send = len;
+                goto bgdl;
+            }
+            pthread_cond_wait(&cf->dl_cond, &cf->dl_lock);
+        }
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        PTHREAD_MUTEX_LOCK(&cf->w_lock);
+        if (Seg_exist(cf, dl_offset)) {
+            send = Data_read(cf, (uint8_t *)output_buf, len, offset_start);
+            PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+            goto bgdl;
+        }
+        goto sync_dl;
+    }
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+    ret = sem_trywait(&cf->bgt_sem);
+    if (ret == 0) {
+        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+        if (cf->active_dl_offset == -1) {
+            cf->active_dl_offset = dl_offset;
+            cf->next_dl_offset = dl_offset;
+            cf->active_dl_ts = NULL;
+            pthread_cond_broadcast(&cf->dl_cond);
+            PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+            Cache_bgdl_launcher(cf);
+            PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+            goto retry;
+        }
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        SEM_POST(&cf->bgt_sem);
+    }
+
+sync_dl:
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    if (cf->active_dl_offset == -1) {
+        cf->active_dl_offset = dl_offset;
+    }
+    cf->active_dl_ts = NULL;
+    pthread_cond_broadcast(&cf->dl_cond);
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
     uint8_t *recv_buf = CALLOC(cf->blksz, sizeof(uint8_t));
-    lprintf(debug, "thread %lx: spawned.\n ", (unsigned long)pthread_self());
-    long recv = Link_download(cf->link, (char *)recv_buf, cf->blksz, dl_offset);
+    long recv
+        = Link_download(cf->link, (char *)recv_buf, cf->blksz, dl_offset, cf);
+
+    PTHREAD_MUTEX_LOCK(&cf->w_lock);
+
     if (recv < 0) {
-        lprintf(error,
-                "thread %lx received %ld bytes, "
-                "which doesn't make sense\n",
-                (unsigned long)pthread_self(), recv);
+        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+        if (cf->active_dl_offset == dl_offset) {
+            cf->active_dl_offset = -1;
+            pthread_cond_broadcast(&cf->dl_cond);
+        }
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
-        lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
-                (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
         return recv;
     }
-    /*
-     * check if we have received enough data, write it to the disk
-     *
-     * Condition 1: received the exact amount as the segment size.
-     * Condition 2: offset is the last segment
-     */
     if ((recv == cf->blksz)
         || (dl_offset == (cf->content_length / cf->blksz * cf->blksz))) {
+        if (recv < (offset_start - dl_offset) + len) {
+            lprintf(error,
+                    "received %ld bytes, but required at least %ld bytes\n",
+                    recv, (long)((offset_start - dl_offset) + len));
+            PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+            if (cf->active_dl_offset == dl_offset) {
+                cf->active_dl_offset = -1;
+                pthread_cond_broadcast(&cf->dl_cond);
+            }
+            PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+            FREE(recv_buf);
+            PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+            return -EIO;
+        }
         if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
             Seg_set(cf, dl_offset, 1);
         }
@@ -1140,7 +1193,23 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
                 "received %ld rather than %d, possible network "
                 "error.\n",
                 recv, cf->blksz);
+        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+        if (cf->active_dl_offset == dl_offset) {
+            cf->active_dl_offset = -1;
+            pthread_cond_broadcast(&cf->dl_cond);
+        }
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        FREE(recv_buf);
+        PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+        return -EIO;
     }
+
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    if (cf->active_dl_offset == dl_offset) {
+        cf->active_dl_offset = -1;
+        pthread_cond_broadcast(&cf->dl_cond);
+    }
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
     send = len;
     if (offset_start < dl_offset
         || (size_t)(offset_start - dl_offset) + (size_t)send
@@ -1151,30 +1220,26 @@ static long Cache_read_segment(Cache *cf, char *const output_buf,
         memcpy(output_buf, recv_buf + (offset_start - dl_offset), send);
     }
     FREE(recv_buf);
-
-    lprintf(cache_lock_debug, "thread %lx: unlocking w_lock;\n",
-            (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-    /*
-     * ----------- Download the next segment in background -----------------
-     */
 bgdl: {
 }
     off_t next_dl_offset = dl_offset + cf->blksz;
     if (!Seg_exist(cf, next_dl_offset) && next_dl_offset < cf->content_length) {
-        /*
-         * Stop the spawning of multiple background pthreads
-         */
-        int ret = sem_trywait(&cf->bgt_sem);
+        ret = sem_trywait(&cf->bgt_sem);
         if (!ret) {
-            lprintf(cache_lock_debug,
-                    "parent thread %lx: sem_trywait successful\n",
-                    (unsigned long)pthread_self());
-            cf->next_dl_offset = next_dl_offset;
-            Cache_bgdl_launcher(cf);
-        } else if (errno != EAGAIN) {
-            lprintf(fatal, "sem_trywait(): %d, %s\n", errno, strerror(errno));
+            PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+            if (cf->active_dl_offset == -1) {
+                cf->active_dl_offset = next_dl_offset;
+                cf->next_dl_offset = next_dl_offset;
+                cf->active_dl_ts = NULL;
+                pthread_cond_broadcast(&cf->dl_cond);
+                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+                Cache_bgdl_launcher(cf);
+            } else {
+                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+                SEM_POST(&cf->bgt_sem);
+            }
         }
     }
 
