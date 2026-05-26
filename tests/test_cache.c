@@ -56,9 +56,30 @@ void test_CacheSystem_get_cache_dir(void)
     FREE(dir);
 }
 
+void test_ActiveDownload_find(void)
+{
+    Cache cf = {0};
+
+    // 1. Search in an empty list must return NULL
+    TEST_ASSERT_NULL(ActiveDownload_find(&cf, 1024));
+
+    // 2. Construct a mock active downloads linked list
+    ActiveDownload ad1 = {.offset = 1024, .ts = NULL, .next = NULL};
+    ActiveDownload ad2 = {.offset = 2048, .ts = NULL, .next = &ad1};
+    cf.active_dls = &ad2;
+
+    // 3. Verify that matching offsets are correctly resolved
+    TEST_ASSERT_EQUAL_PTR(&ad2, ActiveDownload_find(&cf, 2048));
+    TEST_ASSERT_EQUAL_PTR(&ad1, ActiveDownload_find(&cf, 1024));
+
+    // 4. Verify that non-existent offsets correctly return NULL
+    TEST_ASSERT_NULL(ActiveDownload_find(&cf, 4096));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_CacheSystem_get_cache_dir);
+    RUN_TEST(test_ActiveDownload_find);
     return UNITY_END();
 }
