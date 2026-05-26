@@ -197,7 +197,7 @@ void test_Cache_invalid_zero_length_disk_files(void)
     // Verify that the recreated meta file is now not empty (it has valid
     // metadata written)
     struct stat st;
-    TEST_ASSERT_EQUAL_INT(0, stat(meta_filepath, &st));
+    TEST_ASSERT_EQUAL_INT(0, fstat(fileno(cf->mfp), &st));
     TEST_ASSERT_TRUE(st.st_size > 0);
 
     // Close the cache
@@ -207,12 +207,14 @@ void test_Cache_invalid_zero_length_disk_files(void)
     // Create invalid metadata file with disk_content_length = 0
     f_meta = fopen(meta_filepath, "w");
     TEST_ASSERT_NOT_NULL(f_meta);
+    long bad_time = 0;
     off_t bad_len = 0;
     int bad_blksz = 4096;
-    off_t bad_segbc = 0;
+    long bad_segbc = 0;
+    fwrite(&bad_time, sizeof(long), 1, f_meta);
     fwrite(&bad_len, sizeof(off_t), 1, f_meta);
     fwrite(&bad_blksz, sizeof(int), 1, f_meta);
-    fwrite(&bad_segbc, sizeof(off_t), 1, f_meta);
+    fwrite(&bad_segbc, sizeof(long), 1, f_meta);
     fclose(f_meta);
 
     // Re-open
@@ -223,7 +225,7 @@ void test_Cache_invalid_zero_length_disk_files(void)
 
     // Verify it was again invalidated, recreated, and now has a valid non-zero
     // content_length
-    TEST_ASSERT_EQUAL_INT(0, stat(meta_filepath, &st));
+    TEST_ASSERT_EQUAL_INT(0, fstat(fileno(cf->mfp), &st));
     TEST_ASSERT_TRUE(st.st_size > 0);
 
     Cache_close(cf);

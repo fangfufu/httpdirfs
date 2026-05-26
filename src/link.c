@@ -1272,7 +1272,8 @@ static void Link_download_finish_transfer(Cache *cf, off_t offset,
 long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
                    Cache *cf)
 {
-    if (link->content_length == 0) {
+    if (link->content_length == 0 || offset < 0
+        || (size_t)offset >= link->content_length) {
         return 0;
     }
 
