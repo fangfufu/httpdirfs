@@ -724,6 +724,9 @@ static void Meta_create(Cache *cf)
 int Cache_create(const char *path)
 {
     Link *this_link = path_to_Link(path);
+    if (!this_link) {
+        return 1;
+    }
 
     char *fn;
 
@@ -782,7 +785,9 @@ int Cache_create(const char *path)
         curl_free(fn);
     }
 
-    LinkTable_unref(this_link->parent_table);
+    if (this_link) {
+        LinkTable_unref(this_link->parent_table);
+    }
 
     return res;
 }
