@@ -293,14 +293,61 @@ to the compiled `httpdirfs` binary and the desired mode flag:
 
 ---
 
-## Memory Management
+## Wrapper Functions
 
-The project uses wrappers for memory allocation to ensure consistent error
-handling.
+To ensure consistent error handling, memory tracking, and safe concurrency, the
+project uses custom macro and function wrappers around standard library calls.
+**Developers should always use these wrappers instead of their standard C
+counterparts.**
 
-- Use `CALLOC(nmemb, size)` instead of `calloc()`. It automatically handles
-  allocation failures by logging a fatal error.
-- Use `FREE(ptr)` instead of `free()`.
+### 1. Memory Management Wrappers
+
+Memory allocation wrappers automatically handle allocation failures by printing
+a fatal backtrace and exiting, eliminating the need for manual null-checks after
+every call. They also track allocations to prevent memory leaks in debug
+configurations.
+
+| Standard Function | Wrapper Macro         | Notes & Safety Rules                                                                     |
+| :---------------- | :-------------------- | :--------------------------------------------------------------------------------------- |
+| `calloc`          | `CALLOC(nmemb, size)` | Automatically terminates with a `fatal` error on allocation failure.                     |
+| `realloc`         | `REALLOC(ptr, size)`  | Safely handles resizing and tracks allocations.                                          |
+| `strdup`          | `STRDUP(s)`           | Duplicates string with error checking and tracking.                                      |
+| `strndup`         | `STRNDUP(s, n)`       | Duplicates at most `n` characters with error checking and tracking.                      |
+| `realpath`        | `REALPATH(p, r)`      | Resolving path names with wrapper checks.                                                |
+| `free`            | `FREE(ptr)`           | Automatically sets the pointer variable to `NULL` after freeing to prevent double-frees. |
+
+<!-- prettier-ignore -->
+> [!WARNING]
+> **Important rules for `FREE(ptr)`:**
+> - `FREE` modifies the pointer itself by setting it to `NULL`. This will fail to compile if used on const-qualified pointer variables (e.g., `char * const p`).
+> - When used on function parameters (e.g., `void func(void *ptr) { FREE(ptr); }`), it only nullifies the local parameter copy. The caller's original pointer remains unchanged (and dangling), so be sure to nullify the caller's pointer manually.
+
+### 2. Concurrency and Synchronization Wrappers
+
+All pthread mutexes, condition variables, and semaphores must be manipulated via
+wrappers. These wrappers perform automatic validation of return codes and assert
+that no errors occur during locking, unlocking, waiting, or signaling.
+
+#### Pthread Mutexes
+
+- **Initialize**: `PTHREAD_MUTEX_INIT(mutex, attr)` (wraps `pthread_mutex_init`)
+- **Lock**: `PTHREAD_MUTEX_LOCK(mutex)` (wraps `pthread_mutex_lock`)
+- **Unlock**: `PTHREAD_MUTEX_UNLOCK(mutex)` (wraps `pthread_mutex_unlock`)
+- **Destroy**: `PTHREAD_MUTEX_DESTROY(mutex)` (wraps `pthread_mutex_destroy`)
+
+#### Pthread Condition Variables
+
+- **Initialize**: `PTHREAD_COND_INIT(cond, attr)` (wraps `pthread_cond_init`)
+- **Wait**: `PTHREAD_COND_WAIT(cond, mutex)` (wraps `pthread_cond_wait`)
+- **Broadcast**: `PTHREAD_COND_BROADCAST(cond)` (wraps `pthread_cond_broadcast`)
+- **Destroy**: `PTHREAD_COND_DESTROY(cond)` (wraps `pthread_cond_destroy`)
+
+#### POSIX Semaphores
+
+- **Initialize**: `SEM_INIT(sem, pshared, value)` (wraps `sem_init`)
+- **Wait**: `SEM_WAIT(sem)` (wraps `sem_wait`)
+- **Post**: `SEM_POST(sem)` (wraps `sem_post`)
+- **Destroy**: `SEM_DESTROY(sem)` (wraps `sem_destroy`)
 
 ---
 
