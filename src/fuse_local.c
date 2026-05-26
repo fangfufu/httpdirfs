@@ -118,8 +118,6 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
          */
         if (!fi->fh) {
             lprintf(fatal, "Cache file creation failure for %s.\n", path);
-            LinkTable_unref(link->parent_table);
-            return -ENOENT;
         }
     }
     LinkTable_unref(link->parent_table);

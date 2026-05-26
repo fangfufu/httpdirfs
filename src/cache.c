@@ -632,12 +632,12 @@ static int Cache_exist(const char *fn)
  */
 void Cache_delete(const char *fn)
 {
-    Link *link = NULL;
+    Link *link = path_to_Link(fn);
     if (CONFIG.mode == SONIC) {
-        link = path_to_Link(fn);
+        if (!link) {
+            return;
+        }
         fn = link->sonic.id;
-    } else {
-        link = path_to_Link(fn);
     }
 
     char *metafn = path_append(META_DIR, fn);

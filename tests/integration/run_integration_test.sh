@@ -45,7 +45,7 @@ while [[ $# -gt 0 ]]; do
             if [[ -z "${HTTPDIRFS_BIN}" ]]; then
                 HTTPDIRFS_BIN="$1"
             else
-                echo -e "\033[0;31m[ERROR]\033[0m Multiple binary paths specified or extra arguments: $@" >&2
+                echo -e "\033[0;31m[ERROR]\033[0m Multiple binary paths specified or extra arguments: $*" >&2
                 exit 1
             fi
             shift

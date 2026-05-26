@@ -929,6 +929,10 @@ LinkTable *path_to_LinkTable(const char *path)
 
         PTHREAD_MUTEX_LOCK(&link_lock);
         next_table = link->next_table;
+        if (next_table) {
+            next_table->refcount++;
+            next_table->orphaned = 0;
+        }
         PTHREAD_MUTEX_UNLOCK(&link_lock);
     }
 
@@ -949,6 +953,13 @@ LinkTable *path_to_LinkTable(const char *path)
             lprintf(fatal, "Invalid CONFIG.mode: %d\n", CONFIG.mode);
         }
 
+        if (!new_table) {
+            if (link) {
+                LinkTable_unref(link->parent_table);
+            }
+            return NULL;
+        }
+
         PTHREAD_MUTEX_LOCK(&link_lock);
         if (!link->next_table) {
             link->next_table = new_table;
@@ -957,12 +968,16 @@ LinkTable *path_to_LinkTable(const char *path)
             if (new_table->parent_tbl) {
                 new_table->parent_tbl->refcount++;
             }
+            new_table->refcount++;
+            new_table->orphaned = 0;
             next_table = new_table;
         } else {
             PTHREAD_MUTEX_UNLOCK(&link_lock);
             LinkTable_free(new_table);
             PTHREAD_MUTEX_LOCK(&link_lock);
             next_table = link->next_table;
+            next_table->refcount++;
+            next_table->orphaned = 0;
         }
         PTHREAD_MUTEX_UNLOCK(&link_lock);
 
@@ -970,8 +985,6 @@ LinkTable *path_to_LinkTable(const char *path)
             LinkTable_uninitialised_fill(next_table);
         }
     }
-
-    LinkTable_ref(next_table);
 
     if (link) {
         LinkTable_unref(link->parent_table);
@@ -1039,6 +1052,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                  */
                 LinkTable *next_table = linktbl->links[i]->next_table;
                 if (!next_table) {
+                    linktbl->refcount++;
                     PTHREAD_MUTEX_UNLOCK(&link_lock);
                     LinkTable *new_table = NULL;
                     if (CONFIG.mode == NORMAL) {
@@ -1055,6 +1069,26 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                     } else {
                         lprintf(fatal, "Invalid CONFIG.mode\n");
                     }
+
+                    if (!new_table) {
+                        PTHREAD_MUTEX_LOCK(&link_lock);
+                        linktbl->refcount--;
+                        if (linktbl->refcount == 0 && linktbl->orphaned) {
+                            LinkTable *parent = linktbl->parent_tbl;
+                            Link *parent_link = linktbl->parent_link;
+                            if (parent_link) {
+                                parent_link->next_table = NULL;
+                            }
+                            PTHREAD_MUTEX_UNLOCK(&link_lock);
+                            LinkTable_free(linktbl);
+                            if (parent) {
+                                LinkTable_unref(parent);
+                            }
+                            PTHREAD_MUTEX_LOCK(&link_lock);
+                        }
+                        return NULL;
+                    }
+
                     PTHREAD_MUTEX_LOCK(&link_lock);
                     if (!linktbl->links[i]->next_table) {
                         linktbl->links[i]->next_table = new_table;
@@ -1068,6 +1102,7 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                         PTHREAD_MUTEX_LOCK(&link_lock);
                         next_table = linktbl->links[i]->next_table;
                     }
+                    linktbl->refcount--;
                 }
                 return path_to_Link_recursive(next_path, next_table);
             }
@@ -1091,7 +1126,6 @@ Link *path_to_Link(const char *path)
 
     if (link && link->parent_table) {
         link->parent_table->refcount++;
-        link->parent_table->orphaned = 0;
     }
 
     lprintf(link_lock_debug, "thread %lx: unlocking link_lock;\n",

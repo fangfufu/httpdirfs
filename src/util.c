@@ -551,6 +551,11 @@ void FREE_wrapper(void *ptr, const char *file, const char *func, int line)
 
 void mem_cleanup(void)
 {
+    if (CONFIG.http_headers) {
+        curl_slist_free_all(CONFIG.http_headers);
+        CONFIG.http_headers = NULL;
+    }
+
 #ifdef DEBUG
     // 1. Traverse and tear down the whole filesystem recursively
     if (ROOT_LINK_TBL) {
@@ -619,10 +624,6 @@ void mem_cleanup(void)
     pthread_mutex_unlock(&mem_mutex);
     pthread_mutex_destroy(&mem_mutex);
 #endif
-    if (CONFIG.http_headers) {
-        curl_slist_free_all(CONFIG.http_headers);
-        CONFIG.http_headers = NULL;
-    }
 }
 
 char *str_to_hex(char *s)
