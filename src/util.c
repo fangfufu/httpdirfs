@@ -270,6 +270,8 @@ char *generate_md5sum(const char *str)
     for (unsigned int i = 0; i < md5_digest_len; i++) {
         sprintf(out + (2 * (size_t)i), "%02x", md5_digest[i]);
     }
+
+    OPENSSL_free(md5_digest);
     return out;
 }
 
