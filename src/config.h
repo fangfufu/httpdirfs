@@ -112,4 +112,9 @@ typedef struct {
  */
 extern ConfigStruct CONFIG;
 
+/**
+ * \brief Free any heap-allocated configuration options
+ */
+void Config_cleanup(void);
+
 #endif

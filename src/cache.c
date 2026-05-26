@@ -172,6 +172,16 @@ void CacheSystem_init(const char *path, int url_supplied)
     CACHE_SYSTEM_INIT = 1;
 }
 
+void CacheSystem_cleanup(void)
+{
+    if (CACHE_SYSTEM_INIT) {
+        FREE(META_DIR);
+        FREE(DATA_DIR);
+        PTHREAD_MUTEX_DESTROY(&cf_lock);
+        CACHE_SYSTEM_INIT = 0;
+    }
+}
+
 static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
                    struct FTW *ftwbuf)
 {
