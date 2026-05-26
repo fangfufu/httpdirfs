@@ -1271,6 +1271,11 @@ static void Link_download_finish_transfer(Cache *cf, off_t offset,
 long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
                    Cache *cf)
 {
+    if (req_size == 0 || link->content_length == 0 || offset < 0
+        || (size_t)offset >= link->content_length) {
+        return 0;
+    }
+
     TransferStruct ts = {0};
     TransferStruct header = {0};
     curl_off_t recv_sz;

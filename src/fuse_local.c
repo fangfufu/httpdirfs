@@ -29,7 +29,7 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 {
     lprintf(info, "%s\n", path);
     (void)path;
-    if (CACHE_SYSTEM_INIT) {
+    if (CACHE_SYSTEM_INIT && fi->fh) {
         Cache_close((Cache *)fi->fh);
     }
     return 0;
@@ -89,7 +89,7 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi)
 {
     long received;
-    if (CACHE_SYSTEM_INIT) {
+    if (CACHE_SYSTEM_INIT && fi->fh) {
         received = Cache_read((Cache *)fi->fh, buf, size, offset);
     } else {
         received = path_download(path, buf, size, offset);
@@ -110,6 +110,11 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         return -EROFS;
     }
     if (CACHE_SYSTEM_INIT) {
+        if (link->content_length == 0) {
+            fi->fh = 0; /* valid empty file: bypass cache creation */
+            LinkTable_unref(link->parent_table);
+            return 0;
+        }
         fi->fh = (uint64_t)Cache_open(path);
         /*
          * The cache definitely cannot be opened for some reason.
