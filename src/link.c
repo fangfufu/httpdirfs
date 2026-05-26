@@ -1275,8 +1275,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
 
         if (cf) {
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-            if (cf->active_dl_offset == offset) {
-                cf->active_dl_ts = &ts;
+            ActiveDownload *ad = ActiveDownload_find(cf, offset);
+            if (ad) {
+                ad->ts = &ts;
                 PTHREAD_COND_BROADCAST(&cf->dl_cond);
             }
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
@@ -1297,8 +1298,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
             if (cf) {
                 PTHREAD_MUTEX_LOCK(&cf->dl_lock);
                 ts.transferring = 0;
-                if (cf->active_dl_ts == &ts) {
-                    cf->active_dl_ts = NULL;
+                ActiveDownload *ad = ActiveDownload_find(cf, offset);
+                if (ad && ad->ts == &ts) {
+                    ad->ts = NULL;
                 }
                 PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
@@ -1321,8 +1323,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
             if (cf) {
                 PTHREAD_MUTEX_LOCK(&cf->dl_lock);
                 ts.transferring = 0;
-                if (cf->active_dl_ts == &ts) {
-                    cf->active_dl_ts = NULL;
+                ActiveDownload *ad = ActiveDownload_find(cf, offset);
+                if (ad && ad->ts == &ts) {
+                    ad->ts = NULL;
                 }
                 PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
@@ -1341,8 +1344,9 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
     if (cf) {
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         ts.transferring = 0;
-        if (cf->active_dl_ts == &ts) {
-            cf->active_dl_ts = NULL;
+        ActiveDownload *ad = ActiveDownload_find(cf, offset);
+        if (ad && ad->ts == &ts) {
+            ad->ts = NULL;
         }
         PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
