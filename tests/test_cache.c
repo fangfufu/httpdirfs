@@ -93,6 +93,22 @@ void test_Cache_read_zero_length(void)
     TEST_ASSERT_EQUAL_INT(0, res);
 }
 
+void test_Cache_read_past_eof(void)
+{
+    Cache cf = {0};
+    Link link = {0};
+    link.content_length = 100;
+    cf.link = &link;
+    cf.blksz = 4096;
+
+    char buf[10];
+    long res = Cache_read(&cf, buf, sizeof(buf), 100);
+    TEST_ASSERT_EQUAL_INT(0, res);
+
+    res = Cache_read(&cf, buf, sizeof(buf), 150);
+    TEST_ASSERT_EQUAL_INT(0, res);
+}
+
 static void cleanup_temp_dir(const char *tmp_cache_dir)
 {
     char filepath[512];
@@ -229,6 +245,7 @@ int main(void)
     RUN_TEST(test_CacheSystem_get_cache_dir);
     RUN_TEST(test_ActiveDownload_find);
     RUN_TEST(test_Cache_read_zero_length);
+    RUN_TEST(test_Cache_read_past_eof);
     RUN_TEST(test_Cache_invalid_zero_length_disk_files);
     return UNITY_END();
 }
