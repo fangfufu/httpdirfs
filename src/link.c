@@ -1251,6 +1251,24 @@ bug report, please include the following HTTP header information:\n%s\n",
     return recv;
 }
 
+static void Link_download_finish_transfer(Cache *cf, off_t offset,
+                                          TransferStruct *ts)
+{
+    if (!cf) {
+        ts->transferring = 0;
+        return;
+    }
+
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    ts->transferring = 0;
+    ActiveDownload *ad = ActiveDownload_find(cf, offset);
+    if (ad && ad->ts == ts) {
+        ad->ts = NULL;
+    }
+    PTHREAD_COND_BROADCAST(&cf->dl_cond);
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+}
+
 long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
                    Cache *cf)
 {
@@ -1295,18 +1313,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
         recv_sz = Link_download_cleanup(curl, &header);
 
         if (recv_sz < 0) {
-            if (cf) {
-                PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-                ts.transferring = 0;
-                ActiveDownload *ad = ActiveDownload_find(cf, offset);
-                if (ad && ad->ts == &ts) {
-                    ad->ts = NULL;
-                }
-                PTHREAD_COND_BROADCAST(&cf->dl_cond);
-                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-            } else {
-                ts.transferring = 0;
-            }
+            Link_download_finish_transfer(cf, offset, &ts);
             FREE(ts.data);
             if (recv_sz == -EAGAIN) {
                 lprintf(warning, "HTTP temporary failure, retrying...\n");
@@ -1320,18 +1327,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
             lprintf(error,
                     "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
                     req_size, recv_sz);
-            if (cf) {
-                PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-                ts.transferring = 0;
-                ActiveDownload *ad = ActiveDownload_find(cf, offset);
-                if (ad && ad->ts == &ts) {
-                    ad->ts = NULL;
-                }
-                PTHREAD_COND_BROADCAST(&cf->dl_cond);
-                PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-            } else {
-                ts.transferring = 0;
-            }
+            Link_download_finish_transfer(cf, offset, &ts);
             FREE(ts.data);
             sleep(CONFIG.http_wait_sec);
             continue;
@@ -1341,18 +1337,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
         break;
     } while (1);
 
-    if (cf) {
-        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-        ts.transferring = 0;
-        ActiveDownload *ad = ActiveDownload_find(cf, offset);
-        if (ad && ad->ts == &ts) {
-            ad->ts = NULL;
-        }
-        PTHREAD_COND_BROADCAST(&cf->dl_cond);
-        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-    } else {
-        ts.transferring = 0;
-    }
+    Link_download_finish_transfer(cf, offset, &ts);
 
     memmove(output_buf, ts.data, recv_sz);
     FREE(ts.data);
