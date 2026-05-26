@@ -32,23 +32,32 @@ repos:
         files: \.(c|h)$
     -   id: meson-test
         name: Meson Test
-        entry: meson test -C builddir --no-suite integration
+        entry: meson test -C builddir
         language: system
         pass_filenames: false
         files: \.(c|h)$
-    -   id: integration-test
-        name: Integration Test
-        entry: meson test -C builddir --suite integration --verbose
+    -   id: all-tests
+        name: All Tests
+        entry: >-
+          meson test -C builddir
+          --suite unit_test
+          --suite integration_short
+          --suite integration_long
+          --verbose
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
-    -   id: integration-test-clang
-        name: Integration Test (Clang)
+    -   id: all-tests-clang
+        name: All Tests (Clang)
         entry: >-
           bash -c 'if [ ! -d builddir_clang ]; then
           CC=clang meson setup builddir_clang; fi &&
-          meson test -C builddir_clang --suite integration --verbose'
+          meson test -C builddir_clang
+          --suite unit_test
+          --suite integration_short
+          --suite integration_long
+          --verbose'
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
