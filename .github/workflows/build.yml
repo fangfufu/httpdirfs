@@ -8,8 +8,11 @@ on:
 
 jobs:
   build-mac:
-    name: Build (macOS)
+    name: Build (macOS, ${{ matrix.buildtype }})
     runs-on: macos-latest
+    strategy:
+      matrix:
+        buildtype: [debug, release]
     steps:
     - uses: actions/checkout@v5
 
@@ -31,7 +34,7 @@ jobs:
         OPENSSL_PREFIX=$(brew --prefix openssl@3)
         BREW_PREFIX=$(brew --prefix)
         export PKG_CONFIG_PATH="$OPENSSL_PREFIX/lib/pkgconfig:$BREW_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
-        meson setup builddir
+        meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
 
     - name: Compile
       run: meson compile -C builddir
@@ -43,15 +46,16 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v5
       with:
-        name: meson-logs-mac
+        name: meson-logs-mac-${{ matrix.buildtype }}
         path: builddir/meson-logs/
 
   build-ubuntu:
-    name: Build (Ubuntu, ${{ matrix.compiler }})
+    name: Build (Ubuntu, ${{ matrix.compiler }}, ${{ matrix.buildtype }})
     runs-on: ubuntu-latest
     strategy:
       matrix:
         compiler: [gcc, clang]
+        buildtype: [debug, release]
     steps:
     - uses: actions/checkout@v5
 
@@ -75,7 +79,7 @@ jobs:
     - name: Setup Meson
       run: |
         export CC=${{ matrix.compiler }}
-        meson setup builddir
+        meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
 
     - name: Compile
       run: meson compile -C builddir
@@ -90,5 +94,5 @@ jobs:
       if: always()
       uses: actions/upload-artifact@v5
       with:
-        name: meson-logs-ubuntu-${{ matrix.compiler }}
+        name: meson-logs-ubuntu-${{ matrix.compiler }}-${{ matrix.buildtype }}
         path: builddir/meson-logs/
