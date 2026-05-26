@@ -87,6 +87,43 @@ void sem_post_wrapper(const char *file, const char *func, int line, sem_t *sem,
 #define SEM_POST(sem) sem_post_wrapper(__FILE__, __func__, __LINE__, sem, #sem)
 
 /**
+ * \brief wrapper for pthread_cond_init(), with error handling
+ */
+void pthread_cond_init_wrapper(pthread_cond_t *cond,
+                               const pthread_condattr_t *attr,
+                               const char *file, const char *func, int line,
+                               const char *cond_name);
+#define PTHREAD_COND_INIT(cond, attr)                                          \
+    pthread_cond_init_wrapper(cond, attr, __FILE__, __func__, __LINE__, #cond)
+
+/**
+ * \brief wrapper for pthread_cond_destroy(), with error handling
+ */
+void pthread_cond_destroy_wrapper(pthread_cond_t *cond, const char *file,
+                                  const char *func, int line,
+                                  const char *cond_name);
+#define PTHREAD_COND_DESTROY(cond)                                             \
+    pthread_cond_destroy_wrapper(cond, __FILE__, __func__, __LINE__, #cond)
+
+/**
+ * \brief wrapper for pthread_cond_broadcast(), with error handling
+ */
+void pthread_cond_broadcast_wrapper(const char *file, const char *func,
+                                    int line, pthread_cond_t *cond,
+                                    const char *cond_name);
+#define PTHREAD_COND_BROADCAST(cond)                                           \
+    pthread_cond_broadcast_wrapper(__FILE__, __func__, __LINE__, cond, #cond)
+
+/**
+ * \brief wrapper for pthread_cond_wait(), with error handling
+ */
+void pthread_cond_wait_wrapper(const char *file, const char *func, int line,
+                               pthread_cond_t *cond, pthread_mutex_t *mutex,
+                               const char *cond_name, const char *mutex_name);
+#define PTHREAD_COND_WAIT(cond, mutex)                                         \
+    pthread_cond_wait_wrapper(__FILE__, __func__, __LINE__, cond, mutex, #cond, #mutex)
+
+/**
  * \brief wrapper for exit(EXIT_FAILURE), with error handling
  */
 _Noreturn void exit_failure(void);
