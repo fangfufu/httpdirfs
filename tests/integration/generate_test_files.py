@@ -69,23 +69,21 @@ def format_size(size):
 
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <output_directory> [--short | --long | --all | --large]",
+        print(f"Usage: {sys.argv[0]} <output_directory> [--short | --long | --all]",
               file=sys.stderr)
         sys.exit(1)
 
     output_dir = sys.argv[1]
 
     # Parse options
-    is_short = True
+    is_short = False
     is_large = False
 
     if "--short" in sys.argv:
         is_short = True
-        is_large = False
     elif "--long" in sys.argv:
-        is_short = False
         is_large = True
-    elif "--large" in sys.argv or "--all" in sys.argv:
+    elif "--all" in sys.argv:
         is_short = True
         is_large = True
 
