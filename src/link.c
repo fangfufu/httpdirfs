@@ -1271,8 +1271,14 @@ static void Link_download_finish_transfer(Cache *cf, off_t offset,
     ActiveDownload *ad = ActiveDownload_find(cf, offset);
     if (ad && ad->ts == ts) {
         ad->ts = NULL;
+        /* Broadcast to wake waiters so they observe that the transfer is done.
+         * Although the waiter loop will see ad->ts == NULL and temporarily
+         * block on cond wait again, the subsequent ActiveDownload_remove call
+         * will unlink the node and perform a second broadcast to let them
+         * exit the wait loop entirely. */
+        PTHREAD_COND_BROADCAST(&ad->cond);
     }
-    PTHREAD_COND_BROADCAST(&cf->dl_cond);
+    ts->ad_ptr = NULL;
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 }
 
@@ -1308,7 +1314,8 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
             ActiveDownload *ad = ActiveDownload_find(cf, offset);
             if (ad) {
                 ad->ts = &ts;
-                PTHREAD_COND_BROADCAST(&cf->dl_cond);
+                ts.ad_ptr = ad;
+                PTHREAD_COND_BROADCAST(&ad->cond);
             }
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         }

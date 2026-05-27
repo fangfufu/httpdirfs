@@ -1,6 +1,10 @@
 #ifndef CACHE_H
 #define CACHE_H
 #include <sys/types.h>
+#include <pthread.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <semaphore.h>
 
 /**
  * \file cache.h
@@ -22,13 +26,18 @@ struct TransferStruct;
 typedef struct ActiveDownload {
     off_t offset;
     struct TransferStruct *ts;
+    pthread_cond_t cond;
+    /**
+     * \brief Reference count for lifetime management.
+     * \details Starts at 1 when added to cf->active_dls.
+     * Each waiter thread increments the reference count before waiting.
+     * When unlinked from the list in ActiveDownload_remove, the list's
+     * reference is dropped. The structure is freed only when the reference
+     * count reaches 0.
+     */
+    int refcount;
     struct ActiveDownload *next;
 } ActiveDownload;
-
-#include <stdio.h>
-#include <stdint.h>
-#include <pthread.h>
-#include <semaphore.h>
 
 /**
  * \brief Type definition for a cache segment
@@ -67,8 +76,6 @@ struct Cache {
 
     /** \brief mutex lock for background download progress */
     pthread_mutex_t dl_lock;
-    /** \brief condition variable for background download progress */
-    pthread_cond_t dl_cond;
     /** \brief active downloads list */
     ActiveDownload *active_dls;
 
