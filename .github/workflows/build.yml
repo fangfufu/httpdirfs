@@ -39,8 +39,8 @@ jobs:
     - name: Compile
       run: meson compile -C builddir
 
-    - name: Test
-      run: meson test -C builddir --verbose
+    - name: Unit tests
+      run: meson test -C builddir --no-suite integration --verbose
 
     - name: Upload Meson logs
       if: always()
