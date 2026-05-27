@@ -1,18 +1,20 @@
 #include "link.h"
 
+#include "cache.h"
+#include "config.h"
 #include "log.h"
 #include "memcache.h"
+#include "network.h"
 #include "util.h"
-
-#include <gumbo.h>
 
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <gumbo.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/param.h>
+#include <unistd.h>
 
 #define STATUS_LEN 64
 

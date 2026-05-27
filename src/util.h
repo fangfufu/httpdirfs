@@ -8,6 +8,9 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #ifdef __APPLE__
 typedef struct {
@@ -18,9 +21,6 @@ typedef struct {
 #else
 typedef sem_t sys_sem_t;
 #endif
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 /**
  * \brief append a path

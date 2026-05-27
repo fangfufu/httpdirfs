@@ -1,6 +1,11 @@
 #ifndef MEMCACHE_H
 #define MEMCACHE_H
-#include "link.h"
+
+#include <stddef.h>
+
+typedef struct Link Link;
+typedef struct Cache Cache;
+
 
 /**
  * \brief specify the type of data transfer
@@ -10,7 +15,7 @@ typedef enum { FILESTAT = 's', DATA = 'd' } TransferType;
 /**
  * \brief For storing transfer data and metadata
  */
-struct TransferStruct {
+typedef struct TransferStruct {
     /** \brief The array to store the data */
     char *data;
     /** \brief The current size of the array */
@@ -25,7 +30,7 @@ struct TransferStruct {
     Cache *cache_ptr;
     /** \brief The ActiveDownload structure associated with the transfer */
     struct ActiveDownload *ad_ptr;
-};
+} TransferStruct;
 
 /**
  * \brief Callback function for file transfer

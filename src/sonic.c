@@ -1,16 +1,15 @@
 #include "sonic.h"
 
 #include "config.h"
-#include "log.h"
 #include "link.h"
+#include "log.h"
 #include "memcache.h"
 #include "util.h"
 
-#include <expat.h>
-
 #include <assert.h>
-#include <string.h>
+#include <expat.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 typedef struct {

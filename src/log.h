@@ -1,7 +1,6 @@
 #ifndef LOG_H
 #define LOG_H
 
-#include "util.h"
 
 /**
  * \brief Log types

@@ -1,6 +1,7 @@
 #include "cache.h"
 
 #include "config.h"
+#include "link.h"
 #include "log.h"
 #include "memcache.h"
 #include "util.h"

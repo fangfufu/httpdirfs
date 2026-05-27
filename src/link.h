@@ -6,15 +6,17 @@
  * \brief link related structures and functions
  */
 
+#include <curl/curl.h>
+#include <limits.h>
+#include <sys/types.h>
+
+#include "memcache.h"
+#include "sonic.h"
+
+typedef struct Cache Cache;
 typedef struct Link Link;
 typedef struct LinkTable LinkTable;
 
-#include "cache.h"
-#include "config.h"
-#include "network.h"
-#include "sonic.h"
-
-#include <curl/curl.h>
 
 /**
  * \brief the link type

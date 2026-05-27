@@ -4,19 +4,18 @@
 #include "log.h"
 
 #ifdef DEBUG
-#include "link.h"
 #include "cache.h"
+#include "link.h"
 #endif
 
 #include <curl/curl.h>
-#include <openssl/evp.h>
-#include <uuid/uuid.h>
-
 #include <errno.h>
 #include <execinfo.h>
+#include <openssl/evp.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <uuid/uuid.h>
 
 
 /**

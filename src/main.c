@@ -1,15 +1,18 @@
+#include "cache.h"
+#include "config.h"
 #include "fuse_local.h"
 #include "link.h"
 #include "log.h"
+#include "network.h"
 #include "util.h"
 
 #include <ctype.h>
 #include <errno.h>
-#include <unistd.h>
-#include <sys/stat.h>
 #include <getopt.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_help(char *program_name, int long_help);

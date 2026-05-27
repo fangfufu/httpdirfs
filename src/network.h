@@ -6,10 +6,6 @@
  * \brief network related functions
  */
 
-typedef struct TransferStruct TransferStruct;
-
-#include "link.h"
-
 #include <curl/curl.h>
 
 /** \brief HTTP response codes */

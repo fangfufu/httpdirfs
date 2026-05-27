@@ -1,15 +1,16 @@
-#include <unity.h>
+#include "../src/cache.h"
+#include "../src/config.h"
+#include "../src/link.h"
+#include "../src/util.h"
+
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/param.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unity.h>
 #include <unistd.h>
-#include "../src/cache.h"
-#include "../src/config.h"
-#include "../src/util.h"
-#include "../src/link.h"
-#include <sys/param.h>
 
 void setUp(void)
 {

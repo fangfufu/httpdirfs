@@ -1,27 +1,17 @@
 #ifndef CACHE_H
 #define CACHE_H
-#include <sys/types.h>
-#include <stdio.h>
-#include <stdint.h>
 #include <pthread.h>
 #include <semaphore.h>
-
-/**
- * \file cache.h
- * \brief cache related structures and functions
- * \details
- *   - We store the metadata and the actual data separately in two
- * separate folders.
- */
-
-typedef struct Cache Cache;
-
-#include "link.h"
-#include "network.h"
+#include <stdint.h>
+#include <stdio.h>
+#include <sys/types.h>
 
 #include "util.h"
 
+typedef struct Cache Cache;
+typedef struct Link Link;
 struct TransferStruct;
+
 
 typedef struct ActiveDownload {
     off_t offset;

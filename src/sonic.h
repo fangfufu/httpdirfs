@@ -24,7 +24,7 @@ typedef struct {
     int depth;
 } Sonic;
 
-#include "link.h"
+typedef struct LinkTable LinkTable;
 
 /**
  * \brief Initialise Sonic configuration.

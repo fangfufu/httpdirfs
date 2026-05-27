@@ -1,8 +1,9 @@
-#include <unity.h>
-#include <stdlib.h>
-#include <string.h>
 #include "../src/config.h"
 #include "../src/util.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <unity.h>
 
 void setUp(void)
 {
