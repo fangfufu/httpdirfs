@@ -18,6 +18,10 @@ This feature is triggered by the `--cache` flag. This is similar to the
 `--vfs-cache-mode full` feature of
 [rclone mount](https://rclone.org/commands/rclone_mount/#vfs-cache-mode-full)
 
+The cache system runs multiple background worker threads to process downloads
+asynchronously, allowing multiple concurrent HTTP connections to download
+different file segments in parallel.
+
 There is support for Airsonic / Subsonic server. This allows you to mount a
 remote music collection locally.
 
@@ -218,17 +222,12 @@ Each HTTP directory gets its own cache folder, they are named using the escaped
 URL of the HTTP directory.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
-again.
-
-HTTPDirFS features concurrent downloading and asynchronous early-return
-prefetching in cache mode. Once a file has been accessed and cached, subsequent
-reads are served directly from your hard drive or SSD, achieving local storage
-speeds.
+again. Subsequent reads are served offline at local storage speed.
 
 The permanent cache system relies on sparse allocation. Please make sure your
-filesystem supports it. Otherwise your hard drive / SSD will get heavy I/O from
-cache file creation. For a list of filesystem that supports sparse allocation,
-please refer to
+filesystem supports it. Otherwise your local storage device will get heavy I/O
+from cache file creation. For a list of filesystem that supports sparse
+allocation, please refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ## Configuration file support
