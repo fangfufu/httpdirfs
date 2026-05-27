@@ -26,7 +26,7 @@
 
 /**
  * \file fuse_local.h
- * \brief FUSE related functions
+ * \brief FUSE mounting and operations header
  */
 
 /* Initialise fuse */

@@ -26,7 +26,7 @@
 
 /**
  * \file link.h
- * \brief link related structures and functions
+ * \brief Link structure and handling functions header
  */
 
 #include <curl/curl.h>

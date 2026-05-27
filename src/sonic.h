@@ -25,7 +25,7 @@
 #define SONIC_H
 /**
  * \file sonic.h
- * \brief Sonic related function
+ * \brief Airsonic / Subsonic server API integration header
  */
 
 typedef struct {

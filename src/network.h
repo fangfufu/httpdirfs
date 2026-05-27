@@ -26,7 +26,7 @@
 
 /**
  * \file network.h
- * \brief network related functions
+ * \brief Network transfer and cURL wrapper header
  */
 
 #include <curl/curl.h>

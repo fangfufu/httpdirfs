@@ -25,7 +25,7 @@
 #define UTIL_H
 /**
  * \file util.h
- * \brief utility functions
+ * \brief Utility functions and memory allocation wrappers header
  */
 
 #include <pthread.h>
