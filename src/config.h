@@ -115,6 +115,8 @@ typedef struct {
     int refresh_timeout;
     /** \brief Try refreshing invalid links when reading a directory */
     int invalid_refresh;
+    /** \brief Include external (cross-origin) links from directory listings */
+    int external_links;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
     int cache_enabled;

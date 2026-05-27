@@ -243,5 +243,26 @@ int LinkHashSet_add(LinkHashSet *set, const char *linkname);
  */
 void LinkHashSet_free(LinkHashSet *set);
 
+/**
+ * \brief Check if a URL is an external (absolute) http/https URL.
+ * \return 1 if the URL starts with http:// or https://, 0 otherwise
+ */
+int is_external_url(const char *url);
 
+/**
+ * \brief Check if link_url has a different origin than page_url.
+ * \details Compares scheme + host + port. Malformed URLs are treated as
+ * cross-origin.
+ * \return 1 if cross-origin or either URL is malformed, 0 if same origin
+ */
+int is_cross_origin(const char *page_url, const char *link_url);
+
+/**
+ * \brief Extract the filename component from an external URL.
+ * \details For "http://example.com/path/file.iso" returns "file.iso".
+ *          For "http://example.com/path/dir/" returns "dir".
+ *          Query strings are stripped. Returns "" for root-only URLs.
+ * \note The caller must free the returned string with FREE().
+ */
+char *external_url_to_filename(const char *url);
 #endif

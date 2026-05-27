@@ -49,6 +49,13 @@ HTTPDirFS supports the following usage flags:
             --zero-len-is-dir   If a file has a zero length, treat it as a directory
             --insecure-tls      Disable licurl TLS certificate verification by
                                 setting CURLOPT_SSL_VERIFYHOST to 0
+            --external-links    Include external (cross-origin) links from
+                                directory listings. When enabled, httpdirfs will
+                                follow <a href> tags pointing to other servers
+                                and expose their files alongside local links.
+                                HTTP credentials (-u/-p) are only applied to
+                                the mounted server; external servers requiring
+                                authentication will generate a warning.
             --single-file-mode  Single file mode - rather than mounting a whole
                                 directory, present a single file inside a virtual
                                 directory.
