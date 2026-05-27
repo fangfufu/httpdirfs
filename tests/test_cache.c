@@ -332,6 +332,65 @@ void test_Cache_alloc_num_bg_workers(void)
     CONFIG.max_conns = old_max_conns;
 }
 
+void test_Cache_free_active_downloads(void)
+{
+    const char *tmp_cache_dir = "./test_cache_free_ad_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = (char *)tmp_cache_dir;
+
+    LinkTable *table = setup_mock_link_table("dummy.bin");
+
+    LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
+    ROOT_LINK_TBL = table;
+    int old_root_link_offset = ROOT_LINK_OFFSET;
+    ROOT_LINK_OFFSET = 20;
+
+    CacheSystem_init(tmp_cache_dir, 0);
+
+    Cache *cf = Cache_open("dummy.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+
+    // Under the dl_lock, manually add mock ActiveDownload nodes to test
+    // Cache_free's teardown path
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+
+    ActiveDownload *ad1 = CALLOC(1, sizeof(ActiveDownload));
+    ad1->offset = 1024;
+    ad1->refcount = 1;
+    PTHREAD_COND_INIT(&ad1->cond, NULL);
+
+    ActiveDownload *ad2 = CALLOC(1, sizeof(ActiveDownload));
+    ad2->offset = 2048;
+    ad2->refcount = 2; // Extra reference to trigger the warning/no-free path
+    PTHREAD_COND_INIT(&ad2->cond, NULL);
+
+    ad2->next = ad1;
+    cf->active_dls = ad2;
+
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+    // Call Cache_close to trigger Cache_free
+    Cache_close(cf);
+
+    // Verify ad2's refcount drops from 2 to 1 (due to dl list reference
+    // dropping)
+    TEST_ASSERT_EQUAL_INT(1, ad2->refcount);
+
+    // Clean up ad2 manually to prevent leak warnings
+    PTHREAD_COND_DESTROY(&ad2->cond);
+    FREE(ad2);
+
+    // Cleanup
+    ROOT_LINK_TBL = old_root_link_tbl;
+    ROOT_LINK_OFFSET = old_root_link_offset;
+    LinkTable_free(table);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -344,5 +403,6 @@ int main(void)
     RUN_TEST(test_Cache_read_null_link);
     RUN_TEST(test_Cache_invalid_zero_length_disk_files);
     RUN_TEST(test_Cache_alloc_num_bg_workers);
+    RUN_TEST(test_Cache_free_active_downloads);
     return UNITY_END();
 }

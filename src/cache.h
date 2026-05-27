@@ -27,6 +27,15 @@ typedef struct ActiveDownload {
     off_t offset;
     struct TransferStruct *ts;
     pthread_cond_t cond;
+    /**
+     * \brief Reference count for lifetime management.
+     * \details Starts at 1 when added to cf->active_dls.
+     * Each waiter thread increments the reference count before waiting.
+     * When unlinked from the list in ActiveDownload_remove, the list's
+     * reference is dropped. The structure is freed only when the reference
+     * count reaches 0.
+     */
+    int refcount;
     struct ActiveDownload *next;
 } ActiveDownload;
 
@@ -170,4 +179,13 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset_start);
  * \note Must be called while holding cf->dl_lock.
  */
 ActiveDownload *ActiveDownload_find(Cache *cf, off_t offset);
+
+/**
+ * \brief Decrements the reference count of the ActiveDownload tracker.
+ * \details Destroys the condition variable and frees the structure when the
+ * reference count reaches 0.
+ * \param[in] ad The ActiveDownload tracker to unref.
+ * \note Must be called while holding cf->dl_lock.
+ */
+void ActiveDownload_unref(ActiveDownload *ad);
 #endif

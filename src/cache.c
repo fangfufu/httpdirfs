@@ -628,8 +628,21 @@ static void ActiveDownload_add(Cache *cf, off_t offset)
     ad->offset = offset;
     ad->ts = NULL;
     PTHREAD_COND_INIT(&ad->cond, NULL);
+    ad->refcount = 1;
     ad->next = cf->active_dls;
     cf->active_dls = ad;
+}
+
+void ActiveDownload_unref(ActiveDownload *ad)
+{
+    if (ad == NULL) {
+        return;
+    }
+    ad->refcount--;
+    if (ad->refcount == 0) {
+        PTHREAD_COND_DESTROY(&ad->cond);
+        FREE(ad);
+    }
 }
 
 /**
@@ -646,8 +659,7 @@ static void ActiveDownload_remove(Cache *cf, off_t offset)
             ActiveDownload *temp = *curr;
             *curr = (*curr)->next;
             PTHREAD_COND_BROADCAST(&temp->cond);
-            PTHREAD_COND_DESTROY(&temp->cond);
-            FREE(temp);
+            ActiveDownload_unref(temp);
             return;
         }
         curr = &(*curr)->next;
@@ -696,8 +708,7 @@ static void Cache_free(Cache *cf)
     ActiveDownload *ad = cf->active_dls;
     while (ad) {
         ActiveDownload *next = ad->next;
-        PTHREAD_COND_DESTROY(&ad->cond);
-        FREE(ad);
+        ActiveDownload_unref(ad);
         ad = next;
     }
 
@@ -1304,6 +1315,8 @@ retry:
     ActiveDownload *ad = ActiveDownload_find(cf, dl_offset);
     if (ad != NULL) {
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
+        ad->refcount++;
+        ActiveDownload *orig_ad = ad;
 
         while ((ad = ActiveDownload_find(cf, dl_offset)) != NULL) {
             if (ad->ts && ad->ts->data
@@ -1311,12 +1324,14 @@ retry:
                        >= (size_t)(offset_start - dl_offset + len)) {
                 memcpy(output_buf, ad->ts->data + (offset_start - dl_offset),
                        len);
+                ActiveDownload_unref(orig_ad);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 send = len;
                 goto bgdl;
             }
-            PTHREAD_COND_WAIT(&ad->cond, &cf->dl_lock);
+            PTHREAD_COND_WAIT(&orig_ad->cond, &cf->dl_lock);
         }
+        ActiveDownload_unref(orig_ad);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
         if (Seg_exist(cf, dl_offset)) {
