@@ -347,6 +347,63 @@ else
     skip "Tiny file not found"
 fi
 
+# 4f-extra. Test: Zero-length files with varied special-character names
+log_info "Test group: Zero-length files (varied names)"
+
+# Build the list from the manifest: all files whose size is 0
+ZERO_FILES_LIST=$(python3 -c "
+import json
+with open('${MANIFEST}') as f:
+    m = json.load(f)
+for name, info in sorted(m.items()):
+    if info['size'] == 0:
+        print(name)
+")
+
+ZERO_FILE_COUNT=0
+while IFS= read -r zf_name; do
+    [[ -z "${zf_name}" ]] && continue
+    ZERO_FILE_COUNT=$((ZERO_FILE_COUNT + 1))
+    target="${MOUNT_DIR}/${zf_name}"
+
+    # Existence
+    if [[ ! -e "${target}" ]]; then
+        fail "Zero-length file missing: ${zf_name}"
+        continue
+    fi
+
+    # Size must be 0
+    zf_size=$(stat -c%s "${target}" 2>/dev/null || echo "-1")
+    if [[ "${zf_size}" == "0" ]]; then
+        pass "Zero-length size correct: ${zf_name}"
+    else
+        fail "Zero-length size wrong (got ${zf_size}): ${zf_name}"
+    fi
+
+    # Reading must yield empty content (no hang, no error)
+    zf_content=$(cat "${target}" 2>/dev/null)
+    if [[ -z "${zf_content}" ]]; then
+        pass "Zero-length content empty: ${zf_name}"
+    else
+        fail "Zero-length file has unexpected content: ${zf_name}"
+    fi
+
+    # SHA-256 of an empty file is the well-known constant
+    EMPTY_SHA256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    zf_sha=$(sha256sum "${target}" 2>/dev/null | awk '{print $1}')
+    if [[ "${zf_sha}" == "${EMPTY_SHA256}" ]]; then
+        pass "Zero-length checksum OK: ${zf_name}"
+    else
+        fail "Zero-length checksum mismatch: ${zf_name} (got ${zf_sha})"
+    fi
+done <<< "${ZERO_FILES_LIST}"
+
+if [[ "${ZERO_FILE_COUNT}" -eq 0 ]]; then
+    skip "No zero-length files found in manifest"
+else
+    log_info "Tested ${ZERO_FILE_COUNT} zero-length file(s)."
+fi
+
 # 4f. Test: Subdirectory is readable
 SUBDIR="${MOUNT_DIR}/subdir with spaces"
 if [[ -d "${SUBDIR}" ]]; then
@@ -465,10 +522,64 @@ else
             log_error "  actual:   ${actual_sha256}"
         fi
 
+        # Test: Zero-length files in cache mode (run once — not block-size
+        # dependent, but checked here to confirm the fi->fh=0 bypass works
+        # when the cache system is active).
+        if [[ "${BLKSZ}" == "8" ]]; then
+            log_info "Test group: Zero-length files in cache mode"
+            CACHE_ZERO_FILES_LIST=$(python3 -c "
+import json
+with open('${MANIFEST}') as f:
+    m = json.load(f)
+for name, info in sorted(m.items()):
+    if info['size'] == 0:
+        print(name)
+")
+            CACHE_ZERO_COUNT=0
+            EMPTY_SHA256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            while IFS= read -r czf_name; do
+                [[ -z "${czf_name}" ]] && continue
+                CACHE_ZERO_COUNT=$((CACHE_ZERO_COUNT + 1))
+                czf_target="${CACHE_MOUNT_DIR}/${czf_name}"
+
+                if [[ ! -e "${czf_target}" ]]; then
+                    fail "Cache: zero-length file missing: ${czf_name}"
+                    continue
+                fi
+
+                czf_size=$(stat -c%s "${czf_target}" 2>/dev/null || echo "-1")
+                if [[ "${czf_size}" == "0" ]]; then
+                    pass "Cache: zero-length size correct: ${czf_name}"
+                else
+                    fail "Cache: zero-length size wrong (${czf_size}): ${czf_name}"
+                fi
+
+                czf_content=$(cat "${czf_target}" 2>/dev/null)
+                if [[ -z "${czf_content}" ]]; then
+                    pass "Cache: zero-length content empty: ${czf_name}"
+                else
+                    fail "Cache: zero-length has unexpected content: ${czf_name}"
+                fi
+
+                czf_sha=$(sha256sum "${czf_target}" 2>/dev/null | awk '{print $1}')
+                if [[ "${czf_sha}" == "${EMPTY_SHA256}" ]]; then
+                    pass "Cache: zero-length checksum OK: ${czf_name}"
+                else
+                    fail "Cache: zero-length checksum mismatch: ${czf_name}"
+                fi
+            done <<< "${CACHE_ZERO_FILES_LIST}"
+            if [[ "${CACHE_ZERO_COUNT}" -eq 0 ]]; then
+                skip "Cache: no zero-length files in manifest"
+            else
+                log_info "Cache: tested ${CACHE_ZERO_COUNT} zero-length file(s)."
+            fi
+        fi
+
         # Unmount
         do_unmount "${CACHE_MOUNT_DIR}"
         wait "${CACHE_HTTPDIRFS_PID}" 2>/dev/null || true
         log_info "Cache mount (blksz=${BLKSZ}M) unmounted."
+
     done
 fi
 fi

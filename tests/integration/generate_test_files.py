@@ -138,6 +138,22 @@ def main():
         test_files.append(("empty_file.txt", 0))
         test_files.append(("tiny.txt", 1))
 
+        # Zero-length files with varied names to exercise the fi->fh=0 bypass
+        # path through every special-character category.
+        zero_length_names = [
+            "zero_basic.txt",
+            "zero file with spaces.txt",
+            "zero-dashes.bin",
+            "zero_underscores.bin",
+            "zero.multiple.dots.bin",
+            "zero(parens).txt",
+            "zero[brackets].txt",
+            "zero@at.txt",
+            "zero" + "a" * 50 + ".txt",   # moderately long name
+        ]
+        for name in zero_length_names:
+            test_files.append((name, 0))
+
     # Add the 1 GB file for cache system testing when is_large is given
     if is_large:
         test_files.append(("large_1g.bin", 1024 * 1024 * 1024))

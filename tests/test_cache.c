@@ -1,4 +1,5 @@
 #include <unity.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -107,6 +108,43 @@ void test_Cache_read_past_eof(void)
 
     res = Cache_read(&cf, buf, sizeof(buf), 150);
     TEST_ASSERT_EQUAL_INT(0, res);
+}
+
+void test_Cache_read_negative_len(void)
+{
+    /* The new len < 0 guard must reject negative lengths with -EINVAL
+     * rather than wrapping the value to a huge size_t. */
+    Cache cf = {0};
+    Link link = {0};
+    link.content_length = 1024;
+    cf.link = &link;
+    cf.blksz = 4096;
+
+    char buf[64];
+    long res = Cache_read(&cf, buf, (off_t)-1, 0);
+    TEST_ASSERT_EQUAL_INT(-EINVAL, res);
+
+    res = Cache_read(&cf, buf, (off_t)-1024, 0);
+    TEST_ASSERT_EQUAL_INT(-EINVAL, res);
+}
+
+void test_Cache_read_null_cf(void)
+{
+    /* Cache_read must return -EINVAL when passed a NULL cf pointer. */
+    char buf[16];
+    long res = Cache_read(NULL, buf, sizeof(buf), 0);
+    TEST_ASSERT_EQUAL_INT(-EINVAL, res);
+}
+
+void test_Cache_read_null_link(void)
+{
+    /* Cache_read must return -EINVAL when cf->link is NULL. */
+    Cache cf = {0};
+    cf.link = NULL;
+
+    char buf[16];
+    long res = Cache_read(&cf, buf, sizeof(buf), 0);
+    TEST_ASSERT_EQUAL_INT(-EINVAL, res);
 }
 
 static void cleanup_temp_dir(const char *tmp_cache_dir)
@@ -246,6 +284,9 @@ int main(void)
     RUN_TEST(test_ActiveDownload_find);
     RUN_TEST(test_Cache_read_zero_length);
     RUN_TEST(test_Cache_read_past_eof);
+    RUN_TEST(test_Cache_read_negative_len);
+    RUN_TEST(test_Cache_read_null_cf);
+    RUN_TEST(test_Cache_read_null_link);
     RUN_TEST(test_Cache_invalid_zero_length_disk_files);
     return UNITY_END();
 }
