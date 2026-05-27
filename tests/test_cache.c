@@ -332,6 +332,165 @@ void test_Cache_alloc_num_bg_workers(void)
     CONFIG.max_conns = old_max_conns;
 }
 
+void test_Cache_free_active_downloads(void)
+{
+    const char *tmp_cache_dir = "./test_cache_free_ad_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = (char *)tmp_cache_dir;
+
+    LinkTable *table = setup_mock_link_table("dummy.bin");
+
+    LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
+    ROOT_LINK_TBL = table;
+    int old_root_link_offset = ROOT_LINK_OFFSET;
+    ROOT_LINK_OFFSET = 20;
+
+    CacheSystem_init(tmp_cache_dir, 0);
+
+    Cache *cf = Cache_open("dummy.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+
+    // Under the dl_lock, manually add mock ActiveDownload nodes to test
+    // Cache_free's teardown path
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+
+    ActiveDownload *ad1 = CALLOC(1, sizeof(ActiveDownload));
+    ad1->offset = 1024;
+    ad1->refcount = 1;
+    PTHREAD_COND_INIT(&ad1->cond, NULL);
+
+    ActiveDownload *ad2 = CALLOC(1, sizeof(ActiveDownload));
+    ad2->offset = 2048;
+    ad2->refcount = 2; // Extra reference to trigger the warning/no-free path
+    PTHREAD_COND_INIT(&ad2->cond, NULL);
+
+    ad2->next = ad1;
+    cf->active_dls = ad2;
+
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+    // Call Cache_close to trigger Cache_free
+    Cache_close(cf);
+
+    // Since ad2 had a refcount of 2, Cache_free only decremented its refcount
+    // to 1 and did not free it. It is therefore safe and valid to inspect ad2
+    // here without risking use-after-free.
+    TEST_ASSERT_EQUAL_INT(1, ad2->refcount);
+
+    // Clean up ad2 manually to prevent leak warnings
+    PTHREAD_COND_DESTROY(&ad2->cond);
+    FREE(ad2);
+
+    // Cleanup
+    ROOT_LINK_TBL = old_root_link_tbl;
+    ROOT_LINK_OFFSET = old_root_link_offset;
+    LinkTable_free(table);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+struct WaiterThreadArgs {
+    Cache *cf;
+    char *buf;
+    off_t len;
+    off_t offset;
+    long expected_res;
+};
+
+static void *waiter_thread_func(void *arg)
+{
+    struct WaiterThreadArgs *args = (struct WaiterThreadArgs *)arg;
+    long res = Cache_read(args->cf, args->buf, args->len, args->offset);
+    args->expected_res = res;
+    return NULL;
+}
+
+void test_Cache_free_active_downloads_with_waiters(void)
+{
+    const char *tmp_cache_dir = "./test_cache_free_ad_wait_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = (char *)tmp_cache_dir;
+
+    LinkTable *table = setup_mock_link_table("dummy.bin");
+
+    LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
+    ROOT_LINK_TBL = table;
+    int old_root_link_offset = ROOT_LINK_OFFSET;
+    ROOT_LINK_OFFSET = 20;
+
+    CacheSystem_init(tmp_cache_dir, 0);
+
+    Cache *cf = Cache_open("dummy.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+
+    // Manually inject an active download so any reader will block
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    ActiveDownload *ad = CALLOC(1, sizeof(ActiveDownload));
+    ad->offset = 0;
+    ad->refcount = 1;
+    PTHREAD_COND_INIT(&ad->cond, NULL);
+    cf->active_dls = ad;
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+    // Spawn waiter thread
+    pthread_t thread;
+    char buf[64];
+    struct WaiterThreadArgs args = {.cf = cf,
+                                    .buf = buf,
+                                    .len = sizeof(buf),
+                                    .offset = 0,
+                                    .expected_res = 0};
+
+    TEST_ASSERT_EQUAL_INT(
+        0, pthread_create(&thread, NULL, waiter_thread_func, &args));
+
+    // Wait until the reader thread registers as a waiter
+    struct timespec start_time;
+    struct timespec current_time;
+    clock_gettime(CLOCK_MONOTONIC, &start_time);
+    while (1) {
+        PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+        int has_waiter = (cf->waiters == 1);
+        PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        if (has_waiter) {
+            break;
+        }
+        clock_gettime(CLOCK_MONOTONIC, &current_time);
+        double elapsed
+            = (double)(current_time.tv_sec - start_time.tv_sec)
+              + ((double)(current_time.tv_nsec - start_time.tv_nsec) / 1e9);
+        if (elapsed >= 5.0) {
+            TEST_FAIL_MESSAGE(
+                "Timed out waiting for reader to register as waiter");
+        }
+        struct timespec delay = {.tv_sec = 0, .tv_nsec = 1000000};
+        nanosleep(&delay, NULL);
+    }
+
+    // Call Cache_close which triggers Cache_free, setting shutting_down to 1,
+    // waking all waiters and joining them before tearing down
+    Cache_close(cf);
+
+    // Join the helper thread
+    TEST_ASSERT_EQUAL_INT(0, pthread_join(thread, NULL));
+
+    // The read must have been aborted with -EIO due to shutdown
+    TEST_ASSERT_EQUAL_INT(-EIO, args.expected_res);
+
+    // Cleanup
+    ROOT_LINK_TBL = old_root_link_tbl;
+    ROOT_LINK_OFFSET = old_root_link_offset;
+    LinkTable_free(table);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -344,5 +503,7 @@ int main(void)
     RUN_TEST(test_Cache_read_null_link);
     RUN_TEST(test_Cache_invalid_zero_length_disk_files);
     RUN_TEST(test_Cache_alloc_num_bg_workers);
+    RUN_TEST(test_Cache_free_active_downloads);
+    RUN_TEST(test_Cache_free_active_downloads_with_waiters);
     return UNITY_END();
 }

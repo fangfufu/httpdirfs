@@ -1272,7 +1272,10 @@ static void Link_download_finish_transfer(Cache *cf, off_t offset,
     if (ad && ad->ts == ts) {
         ad->ts = NULL;
     }
-    PTHREAD_COND_BROADCAST(&cf->dl_cond);
+    if (ts->ad_ptr) {
+        ActiveDownload_unref(ts->ad_ptr);
+        ts->ad_ptr = NULL;
+    }
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 }
 
@@ -1302,13 +1305,16 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
         ts.type = DATA;
         ts.transferring = 1;
         ts.cache_ptr = cf;
+        ts.ad_ptr = NULL;
 
         if (cf) {
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
             ActiveDownload *ad = ActiveDownload_find(cf, offset);
             if (ad) {
                 ad->ts = &ts;
-                PTHREAD_COND_BROADCAST(&cf->dl_cond);
+                ts.ad_ptr = ad;
+                ad->refcount++;
+                PTHREAD_COND_BROADCAST(&ad->cond);
             }
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         }

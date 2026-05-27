@@ -1,6 +1,10 @@
 #ifndef CACHE_H
 #define CACHE_H
 #include <sys/types.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 /**
  * \file cache.h
@@ -22,13 +26,20 @@ struct TransferStruct;
 typedef struct ActiveDownload {
     off_t offset;
     struct TransferStruct *ts;
+    pthread_cond_t cond;
+    /**
+     * \brief Reference count for lifetime management.
+     * \details Starts at 1 when added to cf->active_dls.
+     * Each waiter thread increments the reference count before waiting.
+     * When unlinked from the list in ActiveDownload_remove, the list's
+     * reference is dropped. The structure is freed only when the reference
+     * count reaches 0.
+     */
+    int refcount;
+    int unlinked;
     struct ActiveDownload *next;
 } ActiveDownload;
 
-#include <stdio.h>
-#include <stdint.h>
-#include <pthread.h>
-#include <semaphore.h>
 
 /**
  * \brief Type definition for a cache segment
@@ -67,10 +78,15 @@ struct Cache {
 
     /** \brief mutex lock for background download progress */
     pthread_mutex_t dl_lock;
-    /** \brief condition variable for background download progress */
-    pthread_cond_t dl_cond;
     /** \brief active downloads list */
     ActiveDownload *active_dls;
+
+    /** \brief Count of active waiters on download segments */
+    int waiters;
+    /** \brief Condition variable for cache shutdown synchronization */
+    pthread_cond_t shutdown_cond;
+    /** \brief Flag indicating that cache shutdown is in progress */
+    int shutting_down;
 
     /** \brief Number of background workers */
     int num_bg_workers;
@@ -171,4 +187,13 @@ long Cache_read(Cache *cf, char *output_buf, off_t len, off_t offset_start);
  * \note Must be called while holding cf->dl_lock.
  */
 ActiveDownload *ActiveDownload_find(Cache *cf, off_t offset);
+
+/**
+ * \brief Decrements the reference count of the ActiveDownload tracker.
+ * \details Destroys the condition variable and frees the structure when the
+ * reference count reaches 0.
+ * \param[in] ad The ActiveDownload tracker to unref.
+ * \note Must be called while holding cf->dl_lock.
+ */
+void ActiveDownload_unref(ActiveDownload *ad);
 #endif
