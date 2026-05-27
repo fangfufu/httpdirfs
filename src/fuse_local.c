@@ -89,8 +89,13 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
                    struct fuse_file_info *fi)
 {
     long received;
-    if (CACHE_SYSTEM_INIT && fi->fh) {
-        received = Cache_read((Cache *)fi->fh, buf, size, offset);
+    if (CACHE_SYSTEM_INIT) {
+        if (fi->fh) {
+            received = Cache_read((Cache *)fi->fh, buf, size, offset);
+        } else {
+            /* zero-length file: fi->fh was set to 0 in fs_open; return EOF */
+            received = 0;
+        }
     } else {
         received = path_download(path, buf, size, offset);
     }
