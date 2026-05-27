@@ -19,7 +19,7 @@ void test_Config_init(void)
     Config_init();
 
     // Check some defaults defined in config.h and config.c
-    TEST_ASSERT_EQUAL_INT(10, CONFIG.max_conns);
+    TEST_ASSERT_EQUAL_INT(DEFAULT_NETWORK_MAX_CONNS, CONFIG.max_conns);
     TEST_ASSERT_EQUAL_INT(3600, CONFIG.refresh_timeout);
     TEST_ASSERT_EQUAL_INT(NORMAL, CONFIG.mode);
     TEST_ASSERT_EQUAL_INT(0, CONFIG.cache_enabled);
