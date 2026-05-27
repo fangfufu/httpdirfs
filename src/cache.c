@@ -658,6 +658,7 @@ static void ActiveDownload_remove(Cache *cf, off_t offset)
         if ((*curr)->offset == offset) {
             ActiveDownload *temp = *curr;
             *curr = (*curr)->next;
+            temp->unlinked = 1;
             PTHREAD_COND_BROADCAST(&temp->cond);
             ActiveDownload_unref(temp);
             return;
@@ -1318,12 +1319,12 @@ retry:
         ad->refcount++;
         ActiveDownload *orig_ad = ad;
 
-        while ((ad = ActiveDownload_find(cf, dl_offset)) != NULL) {
-            if (ad->ts && ad->ts->data
-                && ad->ts->curr_size
+        while (!orig_ad->unlinked) {
+            if (orig_ad->ts && orig_ad->ts->data
+                && orig_ad->ts->curr_size
                        >= (size_t)(offset_start - dl_offset + len)) {
-                memcpy(output_buf, ad->ts->data + (offset_start - dl_offset),
-                       len);
+                memcpy(output_buf,
+                       orig_ad->ts->data + (offset_start - dl_offset), len);
                 ActiveDownload_unref(orig_ad);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 send = len;

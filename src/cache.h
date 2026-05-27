@@ -36,6 +36,7 @@ typedef struct ActiveDownload {
      * count reaches 0.
      */
     int refcount;
+    int unlinked;
     struct ActiveDownload *next;
 } ActiveDownload;
 
