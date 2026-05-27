@@ -545,7 +545,7 @@ else
         # Test: Zero-length files in cache mode (run once — not block-size
         # dependent, but checked here to confirm the fi->fh=0 bypass works
         # when the cache system is active).
-        if [[ "${BLKSZ}" == "8" ]]; then
+        if [[ "${MODE}" != "long" && "${BLKSZ}" == "8" ]]; then
             log_info "Test group: Zero-length files in cache mode"
             CACHE_ZERO_FILES_LIST=$(python3 -c "
 import json
