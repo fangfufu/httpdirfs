@@ -8,11 +8,39 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-05-27
+
 ### Added
+
+- Add comprehensive unit and integration tests for duplicate URL handling,
+  including unit tests for `linknames_equal`, `hash_str`, `LinkHashSet`
+  operations, and `LinkTable_parse_html`
+  ([4534563](https://github.com/fangfufu/httpdirfs/commit/4534563)).
+- Extend the system integration test HTTP server to inject duplicate URLs and
+  directories, and implement mounted directory integration tests to verify
+  robust FUSE duplicate deduplication
+  ([4534563](https://github.com/fangfufu/httpdirfs/commit/4534563)).
+- Expose and document internal `LinkHashSet` operations and comparison helpers
+  in `link.h` using Doxygen
+  ([4534563](https://github.com/fangfufu/httpdirfs/commit/4534563)).
 
 ### Changed
 
+- Optimize duplicate link detection during HTML parsing by replacing the
+  $O(N^2)$ linear scan in `HTML_to_LinkTable` with a custom open-addressing hash
+  set (`LinkHashSet`) using linear probing and a djb2-based `hash_str` function
+  ([26c0c5c](https://github.com/fangfufu/httpdirfs/commit/26c0c5c)).
+- Refine HTTP version negotiation behavior in `Link_to_curl` to gracefully fall
+  back to HTTP/2 (`CURL_HTTP_VERSION_2_0`) if negotiation for HTTP/3
+  (`CURL_HTTP_VERSION_3`) is unsupported or fails
+  ([5de0dd6](https://github.com/fangfufu/httpdirfs/commit/5de0dd6)).
+
 ### Fixed
+
+- Fix formatting in error log outputs by adding missing newlines (`\n`) to
+  multiple `lprintf(error, ...)` calls logging curl easy setup/info errors in
+  `src/link.c` and `src/network.c`
+  ([2f5cf96](https://github.com/fangfufu/httpdirfs/commit/2f5cf96)).
 
 ## [1.3.0] - 2026-05-27
 
@@ -885,7 +913,8 @@ Creating a new minor release, because of the following major changes:
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.3.0...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.3.1...master
+[1.3.1]: https://github.com/fangfufu/httpdirfs/compare/1.3.0...1.3.1
 [1.3.0]: https://github.com/fangfufu/httpdirfs/compare/1.2.11...1.3.0
 [1.2.11]: https://github.com/fangfufu/httpdirfs/compare/1.2.10...1.2.11
 [1.2.10]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...1.2.10
