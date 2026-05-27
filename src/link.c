@@ -782,7 +782,7 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
                 /* First-wins: skip if a link with this name already exists */
                 if (LinkHashSet_add(set, filename)) {
                     Link *link = Link_new(filename, type);
-                    strncpy(link->f_url, raw_href, PATH_MAX);
+                    snprintf(link->f_url, sizeof(link->f_url), "%s", raw_href);
                     LinkTable_add(linktbl, link);
                 }
             }

@@ -838,7 +838,10 @@ void Cache_delete(const char *fn)
             return;
         }
         fn = link->sonic.id;
-    } else if (CONFIG.mode == NORMAL && link) {
+    } else if (CONFIG.mode == NORMAL) {
+        if (!link) {
+            return;
+        }
         cache_key = url_to_cache_path(link->f_url);
         if (!cache_key) {
             lprintf(error, "Failed to derive cache key from URL: %s\n",
