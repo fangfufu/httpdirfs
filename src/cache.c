@@ -686,6 +686,9 @@ static Cache *Cache_alloc(void)
     PTHREAD_MUTEX_INIT(&cf->dl_lock, NULL);
     cf->active_dls = NULL;
     cf->cache_opened = 1;
+    cf->waiters = 0;
+    PTHREAD_COND_INIT(&cf->shutdown_cond, NULL);
+    cf->shutting_down = 0;
 
     cf->num_bg_workers = MIN(CONFIG.max_conns, DEFAULT_NETWORK_MAX_CONNS) / 2;
     if (cf->num_bg_workers <= 0) {
@@ -710,6 +713,7 @@ static void Cache_free(Cache *cf)
     }
 
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    cf->shutting_down = 1;
     ActiveDownload *ad = cf->active_dls;
     cf->active_dls = NULL;
     while (ad) {
@@ -721,14 +725,19 @@ static void Cache_free(Cache *cf)
                     (intmax_t)ad->offset, ad->refcount - 1);
         }
         ad->next = NULL;
+        PTHREAD_COND_BROADCAST(&ad->cond);
         ActiveDownload_unref(ad);
         ad = next;
+    }
+    while (cf->waiters > 0) {
+        PTHREAD_COND_WAIT(&cf->shutdown_cond, &cf->dl_lock);
     }
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
     PTHREAD_MUTEX_DESTROY(&cf->w_lock);
     PTHREAD_MUTEX_DESTROY(&cf->dl_lock);
+    PTHREAD_COND_DESTROY(&cf->shutdown_cond);
     SEM_DESTROY(&cf->bgt_sem);
 
     FREE(cf);
@@ -1337,12 +1346,21 @@ retry:
         ad->refcount++;
         ActiveDownload *orig_ad = ad;
 
-        while (ActiveDownload_find(cf, dl_offset) == orig_ad) {
+        cf->waiters++;
+
+        while (!cf->shutting_down
+               && ActiveDownload_find(cf, dl_offset) == orig_ad) {
             if (orig_ad->ts && orig_ad->ts->data
                 && orig_ad->ts->curr_size
                        >= (size_t)(offset_start - dl_offset + len)) {
                 memcpy(output_buf,
                        orig_ad->ts->data + (offset_start - dl_offset), len);
+
+                cf->waiters--;
+                if (cf->shutting_down && cf->waiters == 0) {
+                    PTHREAD_COND_BROADCAST(&cf->shutdown_cond);
+                }
+
                 ActiveDownload_unref(orig_ad);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 send = len;
@@ -1350,8 +1368,20 @@ retry:
             }
             PTHREAD_COND_WAIT(&orig_ad->cond, &cf->dl_lock);
         }
+
+        cf->waiters--;
+        int was_shutdown = cf->shutting_down;
+        if (cf->shutting_down && cf->waiters == 0) {
+            PTHREAD_COND_BROADCAST(&cf->shutdown_cond);
+        }
+
         ActiveDownload_unref(orig_ad);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+        if (was_shutdown) {
+            return -EIO;
+        }
+
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
         if (Seg_exist(cf, dl_offset)) {
             send = Data_read(cf, (uint8_t *)output_buf, len, offset_start);
