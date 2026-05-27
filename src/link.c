@@ -41,6 +41,7 @@
 #include <gumbo.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/param.h>
 #include <unistd.h>
 
@@ -184,8 +185,7 @@ static CURL *Link_to_curl(Link *link)
          * the user's credentials for the primary server.
          */
         int apply_creds
-            = !CONFIG.external_links
-              || !ROOT_LINK_TBL
+            = !CONFIG.external_links || !ROOT_LINK_TBL
               || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link->f_url);
         if (apply_creds) {
             ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
@@ -198,8 +198,7 @@ static CURL *Link_to_curl(Link *link)
 
     if (CONFIG.http_password) {
         int apply_creds
-            = !CONFIG.external_links
-              || !ROOT_LINK_TBL
+            = !CONFIG.external_links || !ROOT_LINK_TBL
               || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link->f_url);
         if (apply_creds) {
             ret = curl_easy_setopt(curl, CURLOPT_PASSWORD,
@@ -365,9 +364,11 @@ static LinkTable *single_LinkTable_new(const char *url)
     const char *orig_ptr = strrchr(url, '/') + 1;
     char *ptr = curl_easy_unescape(NULL, orig_ptr, 0, NULL);
     LinkTable *linktbl = LinkTable_alloc(url);
-    Link *link = Link_new(ptr, LINK_UNINITIALISED_FILE);
+    Link *link = Link_new(ptr ? ptr : orig_ptr, LINK_UNINITIALISED_FILE);
     strncpy(link->f_url, url, PATH_MAX);
-    curl_free(ptr);
+    if (ptr) {
+        curl_free(ptr);
+    }
     LinkTable_add(linktbl, link);
     LinkTable_uninitialised_fill(linktbl);
     LinkTable_print(linktbl);
@@ -602,8 +603,11 @@ void LinkHashSet_free(LinkHashSet *set)
  */
 int is_external_url(const char *url)
 {
-    return (strncmp(url, "http://", 7) == 0
-            || strncmp(url, "https://", 8) == 0);
+    if (!url) {
+        return 0;
+    }
+    return (strncasecmp(url, "http://", 7) == 0
+            || strncasecmp(url, "https://", 8) == 0);
 }
 
 /**
@@ -614,11 +618,14 @@ int is_external_url(const char *url)
  */
 int is_cross_origin(const char *page_url, const char *link_url)
 {
+    if (!page_url || !link_url) {
+        return 1;
+    }
     /*
      * Walk past "scheme://host:port" in both URLs and compare the
      * prefix up to (but not including) the first path slash.
-     * If either URL has fewer than 3 slashes it is malformed; treat
-     * as cross-origin to be safe.
+     * If either URL has fewer than 3 slashes, check if it is a valid
+     * absolute URL to determine the origin length.
      */
     int slashes = 0;
     const char *p = page_url;
@@ -628,11 +635,16 @@ int is_cross_origin(const char *page_url, const char *link_url)
         }
         p++;
     }
+    size_t page_origin_len;
     if (slashes < 3) {
-        return 1; /* malformed page_url */
+        if (is_external_url(page_url)) {
+            page_origin_len = strlen(page_url);
+        } else {
+            return 1; /* malformed page_url */
+        }
+    } else {
+        page_origin_len = (size_t)(p - page_url) - 1;
     }
-    /* p is one past the third slash; back up to point at the slash */
-    size_t page_origin_len = (size_t)(p - page_url) - 1;
 
     slashes = 0;
     const char *l = link_url;
@@ -642,15 +654,21 @@ int is_cross_origin(const char *page_url, const char *link_url)
         }
         l++;
     }
+    size_t link_origin_len;
     if (slashes < 3) {
-        return 1; /* malformed link_url */
+        if (is_external_url(link_url)) {
+            link_origin_len = strlen(link_url);
+        } else {
+            return 1; /* malformed link_url */
+        }
+    } else {
+        link_origin_len = (size_t)(l - link_url) - 1;
     }
-    size_t link_origin_len = (size_t)(l - link_url) - 1;
 
     if (page_origin_len != link_origin_len) {
         return 1;
     }
-    return strncmp(page_url, link_url, page_origin_len) != 0;
+    return strncasecmp(page_url, link_url, page_origin_len) != 0;
 }
 
 /**
@@ -663,6 +681,9 @@ int is_cross_origin(const char *page_url, const char *link_url)
  */
 char *external_url_to_filename(const char *url)
 {
+    if (!url) {
+        return STRDUP("");
+    }
     /*
      * Skip the scheme://host:port/ prefix — walk past the third slash.
      */
@@ -685,8 +706,10 @@ char *external_url_to_filename(const char *url)
     size_t path_len = strlen(p);
     char *path_copy = STRNDUP(p, path_len);
 
-    /* Strip query string if present (must be done before trailing slash check). */
-    char *q = strchr(path_copy, '?');
+    /* Strip query string and fragment identifier if present (must be done
+     * before trailing slash check).
+     */
+    char *q = strpbrk(path_copy, "?#");
     if (q) {
         *q = '\0';
     }
@@ -742,7 +765,8 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
              * LinkTable_fill() will skip URL-construction for these.
              */
             char *filename = external_url_to_filename(raw_href);
-            if (filename && filename[0] != '\0') {
+            if (filename && filename[0] != '\0' && strcmp(filename, ".") != 0
+                && strcmp(filename, "..") != 0) {
                 /* Determine type: directory if URL ends with '/' */
                 size_t href_len = strlen(raw_href);
                 LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
@@ -850,9 +874,8 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
          */
         if (CONFIG.external_links && (http_resp == 401 || http_resp == 403)
             && ROOT_LINK_TBL
-            && strncmp(this_link->f_url, ROOT_LINK_TBL->links[0]->f_url,
-                       (size_t)ROOT_LINK_OFFSET)
-                   != 0) {
+            && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url,
+                               this_link->f_url)) {
             lprintf(warning,
                     "External link %s requires authentication (HTTP %ld). "
                     "Credentials are only applied to the mounted "
@@ -875,13 +898,9 @@ static void LinkTable_fill(LinkTable *linktbl)
 
         /*
          * External links have f_url pre-populated by HTML_to_LinkTable().
-         * Skip URL construction for them; just unescape the linkname.
+         * Skip URL construction for them.
          */
         if (this_link->f_url[0] != '\0') {
-            char *unescaped_linkname
-                = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
-            strncpy(this_link->linkname, unescaped_linkname, NAME_MAX);
-            curl_free(unescaped_linkname);
             continue;
         }
 
@@ -894,26 +913,40 @@ static void LinkTable_fill(LinkTable *linktbl)
            encoded characters in it, then that would break the link. */
         char *unescaped_path
             = curl_easy_unescape(NULL, this_link->linkpath, 0, NULL);
-        char *escaped_path = curl_easy_escape(NULL, unescaped_path, 0);
-        curl_free(unescaped_path);
-        /* Our code does the wrong thing if there's a trailing slash that's been
-           replaced with %2F, which curl_easy_escape does, God bless it, so if
-           it did that then let's put it back. */
-        int escaped_len = strlen(escaped_path);
-        if (escaped_len >= 3
-            && !strcmp(escaped_path + escaped_len - 3, "%2F")) {
-            escaped_path[escaped_len - 3] = '/';
-            escaped_path[escaped_len - 2] = '\0';
+        char *escaped_path = curl_easy_escape(
+            NULL, unescaped_path ? unescaped_path : this_link->linkpath, 0);
+        if (unescaped_path) {
+            curl_free(unescaped_path);
         }
-        char *url = path_append(head_link->f_url, escaped_path);
-        curl_free(escaped_path);
-        strncpy(this_link->f_url, url, PATH_MAX);
-        FREE(url);
-        char *unescaped_linkname;
-        unescaped_linkname
+
+        if (escaped_path) {
+            /* Our code does the wrong thing if there's a trailing slash that's
+               been replaced with %2F, which curl_easy_escape does, God bless
+               it, so if it did that then let's put it back. */
+            int escaped_len = strlen(escaped_path);
+            if (escaped_len >= 3
+                && !strcmp(escaped_path + escaped_len - 3, "%2F")) {
+                escaped_path[escaped_len - 3] = '/';
+                escaped_path[escaped_len - 2] = '\0';
+            }
+            char *url = path_append(head_link->f_url, escaped_path);
+            curl_free(escaped_path);
+            strncpy(this_link->f_url, url, PATH_MAX);
+            FREE(url);
+        } else {
+            /* Fallback in case escape fails */
+            char *url = path_append(head_link->f_url, this_link->linkpath);
+            strncpy(this_link->f_url, url, PATH_MAX);
+            FREE(url);
+        }
+
+        char *unescaped_linkname
             = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
-        strncpy(this_link->linkname, unescaped_linkname, NAME_MAX);
-        curl_free(unescaped_linkname);
+        if (unescaped_linkname) {
+            snprintf(this_link->linkname, sizeof(this_link->linkname), "%s",
+                     unescaped_linkname);
+            curl_free(unescaped_linkname);
+        }
     }
     LinkTable_uninitialised_fill(linktbl);
 }
@@ -1029,17 +1062,32 @@ LinkTable *LinkTable_new(const char *url)
      * When --external-links is active a directory link from an external
      * server may be navigated. Its URL won't share the root server's
      * origin, so applying ROOT_LINK_OFFSET would produce garbage. Detect
-     * this case by checking whether url starts with the root URL prefix.
+     * this case by checking whether url is cross-origin from root.
      */
-    if (ROOT_LINK_TBL
-        && strncmp(url, ROOT_LINK_TBL->links[0]->f_url,
-                   (size_t)ROOT_LINK_OFFSET)
-               != 0) {
+    if (ROOT_LINK_TBL && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, url)) {
         /* External URL: use the full URL as the cache key path. */
-        unescaped_path = curl_easy_unescape(NULL, url, 0, NULL);
+        char *temp = curl_easy_unescape(NULL, url, 0, NULL);
+        unescaped_path = temp ? STRDUP(temp) : STRDUP(url);
+        if (temp) {
+            curl_free(temp);
+        }
+        /* Sanitize unescaped_path to prevent path traversal via ".." */
+        char *p = unescaped_path;
+        while ((p = strstr(p, ".."))) {
+            p[0] = '_';
+            p[1] = '_';
+            p += 2;
+        }
     } else {
-        unescaped_path
-            = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
+        size_t url_len = strlen(url);
+        const char *offset_url = (url_len >= (size_t)ROOT_LINK_OFFSET)
+                                     ? url + ROOT_LINK_OFFSET
+                                     : url;
+        char *temp = curl_easy_unescape(NULL, offset_url, 0, NULL);
+        unescaped_path = temp ? STRDUP(temp) : STRDUP(offset_url);
+        if (temp) {
+            curl_free(temp);
+        }
     }
     LinkTable *linktbl = NULL;
 
@@ -1103,7 +1151,7 @@ LinkTable *LinkTable_new(const char *url)
         }
     }
 
-    free(unescaped_path);
+    FREE(unescaped_path);
     LinkTable_print(linktbl);
     return linktbl;
 }

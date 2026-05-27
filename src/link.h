@@ -251,7 +251,8 @@ int is_external_url(const char *url);
 
 /**
  * \brief Check if link_url has a different origin than page_url.
- * \details Compares scheme + host + port. Malformed URLs are treated as cross-origin.
+ * \details Compares scheme + host + port. Malformed URLs are treated as
+ * cross-origin.
  * \return 1 if cross-origin or either URL is malformed, 0 if same origin
  */
 int is_cross_origin(const char *page_url, const char *link_url);

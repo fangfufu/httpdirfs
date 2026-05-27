@@ -74,6 +74,17 @@ void test_is_external_url_ftp(void)
     TEST_ASSERT_EQUAL_INT(0, is_external_url("ftp://example.com/file.iso"));
 }
 
+void test_is_external_url_null(void)
+{
+    TEST_ASSERT_EQUAL_INT(0, is_external_url(NULL));
+}
+
+void test_is_external_url_uppercase(void)
+{
+    TEST_ASSERT_EQUAL_INT(1, is_external_url("HTTP://example.com/file.iso"));
+    TEST_ASSERT_EQUAL_INT(1, is_external_url("HTTPS://example.com/file.iso"));
+}
+
 /* ========================================================================= */
 /* is_cross_origin() tests                                                   */
 /* ========================================================================= */
@@ -106,6 +117,39 @@ void test_is_cross_origin_same_host_with_port(void)
 {
     TEST_ASSERT_EQUAL_INT(0, is_cross_origin("http://localhost:8080/",
                                              "http://localhost:8080/f.iso"));
+}
+
+void test_is_cross_origin_no_trailing_slash_same(void)
+{
+    TEST_ASSERT_EQUAL_INT(
+        0, is_cross_origin("http://example.com", "http://example.com/f.iso"));
+}
+
+void test_is_cross_origin_no_trailing_slash_different(void)
+{
+    TEST_ASSERT_EQUAL_INT(
+        1, is_cross_origin("http://example.com", "http://other.com/f.iso"));
+}
+
+void test_is_cross_origin_both_no_trailing_slash_same(void)
+{
+    TEST_ASSERT_EQUAL_INT(
+        0, is_cross_origin("http://example.com", "http://example.com"));
+}
+
+void test_is_cross_origin_null(void)
+{
+    TEST_ASSERT_EQUAL_INT(1, is_cross_origin(NULL, "http://example.com/"));
+    TEST_ASSERT_EQUAL_INT(1, is_cross_origin("http://example.com/", NULL));
+    TEST_ASSERT_EQUAL_INT(1, is_cross_origin(NULL, NULL));
+}
+
+void test_is_cross_origin_case_insensitive(void)
+{
+    TEST_ASSERT_EQUAL_INT(
+        0, is_cross_origin("http://LOCALHOST/", "http://localhost/file.iso"));
+    TEST_ASSERT_EQUAL_INT(
+        0, is_cross_origin("HTTP://localhost/", "http://localhost/file.iso"));
 }
 
 /* ========================================================================= */
@@ -158,6 +202,32 @@ void test_external_url_to_filename_root(void)
     char *name = external_url_to_filename("http://example.com/");
     TEST_ASSERT_NOT_NULL(name);
     TEST_ASSERT_EQUAL_STRING("", name);
+    FREE(name);
+}
+
+void test_external_url_to_filename_null(void)
+{
+    char *name = external_url_to_filename(NULL);
+    TEST_ASSERT_NOT_NULL(name);
+    TEST_ASSERT_EQUAL_STRING("", name);
+    FREE(name);
+}
+
+void test_external_url_to_filename_fragment(void)
+{
+    char *name
+        = external_url_to_filename("http://example.com/file.iso#section");
+    TEST_ASSERT_NOT_NULL(name);
+    TEST_ASSERT_EQUAL_STRING("file.iso", name);
+    FREE(name);
+}
+
+void test_external_url_to_filename_query_and_fragment(void)
+{
+    char *name
+        = external_url_to_filename("http://example.com/file.iso?v=1#section");
+    TEST_ASSERT_NOT_NULL(name);
+    TEST_ASSERT_EQUAL_STRING("file.iso", name);
     FREE(name);
 }
 
@@ -245,6 +315,23 @@ void test_HTML_external_link_dedup_first_wins(void)
     TEST_ASSERT_EQUAL_INT(2, tbl->size);
     TEST_ASSERT_EQUAL_STRING("http://server-a.com/file.iso",
                              tbl->links[1]->f_url);
+    LinkTable_free(tbl);
+    CONFIG.external_links = 0;
+}
+
+void test_HTML_external_link_dot_and_dotdot(void)
+{
+    CONFIG.external_links = 1;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    LinkTable_parse_html(
+        tbl, "http://localhost/",
+        "<a href=\"http://external.com/.\">dot</a>"
+        "<a href=\"http://external.com/..\">dotdot</a>"
+        "<a href=\"http://external.com/file.iso\">file.iso</a>");
+
+    /* Expect 2 entries: HEAD link + file.iso (ignoring . and ..) */
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("file.iso", tbl->links[1]->linkname);
     LinkTable_free(tbl);
     CONFIG.external_links = 0;
 }
@@ -414,6 +501,8 @@ int main(void)
     RUN_TEST(test_is_external_url_relative);
     RUN_TEST(test_is_external_url_absolute_path);
     RUN_TEST(test_is_external_url_ftp);
+    RUN_TEST(test_is_external_url_null);
+    RUN_TEST(test_is_external_url_uppercase);
 
     /* is_cross_origin */
     RUN_TEST(test_is_cross_origin_different_host);
@@ -421,6 +510,11 @@ int main(void)
     RUN_TEST(test_is_cross_origin_different_scheme);
     RUN_TEST(test_is_cross_origin_different_port);
     RUN_TEST(test_is_cross_origin_same_host_with_port);
+    RUN_TEST(test_is_cross_origin_no_trailing_slash_same);
+    RUN_TEST(test_is_cross_origin_no_trailing_slash_different);
+    RUN_TEST(test_is_cross_origin_both_no_trailing_slash_same);
+    RUN_TEST(test_is_cross_origin_null);
+    RUN_TEST(test_is_cross_origin_case_insensitive);
 
     /* external_url_to_filename */
     RUN_TEST(test_external_url_to_filename_simple);
@@ -429,6 +523,9 @@ int main(void)
     RUN_TEST(test_external_url_to_filename_encoded);
     RUN_TEST(test_external_url_to_filename_query);
     RUN_TEST(test_external_url_to_filename_root);
+    RUN_TEST(test_external_url_to_filename_null);
+    RUN_TEST(test_external_url_to_filename_fragment);
+    RUN_TEST(test_external_url_to_filename_query_and_fragment);
 
     /* HTML_to_LinkTable integration via LinkTable_parse_html */
     RUN_TEST(test_HTML_external_link_file);
@@ -436,6 +533,7 @@ int main(void)
     RUN_TEST(test_HTML_external_link_disabled);
     RUN_TEST(test_HTML_external_link_same_origin);
     RUN_TEST(test_HTML_external_link_dedup_first_wins);
+    RUN_TEST(test_HTML_external_link_dot_and_dotdot);
 
     /* LinkTable_fill skip */
     RUN_TEST(test_LinkTable_fill_skips_external);
