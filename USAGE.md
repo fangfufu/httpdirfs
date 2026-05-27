@@ -68,3 +68,37 @@ HTTPDirFS supports the following usage flags:
             --sonic-insecure    Authenticate against your Airsonic / Subsonic server
                                 using the insecure username / hex encoded password
                                 scheme
+
+### External Links (`--external-links`)
+
+When `--external-links` is enabled, HTTPDirFS parses the HTML directory listing
+of the mounted server and identifies any `<a href>` tags pointing to absolute
+external (cross-origin) URLs.
+
+#### How It Works
+
+- **File and Directory Exposure:** External files and directories will appear
+  alongside local files in the mountpoint. External URLs ending with a trailing
+  slash (`/`) are treated as directories; navigating into them triggers a
+  recursive layout discovery on the remote server.
+- **First-Wins Deduplication:** If multiple external links produce the same
+  filename after extraction, only the first encountered link is kept.
+- **Path Sanitization:** Filenames derived from external URLs are automatically
+  sanitized. URL-decoded slash characters (`%2F`) are unescaped and converted to
+  underscores (`_`) to prevent directory traversal or invalid FUSE entry
+  creations.
+- **Cache Compatibility:** Caching works seamlessly with external links. Cache
+  paths for external files are safely flattened and sanitized within the
+  metadata and data cache directory structures to avoid directory traversal.
+
+#### Security & Credentials Scoping
+
+- **Credential Protection:** To prevent credential leakage, HTTP credentials
+  specified with `-u`/`--username` and `-p`/`--password` are strictly scoped to
+  the primary mounted origin. They are **not** forwarded to cross-origin
+  servers.
+- **Custom HTTP Headers:** Custom HTTP headers set via `--http-header` are also
+  strictly scoped to the primary origin and will not be sent to external hosts.
+- **Authentication Warnings:** External servers requiring authentication
+  (returning HTTP 401 or 403) will log a warning indicating that credentials are
+  restricted to the main server.
