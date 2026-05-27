@@ -81,6 +81,13 @@ struct Cache {
     /** \brief active downloads list */
     ActiveDownload *active_dls;
 
+    /** \brief Count of active waiters on download segments */
+    int waiters;
+    /** \brief Condition variable for cache shutdown synchronization */
+    pthread_cond_t shutdown_cond;
+    /** \brief Flag indicating that cache shutdown is in progress */
+    int shutting_down;
+
     /** \brief Number of background workers */
     int num_bg_workers;
 };
