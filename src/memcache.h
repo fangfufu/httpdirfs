@@ -23,6 +23,8 @@ struct TransferStruct {
     Link *link;
     /** \brief The Cache structure associated with the transfer */
     Cache *cache_ptr;
+    /** \brief The ActiveDownload structure associated with the transfer */
+    struct ActiveDownload *ad_ptr;
 };
 
 /**

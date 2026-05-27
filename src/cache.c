@@ -635,7 +635,9 @@ static void ActiveDownload_add(Cache *cf, off_t offset)
 /**
  * \brief Decrements the reference count of the ActiveDownload tracker.
  * \details Destroys the condition variable and frees the structure when the
- * reference count reaches 0.
+ * reference count reaches 0. The reference count of 1 initially represents
+ * list ownership, while subsequent waiting threads increment it. When unlinked,
+ * the list drops its reference.
  * \param[in] ad The ActiveDownload tracker to unref.
  * \note Must be called while holding cf->dl_lock.
  */
@@ -692,11 +694,6 @@ static Cache *Cache_alloc(void)
  */
 static void Cache_free(Cache *cf)
 {
-    PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
-    PTHREAD_MUTEX_DESTROY(&cf->w_lock);
-    PTHREAD_MUTEX_DESTROY(&cf->dl_lock);
-    SEM_DESTROY(&cf->bgt_sem);
-
     if (cf->path) {
         FREE(cf->path);
     }
@@ -705,13 +702,22 @@ static void Cache_free(Cache *cf)
         FREE(cf->seg);
     }
 
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
     ActiveDownload *ad = cf->active_dls;
+    cf->active_dls = NULL;
     while (ad) {
         ActiveDownload *next = ad->next;
-        PTHREAD_COND_DESTROY(&ad->cond);
-        FREE(ad);
+        PTHREAD_COND_BROADCAST(&ad->cond);
+        ad->next = NULL;
+        ActiveDownload_unref(ad);
         ad = next;
     }
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+
+    PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
+    PTHREAD_MUTEX_DESTROY(&cf->w_lock);
+    PTHREAD_MUTEX_DESTROY(&cf->dl_lock);
+    SEM_DESTROY(&cf->bgt_sem);
 
     FREE(cf);
 }
@@ -1317,18 +1323,18 @@ retry:
         ad->refcount++;
         ActiveDownload *orig_ad = ad;
 
-        while ((ad = ActiveDownload_find(cf, dl_offset)) == orig_ad) {
-            if (ad->ts && ad->ts->data
-                && ad->ts->curr_size
+        while (ActiveDownload_find(cf, dl_offset) == orig_ad) {
+            if (orig_ad->ts && orig_ad->ts->data
+                && orig_ad->ts->curr_size
                        >= (size_t)(offset_start - dl_offset + len)) {
-                memcpy(output_buf, ad->ts->data + (offset_start - dl_offset),
-                       len);
+                memcpy(output_buf,
+                       orig_ad->ts->data + (offset_start - dl_offset), len);
                 ActiveDownload_unref(orig_ad);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 send = len;
                 goto bgdl;
             }
-            PTHREAD_COND_WAIT(&ad->cond, &cf->dl_lock);
+            PTHREAD_COND_WAIT(&orig_ad->cond, &cf->dl_lock);
         }
         ActiveDownload_unref(orig_ad);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);

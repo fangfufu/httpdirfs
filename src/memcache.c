@@ -29,13 +29,8 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
     ts->data[ts->curr_size] = '\0';
 
     if (ts->cache_ptr) {
-        ActiveDownload *ad = ts->cache_ptr->active_dls;
-        while (ad) {
-            if (ad->ts == ts) {
-                PTHREAD_COND_BROADCAST(&ad->cond);
-                break;
-            }
-            ad = ad->next;
+        if (ts->ad_ptr) {
+            PTHREAD_COND_BROADCAST(&ts->ad_ptr->cond);
         }
         PTHREAD_MUTEX_UNLOCK(&ts->cache_ptr->dl_lock);
     }
