@@ -250,6 +250,15 @@ void test_external_url_to_filename_query_and_fragment(void)
     FREE(name);
 }
 
+void test_external_url_to_filename_encoded_slashes(void)
+{
+    char *name = external_url_to_filename(
+        "http://example.com/some%2Fnested%2Ffile.iso");
+    TEST_ASSERT_NOT_NULL(name);
+    TEST_ASSERT_EQUAL_STRING("some_nested_file.iso", name);
+    FREE(name);
+}
+
 /* ========================================================================= */
 /* HTML_to_LinkTable() integration tests via LinkTable_parse_html()          */
 /* ========================================================================= */
@@ -585,6 +594,7 @@ int main(void)
     RUN_TEST(test_external_url_to_filename_null);
     RUN_TEST(test_external_url_to_filename_fragment);
     RUN_TEST(test_external_url_to_filename_query_and_fragment);
+    RUN_TEST(test_external_url_to_filename_encoded_slashes);
 
     /* HTML_to_LinkTable integration via LinkTable_parse_html */
     RUN_TEST(test_HTML_external_link_file);

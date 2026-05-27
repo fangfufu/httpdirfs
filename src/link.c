@@ -743,6 +743,11 @@ char *external_url_to_filename(const char *url)
     char *result = STRDUP(decoded);
     curl_free(decoded);
     FREE(filename);
+    for (char *ptr = result; *ptr; ptr++) {
+        if (*ptr == '/') {
+            *ptr = '_';
+        }
+    }
     return result;
 }
 
