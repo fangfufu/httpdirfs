@@ -593,8 +593,7 @@ void LinkHashSet_free(LinkHashSet *set)
     }
     for (int i = 0; i < set->capacity; i++) {
         if (set->buckets[i]) {
-            char *ptr = (char *)set->buckets[i];
-            FREE(ptr);
+            FREE(set->buckets[i]);
         }
     }
     FREE(set->buckets);
