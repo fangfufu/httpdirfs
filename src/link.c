@@ -87,6 +87,14 @@ static CURL *Link_to_curl(Link *link)
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
     }
+    ret = curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_3);
+    if (ret) {
+        lprintf(error, "%s", curl_easy_strerror(ret));
+    }
     ret = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
     if (ret) {
         lprintf(error, "%s", curl_easy_strerror(ret));
