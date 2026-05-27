@@ -41,7 +41,11 @@ void setUp(void)
 
 void tearDown(void)
 {
-    /* nothing */
+    CONFIG.external_links = 0;
+    if (ROOT_LINK_TBL != NULL) {
+        LinkTable_free(ROOT_LINK_TBL);
+        ROOT_LINK_TBL = NULL;
+    }
 }
 
 /* ========================================================================= */
