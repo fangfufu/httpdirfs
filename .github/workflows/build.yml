@@ -21,11 +21,8 @@ jobs:
         brew update
         brew install \
           gumbo-parser \
-          openssl \
-          curl \
           expat \
           meson \
-          pkg-config \
           ossp-uuid
         brew install --cask macfuse
 
