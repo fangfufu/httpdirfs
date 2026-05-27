@@ -25,6 +25,13 @@ different file segments in parallel.
 There is support for Airsonic / Subsonic server. This allows you to mount a
 remote music collection locally.
 
+If you enable the `--external-links` flag, HTTPDirFS will also parse the HTML
+directory listing of the mounted server and identify any `<a href>` tags
+pointing to absolute external (cross-origin) URLs. These external files and
+directories will appear alongside local files in the mountpoint. External URLs
+ending with a trailing slash (`/`) are treated as directories; navigating into
+them triggers a recursive layout discovery on the remote server.
+
 If you only want to access a single file, there is also a simplified Single File
 Mode. This can be especially useful if the web server does not present a HTTP
 directory listing.
