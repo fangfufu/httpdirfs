@@ -86,6 +86,12 @@ static Link *Link_new(const char *linkname, LinkType type)
     return link;
 }
 
+static int is_same_origin(const char *link_url)
+{
+    return !CONFIG.external_links || !ROOT_LINK_TBL
+           || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
+}
+
 static CURL *Link_to_curl(Link *link)
 {
     CURL *curl = curl_easy_init();
@@ -157,6 +163,7 @@ static CURL *Link_to_curl(Link *link)
             lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
     }
+
     if (CONFIG.insecure_tls) {
         ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
         if (ret) {
@@ -172,9 +179,12 @@ static CURL *Link_to_curl(Link *link)
     }
 
     if (CONFIG.http_headers) {
-        ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, CONFIG.http_headers);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        if (is_same_origin(link->f_url)) {
+            ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER,
+                                   CONFIG.http_headers);
+            if (ret) {
+                lprintf(error, "%s\n", curl_easy_strerror(ret));
+            }
         }
     }
 
@@ -184,10 +194,7 @@ static CURL *Link_to_curl(Link *link)
          * --external-links is active, cross-origin links must NOT receive
          * the user's credentials for the primary server.
          */
-        int apply_creds
-            = !CONFIG.external_links || !ROOT_LINK_TBL
-              || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link->f_url);
-        if (apply_creds) {
+        if (is_same_origin(link->f_url)) {
             ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
                                    CONFIG.http_username);
             if (ret) {
@@ -197,10 +204,7 @@ static CURL *Link_to_curl(Link *link)
     }
 
     if (CONFIG.http_password) {
-        int apply_creds
-            = !CONFIG.external_links || !ROOT_LINK_TBL
-              || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link->f_url);
-        if (apply_creds) {
+        if (is_same_origin(link->f_url)) {
             ret = curl_easy_setopt(curl, CURLOPT_PASSWORD,
                                    CONFIG.http_password);
             if (ret) {
@@ -1055,7 +1059,7 @@ LinkTable *LinkTable_alloc(const char *url)
     return linktbl;
 }
 
-LinkTable *LinkTable_new(const char *url)
+char *url_to_cache_path(const char *url)
 {
     char *unescaped_path;
     /*
@@ -1089,6 +1093,12 @@ LinkTable *LinkTable_new(const char *url)
             curl_free(temp);
         }
     }
+    return unescaped_path;
+}
+
+LinkTable *LinkTable_new(const char *url)
+{
+    char *unescaped_path = url_to_cache_path(url);
     LinkTable *linktbl = NULL;
 
     /*
