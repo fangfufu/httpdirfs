@@ -1,6 +1,10 @@
 #ifndef CACHE_H
 #define CACHE_H
 #include <sys/types.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <pthread.h>
+#include <semaphore.h>
 
 /**
  * \file cache.h
@@ -22,13 +26,10 @@ struct TransferStruct;
 typedef struct ActiveDownload {
     off_t offset;
     struct TransferStruct *ts;
+    pthread_cond_t cond;
     struct ActiveDownload *next;
 } ActiveDownload;
 
-#include <stdio.h>
-#include <stdint.h>
-#include <pthread.h>
-#include <semaphore.h>
 
 /**
  * \brief Type definition for a cache segment
@@ -67,8 +68,6 @@ struct Cache {
 
     /** \brief mutex lock for background download progress */
     pthread_mutex_t dl_lock;
-    /** \brief condition variable for background download progress */
-    pthread_cond_t dl_cond;
     /** \brief active downloads list */
     ActiveDownload *active_dls;
 

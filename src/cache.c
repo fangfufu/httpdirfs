@@ -627,6 +627,7 @@ static void ActiveDownload_add(Cache *cf, off_t offset)
     ActiveDownload *ad = CALLOC(1, sizeof(ActiveDownload));
     ad->offset = offset;
     ad->ts = NULL;
+    PTHREAD_COND_INIT(&ad->cond, NULL);
     ad->next = cf->active_dls;
     cf->active_dls = ad;
 }
@@ -644,6 +645,8 @@ static void ActiveDownload_remove(Cache *cf, off_t offset)
         if ((*curr)->offset == offset) {
             ActiveDownload *temp = *curr;
             *curr = (*curr)->next;
+            PTHREAD_COND_BROADCAST(&temp->cond);
+            PTHREAD_COND_DESTROY(&temp->cond);
             FREE(temp);
             return;
         }
@@ -660,7 +663,6 @@ static Cache *Cache_alloc(void)
     PTHREAD_MUTEX_INIT(&cf->seek_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->w_lock, NULL);
     PTHREAD_MUTEX_INIT(&cf->dl_lock, NULL);
-    PTHREAD_COND_INIT(&cf->dl_cond, NULL);
     cf->active_dls = NULL;
     cf->cache_opened = 1;
 
@@ -681,7 +683,6 @@ static void Cache_free(Cache *cf)
     PTHREAD_MUTEX_DESTROY(&cf->seek_lock);
     PTHREAD_MUTEX_DESTROY(&cf->w_lock);
     PTHREAD_MUTEX_DESTROY(&cf->dl_lock);
-    PTHREAD_COND_DESTROY(&cf->dl_cond);
     SEM_DESTROY(&cf->bgt_sem);
 
     if (cf->path) {
@@ -695,6 +696,7 @@ static void Cache_free(Cache *cf)
     ActiveDownload *ad = cf->active_dls;
     while (ad) {
         ActiveDownload *next = ad->next;
+        PTHREAD_COND_DESTROY(&ad->cond);
         FREE(ad);
         ad = next;
     }
@@ -1167,7 +1169,6 @@ static void *Cache_bgdl(void *arg)
         FREE(recv_buf);
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         ActiveDownload_remove(cf, dl_offset);
-        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         SEM_POST(&cf->bgt_sem);
         pthread_exit(NULL);
@@ -1193,7 +1194,6 @@ static void *Cache_bgdl(void *arg)
 
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
     ActiveDownload_remove(cf, dl_offset);
-    PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     SEM_POST(&cf->bgt_sem);
@@ -1315,7 +1315,7 @@ retry:
                 send = len;
                 goto bgdl;
             }
-            PTHREAD_COND_WAIT(&cf->dl_cond, &cf->dl_lock);
+            PTHREAD_COND_WAIT(&ad->cond, &cf->dl_lock);
         }
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         PTHREAD_MUTEX_LOCK(&cf->w_lock);
@@ -1344,7 +1344,6 @@ retry:
         ActiveDownload *bg_ad = ActiveDownload_find(cf, dl_offset);
         if (bg_ad == NULL) {
             ActiveDownload_add(cf, dl_offset);
-            PTHREAD_COND_BROADCAST(&cf->dl_cond);
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             Cache_bgdl_launcher(cf, dl_offset);
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1368,7 +1367,6 @@ sync_dl:
         goto retry;
     }
     ActiveDownload_add(cf, dl_offset);
-    PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
 
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1382,7 +1380,6 @@ sync_dl:
     if (recv < 0) {
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         ActiveDownload_remove(cf, dl_offset);
-        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1398,7 +1395,6 @@ sync_dl:
                     recv, (long)((offset_start - dl_offset) + len));
             PTHREAD_MUTEX_LOCK(&cf->dl_lock);
             ActiveDownload_remove(cf, dl_offset);
-            PTHREAD_COND_BROADCAST(&cf->dl_cond);
             PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
             FREE(recv_buf);
             PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1414,7 +1410,6 @@ sync_dl:
                 recv, cf->blksz);
         PTHREAD_MUTEX_LOCK(&cf->dl_lock);
         ActiveDownload_remove(cf, dl_offset);
-        PTHREAD_COND_BROADCAST(&cf->dl_cond);
         PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
         FREE(recv_buf);
         PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
@@ -1423,7 +1418,6 @@ sync_dl:
 
     PTHREAD_MUTEX_LOCK(&cf->dl_lock);
     ActiveDownload_remove(cf, dl_offset);
-    PTHREAD_COND_BROADCAST(&cf->dl_cond);
     PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
     send = len;
     if (offset_start < dl_offset
@@ -1456,7 +1450,6 @@ bgdl: {
                 = ActiveDownload_find(cf, next_dl_offset);
             if (next_seg_missing && next_ad == NULL) {
                 ActiveDownload_add(cf, next_dl_offset);
-                PTHREAD_COND_BROADCAST(&cf->dl_cond);
                 PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
                 PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
                 Cache_bgdl_launcher(cf, next_dl_offset);
