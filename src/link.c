@@ -435,11 +435,11 @@ static LinkType linkname_to_LinkType(const char *linkname)
     return LINK_UNINITIALISED_FILE;
 }
 
-/**
- * \brief check if two link names are equal, after taking the '/' into account.
- */
-static int linknames_equal(const char *str_a, const char *str_b)
+int link_linknames_equal(const char *str_a, const char *str_b)
 {
+    if (!str_a || !str_b) {
+        return 0;
+    }
     size_t len_a = strnlen(str_a, NAME_MAX);
     size_t len_b = strnlen(str_b, NAME_MAX);
     size_t max_len = MAX(len_a, len_b);
@@ -471,12 +471,109 @@ end:
     return identical;
 }
 
+struct LinkHashSet {
+    const char **buckets;
+    int capacity;
+    int size;
+};
+
+unsigned int link_hash_str(const char *str)
+{
+    unsigned int hash = 5381;
+    int c;
+    size_t len = strnlen(str, NAME_MAX);
+
+    /* Strip all trailing slashes */
+    while (len > 0 && str[len - 1] == '/') {
+        len--;
+    }
+
+    for (size_t i = 0; i < len; i++) {
+        c = (unsigned char)str[i];
+        hash = ((hash << 5) + hash) + c;
+    }
+    return hash;
+}
+
+LinkHashSet *LinkHashSet_new(int capacity)
+{
+    if (capacity <= 0) {
+        capacity = 16;
+    } else {
+        int power = 1;
+        while (power < capacity && power < (1 << 30)) {
+            power <<= 1;
+        }
+        capacity = power;
+    }
+    LinkHashSet *set = (LinkHashSet *)CALLOC(1, sizeof(LinkHashSet));
+    set->capacity = capacity;
+    set->buckets = (const char **)CALLOC(capacity, sizeof(const char *));
+    return set;
+}
+
+static void LinkHashSet_resize(LinkHashSet *set)
+{
+    if (set->capacity <= 0) {
+        return;
+    }
+    int old_capacity = set->capacity;
+    const char **old_buckets = set->buckets;
+    if (set->capacity > INT_MAX / 2) {
+        lprintf(fatal, "LinkHashSet capacity overflow\n");
+    }
+    set->capacity *= 2;
+    set->buckets = (const char **)CALLOC(set->capacity, sizeof(const char *));
+
+    for (int i = 0; i < old_capacity; i++) {
+        if (old_buckets[i]) {
+            unsigned int hash = link_hash_str(old_buckets[i]);
+            int bucket = hash & (set->capacity - 1);
+            while (set->buckets[bucket] != NULL) {
+                bucket = (bucket + 1) & (set->capacity - 1);
+            }
+            set->buckets[bucket] = old_buckets[i];
+        }
+    }
+    FREE(old_buckets);
+}
+
+int LinkHashSet_add(LinkHashSet *set, const char *linkname)
+{
+    if (!set || !linkname || set->capacity <= 0) {
+        return 0;
+    }
+    if (set->size >= set->capacity / 2) {
+        LinkHashSet_resize(set);
+    }
+    unsigned int hash = link_hash_str(linkname);
+    int bucket = hash & (set->capacity - 1);
+    while (set->buckets[bucket] != NULL) {
+        if (link_linknames_equal(set->buckets[bucket], linkname)) {
+            return 0;
+        }
+        bucket = (bucket + 1) & (set->capacity - 1);
+    }
+    set->buckets[bucket] = linkname;
+    set->size++;
+    return 1;
+}
+
+void LinkHashSet_free(LinkHashSet *set)
+{
+    if (!set) {
+        return;
+    }
+    FREE(set->buckets);
+    FREE(set);
+}
+
 /**
  * Shamelessly copied and pasted from:
  * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
  */
 static void HTML_to_LinkTable(const char *url, GumboNode *node,
-                              LinkTable *linktbl)
+                              LinkTable *linktbl, LinkHashSet *set)
 {
     if (node->type != GUMBO_NODE_ELEMENT) {
         return;
@@ -502,15 +599,7 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
         /* Check if the new link is a duplicate */
         if ((type == LINK_UNINITIALISED_DIR)
             || (type == LINK_UNINITIALISED_FILE)) {
-            int identical_link_found = 0;
-            for (int i = 0; i < linktbl->size; i++) {
-                if (linknames_equal(relative_url,
-                                    linktbl->links[i]->linkname)) {
-                    identical_link_found = 1;
-                    break;
-                }
-            }
-            if (!identical_link_found) {
+            if (LinkHashSet_add(set, relative_url)) {
                 LinkTable_add(linktbl, Link_new(relative_url, type));
             }
         }
@@ -519,9 +608,27 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     /* Note the recursive call */
     GumboVector *children = &node->v.element.children;
     for (size_t i = 0; i < children->length; ++i) {
-        HTML_to_LinkTable(url, (GumboNode *)children->data[i], linktbl);
+        HTML_to_LinkTable(url, (GumboNode *)children->data[i], linktbl, set);
     }
 }
+
+void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
+{
+    if (!linktbl || !url || !html) {
+        return;
+    }
+    GumboOutput *output = gumbo_parse(html);
+    if (!output) {
+        return;
+    }
+    LinkHashSet *set = LinkHashSet_new(4096);
+    if (output->root) {
+        HTML_to_LinkTable(url, output->root, linktbl, set);
+    }
+    LinkHashSet_free(set);
+    gumbo_destroy_output(&kGumboDefaultOptions, output);
+}
+
 
 void Link_set_file_stat(Link *this_link, CURL *curl)
 {
@@ -758,10 +865,9 @@ LinkTable *LinkTable_new(const char *url)
         /*
          * Otherwise parsed the received data
          */
-        GumboOutput *output = gumbo_parse(ts.data);
-        HTML_to_LinkTable(url, output->root, linktbl);
-        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        LinkTable_parse_html(linktbl, url, ts.data);
         FREE(ts.data);
+
 
         LinkTable_fill(linktbl);
 

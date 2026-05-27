@@ -428,6 +428,26 @@ else
     pass "Write correctly rejected (read-only filesystem)"
 fi
 
+# 4h. Test: Duplicated URL deduplication
+log_info "Test group: Duplicated URL deduplication"
+
+# Count the occurrences of 'simple.txt' in the mounted directory listing
+simple_count=$(ls -1 "${MOUNT_DIR}" | grep -Fxc "simple.txt" || true)
+if [[ "${simple_count}" -eq 1 ]]; then
+    pass "Duplicate 'simple.txt' links successfully deduplicated (count: 1)"
+else
+    fail "Deduplication failed for 'simple.txt' (count: ${simple_count})"
+fi
+
+# Count the occurrences of 'subdir with spaces' in the mounted directory listing
+subdir_count_dup=$(ls -1 "${MOUNT_DIR}" | grep -Fxc "subdir with spaces" || true)
+if [[ "${subdir_count_dup}" -eq 1 ]]; then
+    pass "Duplicate 'subdir with spaces' links successfully deduplicated (count: 1)"
+else
+    fail "Deduplication failed for 'subdir with spaces' (count: ${subdir_count_dup})"
+fi
+
+
 # ─── Step 5: Unmount non-cache mount ────────────────────────────────────────
 
 log_info "Unmounting non-cache mount..."

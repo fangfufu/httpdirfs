@@ -194,4 +194,54 @@ void LinkTable_print(LinkTable *linktbl);
  * \brief add a Link to a LinkTable
  */
 void LinkTable_add(LinkTable *linktbl, Link *link);
+
+/**
+ * \brief Parse HTML content and populate LinkTable with unique links.
+ */
+void LinkTable_parse_html(LinkTable *linktbl, const char *url,
+                          const char *html);
+
+/*
+ * Functions exposed for unit testing duplicated URL logic
+ */
+typedef struct LinkHashSet LinkHashSet;
+
+/**
+ * \brief Check if two link names are equal, normalizing any single trailing
+ * slash.
+ * \param str_a The first link name string to compare.
+ * \param str_b The second link name string to compare.
+ * \return 1 if they are equivalent, 0 otherwise.
+ */
+int link_linknames_equal(const char *str_a, const char *str_b);
+
+/**
+ * \brief Generate a hash value for a link name, ignoring any trailing slashes.
+ * \param str The link name string to hash.
+ * \return The generated unsigned int hash value.
+ */
+unsigned int link_hash_str(const char *str);
+
+/**
+ * \brief Create a new LinkHashSet with a specified initial capacity.
+ * \param capacity The initial number of buckets to allocate.
+ * \return Pointer to the newly allocated LinkHashSet.
+ */
+LinkHashSet *LinkHashSet_new(int capacity);
+
+/**
+ * \brief Add a link name to the LinkHashSet if it is not already present.
+ * \param set The LinkHashSet to insert the link name into.
+ * \param linkname The link name string to add.
+ * \return 1 if successfully added (not a duplicate), 0 if it is a duplicate.
+ */
+int LinkHashSet_add(LinkHashSet *set, const char *linkname);
+
+/**
+ * \brief Free all memory allocated for a LinkHashSet.
+ * \param set The LinkHashSet to deallocate.
+ */
+void LinkHashSet_free(LinkHashSet *set);
+
+
 #endif

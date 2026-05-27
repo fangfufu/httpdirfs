@@ -28,6 +28,71 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         """Suppress default request logging."""
         pass
 
+    def list_directory(self, path):
+        """Override directory listing to inject duplicate/malformed URLs for deduplication testing."""
+        try:
+            files = os.listdir(path)
+        except OSError:
+            self.send_error(404, "No permission to list directory")
+            return None
+        files.sort(key=lambda a: a.lower())
+
+        import io
+        from html import escape as html_escape
+
+        r = []
+        displaypath = urllib.parse.unquote(self.path, errors='surrogatepass')
+        displaypath = html_escape(displaypath)
+        enc = sys.getfilesystemencoding()
+        title = f"Directory listing for {displaypath}"
+        r.append('<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">')
+        r.append('<html>\n<head>')
+        r.append(f'<meta http-equiv="Content-Type" content="text/html; charset={enc}">')
+        r.append(f'<title>{title}</title>\n</head>\n<body>')
+        r.append(f'<h1>{title}</h1>\n<hr>\n<ul>')
+
+        for name in files:
+            fullname = os.path.join(path, name)
+            displayname = linkname = name
+
+            # Skip hidden files
+            if name.startswith('.'):
+                continue
+
+            # Append / for directories
+            if os.path.isdir(fullname):
+                displayname = name + "/"
+                linkname = name + "/"
+
+            displayname = html_escape(displayname)
+            linkname = urllib.parse.quote(linkname, errors='surrogatepass')
+            r.append(f'<li><a href="{linkname}">{displayname}</a></li>')
+
+            # Inject duplicate links specifically for testing duplicated URL handling
+            if name == "simple.txt":
+                # Duplicate 1: identical link
+                r.append(f'<li><a href="{linkname}">{displayname} (duplicate)</a></li>')
+                # Duplicate 2: trailing slash variation
+                r.append(f'<li><a href="{linkname}/">{displayname}/ (duplicate slash)</a></li>')
+            elif name == "subdir with spaces":
+                # Duplicate 1: identical link
+                r.append(f'<li><a href="{linkname}">{displayname} (duplicate)</a></li>')
+                # Duplicate 2: without trailing slash
+                no_slash_link = urllib.parse.quote(name, errors='surrogatepass')
+                r.append(f'<li><a href="{no_slash_link}">{html_escape(name)} (duplicate no slash)</a></li>')
+
+        r.append('</ul>\n<hr>\n</body>\n</html>\n')
+        encoded = '\n'.join(r).encode(enc, 'surrogateescape')
+        f = io.BytesIO()
+        f.write(encoded)
+        f.seek(0)
+        self.send_response(200)
+        self.send_header("Content-type", f"text/html; charset={enc}")
+        self.send_header("Content-Length", str(len(encoded)))
+        self.end_headers()
+        return f
+
+
     def send_head(self):
         """Common code for GET and HEAD commands (with Range support).
 
