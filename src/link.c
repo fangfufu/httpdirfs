@@ -632,7 +632,7 @@ int is_cross_origin(const char *page_url, const char *link_url)
      */
     int slashes = 0;
     const char *p = page_url;
-    while (*p && slashes < 3) {
+    while (*p && slashes < 3 && *p != '?' && *p != '#') {
         if (*p == '/') {
             slashes++;
         }
@@ -641,7 +641,8 @@ int is_cross_origin(const char *page_url, const char *link_url)
     size_t page_origin_len;
     if (slashes < 3) {
         if (is_external_url(page_url)) {
-            page_origin_len = strlen(page_url);
+            const char *q = strpbrk(page_url, "?#");
+            page_origin_len = q ? (size_t)(q - page_url) : strlen(page_url);
         } else {
             return 1; /* malformed page_url */
         }
@@ -651,7 +652,7 @@ int is_cross_origin(const char *page_url, const char *link_url)
 
     slashes = 0;
     const char *l = link_url;
-    while (*l && slashes < 3) {
+    while (*l && slashes < 3 && *l != '?' && *l != '#') {
         if (*l == '/') {
             slashes++;
         }
@@ -660,7 +661,8 @@ int is_cross_origin(const char *page_url, const char *link_url)
     size_t link_origin_len;
     if (slashes < 3) {
         if (is_external_url(link_url)) {
-            link_origin_len = strlen(link_url);
+            const char *q = strpbrk(link_url, "?#");
+            link_origin_len = q ? (size_t)(q - link_url) : strlen(link_url);
         } else {
             return 1; /* malformed link_url */
         }

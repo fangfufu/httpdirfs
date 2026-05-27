@@ -152,6 +152,25 @@ void test_is_cross_origin_case_insensitive(void)
         0, is_cross_origin("HTTP://localhost/", "http://localhost/file.iso"));
 }
 
+void test_is_cross_origin_with_query_and_fragment(void)
+{
+    /* Test URLs with query params/fragments containing slashes */
+    TEST_ASSERT_EQUAL_INT(
+        0, is_cross_origin("http://localhost/",
+                           "http://localhost?redirect=/foo/bar"));
+    TEST_ASSERT_EQUAL_INT(0,
+                          is_cross_origin("http://localhost?redirect=/foo/bar",
+                                          "http://localhost/file.iso"));
+
+    /* Test URLs with query params/fragments but fewer than 3 slashes */
+    TEST_ASSERT_EQUAL_INT(0, is_cross_origin("http://localhost?auth=1",
+                                             "http://localhost/file.iso"));
+    TEST_ASSERT_EQUAL_INT(0, is_cross_origin("http://localhost#fragment",
+                                             "http://localhost?auth=1"));
+    TEST_ASSERT_EQUAL_INT(1, is_cross_origin("http://localhost?auth=1",
+                                             "http://otherhost?auth=1"));
+}
+
 /* ========================================================================= */
 /* external_url_to_filename() tests                                          */
 /* ========================================================================= */
@@ -554,6 +573,7 @@ int main(void)
     RUN_TEST(test_is_cross_origin_both_no_trailing_slash_same);
     RUN_TEST(test_is_cross_origin_null);
     RUN_TEST(test_is_cross_origin_case_insensitive);
+    RUN_TEST(test_is_cross_origin_with_query_and_fragment);
 
     /* external_url_to_filename */
     RUN_TEST(test_external_url_to_filename_simple);
