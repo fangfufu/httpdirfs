@@ -259,11 +259,22 @@ void test_HTML_external_link_dir(void)
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
     LinkTable_parse_html(tbl, "http://localhost/",
                          "<a href=\"http://external.com/subdir/\">"
-                         "subdir</a>");
+                         "subdir</a>"
+                         "<a href=\"http://external.com/subdir2/?q=1\">"
+                         "subdir2</a>"
+                         "<a href=\"http://external.com/subdir3/#fragment\">"
+                         "subdir3</a>");
 
-    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_INT(4, tbl->size);
     TEST_ASSERT_EQUAL_STRING("subdir", tbl->links[1]->linkname);
     TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_DIR, tbl->links[1]->type);
+
+    TEST_ASSERT_EQUAL_STRING("subdir2", tbl->links[2]->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_DIR, tbl->links[2]->type);
+
+    TEST_ASSERT_EQUAL_STRING("subdir3", tbl->links[3]->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_DIR, tbl->links[3]->type);
+
     LinkTable_free(tbl);
     CONFIG.external_links = 0;
 }
@@ -340,7 +351,7 @@ void test_HTML_external_link_dot_and_dotdot(void)
 /* LinkTable_fill() skip test                                                */
 /* ========================================================================= */
 
-void test_LinkTable_fill_skips_external(void)
+void test_Link_preserves_preset_f_url(void)
 {
     /* Verify the invariant: a link with f_url pre-set by HTML_to_LinkTable
      * retains its f_url.  We check this directly on the link struct rather
@@ -562,10 +573,7 @@ int main(void)
     RUN_TEST(test_HTML_external_link_same_origin);
     RUN_TEST(test_HTML_external_link_dedup_first_wins);
     RUN_TEST(test_HTML_external_link_dot_and_dotdot);
-
-    /* LinkTable_fill skip */
-    RUN_TEST(test_LinkTable_fill_skips_external);
-
+    RUN_TEST(test_Link_preserves_preset_f_url);
     /* url_to_cache_path */
     RUN_TEST(test_url_to_cache_path_null);
     RUN_TEST(test_url_to_cache_path_local);

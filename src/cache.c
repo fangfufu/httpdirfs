@@ -840,6 +840,12 @@ void Cache_delete(const char *fn)
         fn = link->sonic.id;
     } else if (CONFIG.mode == NORMAL && link) {
         cache_key = url_to_cache_path(link->f_url);
+        if (!cache_key) {
+            lprintf(error, "Failed to derive cache key from URL: %s\n",
+                    link->f_url);
+            LinkTable_unref(link->parent_table);
+            return;
+        }
         fn = cache_key;
     }
 
@@ -953,6 +959,16 @@ int Cache_create(const char *path)
     } else {
         lprintf(fatal, "Invalid CONFIG.mode\n");
     }
+
+    if (!fn) {
+        lprintf(error,
+                "Failed to derive cache key/name from URL or linkname\n");
+        if (fn_alloc) {
+            FREE(fn_alloc);
+        }
+        LinkTable_unref(this_link->parent_table);
+        return 1;
+    }
     Cache *cf = Cache_alloc();
     cf->path = STRNDUP(fn, PATH_MAX);
     cf->link = this_link;
@@ -998,7 +1014,7 @@ int Cache_create(const char *path)
 
     if (CONFIG.mode == NORMAL) {
         FREE(fn_alloc);
-    } else if (CONFIG.mode == SONIC || CONFIG.mode == SINGLE) {
+    } else if (CONFIG.mode == SINGLE) {
         curl_free(fn);
     }
 
@@ -1041,6 +1057,15 @@ Cache *Cache_open(const char *fn)
         actual_fn = link->sonic.id;
     } else if (CONFIG.mode == NORMAL) {
         actual_fn_alloc = url_to_cache_path(link->f_url);
+        if (!actual_fn_alloc) {
+            lprintf(error, "Failed to derive cache path from URL: %s\n",
+                    link->f_url);
+            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                    (unsigned long)pthread_self());
+            PTHREAD_MUTEX_UNLOCK(&cf_lock);
+            LinkTable_unref(link->parent_table);
+            return NULL;
+        }
         actual_fn = actual_fn_alloc;
     }
 

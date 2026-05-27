@@ -571,9 +571,8 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null && break
     sleep 1
 done
-
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    log_error "httpdirfs (--external-links) failed to mount."
+    fail "httpdirfs (--external-links) failed to mount."
     kill "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
 else
     # local file is present
@@ -679,9 +678,8 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null && break
     sleep 1
 done
-
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    log_error "httpdirfs (no --external-links) failed to mount."
+    fail "httpdirfs (no --external-links) failed to mount."
     kill "${COMPAT_PID}" 2>/dev/null || true
 else
     if [[ ! -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
@@ -702,10 +700,63 @@ fi
 
 # ── Test 6: cache mode with --external-links ───────────────────────────────
 log_info "Test group: External-links cache mode"
-# NOTE: Cache mode with external links requires additional work in the cache
-# path (Meta_open uses ROOT_LINK_OFFSET which is incorrect for cross-origin
-# URLs). This will be addressed in a follow-up. Skip for now.
-skip "external_link_cache_mode: cache path for external URLs not yet supported"
+
+# Remove and recreate the cache directory for a completely clean state
+rm -rf "${CACHE_DIR:?}"
+mkdir -p "${CACHE_DIR}"
+
+"${HTTPDIRFS_BIN}" \
+    -f \
+    --external-links \
+    --cache \
+    --cache-location "${CACHE_DIR}" \
+    "${EXT_TEST_URL}" \
+    "${EXT_MOUNT_DIR}" &
+EXT_CACHE_PID=$!
+
+for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+    mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null && break
+    sleep 1
+done
+
+if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
+    fail "httpdirfs (--external-links --cache) failed to mount."
+    kill "${EXT_CACHE_PID}" 2>/dev/null || true
+else
+    # 6a. Check file presence
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        pass "external_link_cache_mode: file present"
+    else
+        fail "external_link_cache_mode: file missing"
+    fi
+
+    # 6b. Verify content integrity (downloads and caches the file)
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        actual=$(sha256sum "${EXT_MOUNT_DIR}/external_file.txt" \
+            | awk '{print $1}')
+        if [[ "${actual}" == "${EXT_FILE_SHA}" ]]; then
+            pass "external_link_cache_mode: content OK"
+        else
+            fail "external_link_cache_mode: content checksum mismatch"
+        fi
+    else
+        skip "external_link_cache_mode: content check skipped (file missing)"
+    fi
+
+    # 6c. Verify re-reading from cache works
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        actual_cached=$(sha256sum "${EXT_MOUNT_DIR}/external_file.txt" \
+            | awk '{print $1}')
+        if [[ "${actual_cached}" == "${EXT_FILE_SHA}" ]]; then
+            pass "external_link_cache_mode: cached re-read OK"
+        else
+            fail "external_link_cache_mode: cached re-read checksum mismatch"
+        fi
+    fi
+
+    do_unmount "${EXT_MOUNT_DIR}"
+    wait "${EXT_CACHE_PID}" 2>/dev/null || true
+fi
 
 # Stop the external HTTP server
 cleanup_ext

@@ -771,8 +771,11 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
             char *filename = external_url_to_filename(raw_href);
             if (filename && filename[0] != '\0' && strcmp(filename, ".") != 0
                 && strcmp(filename, "..") != 0) {
-                /* Determine type: directory if URL ends with '/' */
-                size_t href_len = strlen(raw_href);
+                /* Determine type: directory if URL (ignoring query/fragment)
+                 * ends with '/' */
+                const char *qf = strpbrk(raw_href, "?#");
+                size_t href_len
+                    = qf ? (size_t)(qf - raw_href) : strlen(raw_href);
                 LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
                                     ? LINK_UNINITIALISED_DIR
                                     : LINK_UNINITIALISED_FILE;
