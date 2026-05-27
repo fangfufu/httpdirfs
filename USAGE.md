@@ -156,7 +156,7 @@ httpdirfs [options] URL mountpoint
 #### `--http-header <header>`
 
 - **Description:** Set one or more custom HTTP headers for requests sent to the
-  mounted server. Can be specified multiple times.
+  mounted server. This option can be specified multiple times.
 - **Example:**
   `httpdirfs --http-header "Authorization: Bearer token" --http-header "X-Custom: value" URL mountpoint`
 

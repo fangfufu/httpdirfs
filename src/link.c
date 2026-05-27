@@ -613,6 +613,119 @@ int is_external_url(const char *url)
             || strncasecmp(url, "https://", 8) == 0);
 }
 
+static int parse_origin(const char *url, size_t origin_len, char *scheme,
+                        size_t scheme_max, char *host, size_t host_max,
+                        int *port)
+{
+    if (!url || origin_len == 0) {
+        return -1;
+    }
+
+    // Find "://" within origin_len
+    const char *scheme_end = NULL;
+    for (size_t i = 0; i + 2 < origin_len; i++) {
+        if (url[i] == ':' && url[i + 1] == '/' && url[i + 2] == '/') {
+            scheme_end = url + i;
+            break;
+        }
+    }
+
+    if (!scheme_end) {
+        return -1; // malformed origin
+    }
+
+    size_t scheme_len = (size_t)(scheme_end - url);
+    if (scheme_len >= scheme_max) {
+        return -1;
+    }
+    strncpy(scheme, url, scheme_len);
+    scheme[scheme_len] = '\0';
+    // Lowercase scheme
+    for (size_t i = 0; i < scheme_len; i++) {
+        if (scheme[i] >= 'A' && scheme[i] <= 'Z') {
+            scheme[i] += 32;
+        }
+    }
+
+    const char *host_start = scheme_end + 3;
+    const char *origin_end = url + origin_len;
+    if (host_start >= origin_end) {
+        return -1;
+    }
+
+    size_t host_part_len = (size_t)(origin_end - host_start);
+
+    // Check for IPv6 bracketed host
+    const char *bracket_close = NULL;
+    if (*host_start == '[') {
+        for (const char *p = host_start; p < origin_end; p++) {
+            if (*p == ']') {
+                bracket_close = p;
+                break;
+            }
+        }
+    }
+
+    const char *port_colon = NULL;
+    if (bracket_close) {
+        // Look for colon after the closing bracket
+        for (const char *p = bracket_close + 1; p < origin_end; p++) {
+            if (*p == ':') {
+                port_colon = p;
+                break;
+            }
+        }
+    } else {
+        // Look for colon in the host part (there should be at most one colon if
+        // no brackets)
+        for (const char *p = host_start; p < origin_end; p++) {
+            if (*p == ':') {
+                port_colon = p;
+                break;
+            }
+        }
+    }
+
+    size_t host_len;
+    if (port_colon) {
+        host_len = (size_t)(port_colon - host_start);
+        // Parse port
+        int p_val = 0;
+        for (const char *p = port_colon + 1; p < origin_end; p++) {
+            if (*p >= '0' && *p <= '9') {
+                p_val = p_val * 10 + (*p - '0');
+            } else {
+                return -1; // invalid character in port
+            }
+        }
+        *port = p_val;
+    } else {
+        host_len = host_part_len;
+        // Default port based on scheme
+        if (strcmp(scheme, "http") == 0) {
+            *port = 80;
+        } else if (strcmp(scheme, "https") == 0) {
+            *port = 443;
+        } else {
+            *port = 0; // unknown scheme default port
+        }
+    }
+
+    if (host_len >= host_max) {
+        return -1;
+    }
+    strncpy(host, host_start, host_len);
+    host[host_len] = '\0';
+    // Lowercase host
+    for (size_t i = 0; i < host_len; i++) {
+        if (host[i] >= 'A' && host[i] <= 'Z') {
+            host[i] += 32;
+        }
+    }
+
+    return 0;
+}
+
 /**
  * \brief Check if link_url has a different origin than page_url.
  * \details Compares scheme + host + port by finding the path component
@@ -670,11 +783,39 @@ int is_cross_origin(const char *page_url, const char *link_url)
         link_origin_len = (size_t)(l - link_url) - 1;
     }
 
-    if (page_origin_len != link_origin_len) {
+    char page_scheme[32];
+    char page_host[PATH_MAX];
+    int page_port = 0;
+    if (parse_origin(page_url, page_origin_len, page_scheme,
+                     sizeof(page_scheme), page_host, sizeof(page_host),
+                     &page_port)
+        != 0) {
         return 1;
     }
-    return strncasecmp(page_url, link_url, page_origin_len) != 0;
+
+    char link_scheme[32];
+    char link_host[PATH_MAX];
+    int link_port = 0;
+    if (parse_origin(link_url, link_origin_len, link_scheme,
+                     sizeof(link_scheme), link_host, sizeof(link_host),
+                     &link_port)
+        != 0) {
+        return 1;
+    }
+
+    if (strcmp(page_scheme, link_scheme) != 0) {
+        return 1;
+    }
+    if (strcmp(page_host, link_host) != 0) {
+        return 1;
+    }
+    if (page_port != link_port) {
+        return 1;
+    }
+
+    return 0;
 }
+
 
 /**
  * \brief Extract the filename component from an external URL.

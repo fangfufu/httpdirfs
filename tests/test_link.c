@@ -171,6 +171,31 @@ void test_is_cross_origin_with_query_and_fragment(void)
                                              "http://otherhost?auth=1"));
 }
 
+void test_is_cross_origin_default_port_normalization_http(void)
+{
+    TEST_ASSERT_EQUAL_INT(0, is_cross_origin("http://example.com/",
+                                             "http://example.com:80/f.iso"));
+    TEST_ASSERT_EQUAL_INT(0, is_cross_origin("http://example.com:80/",
+                                             "http://example.com/f.iso"));
+}
+
+void test_is_cross_origin_default_port_normalization_https(void)
+{
+    TEST_ASSERT_EQUAL_INT(0, is_cross_origin("https://example.com/",
+                                             "https://example.com:443/f.iso"));
+    TEST_ASSERT_EQUAL_INT(0, is_cross_origin("https://example.com:443/",
+                                             "https://example.com/f.iso"));
+}
+
+void test_is_cross_origin_non_default_port_not_equal(void)
+{
+    TEST_ASSERT_EQUAL_INT(1, is_cross_origin("http://example.com/",
+                                             "http://example.com:8080/f.iso"));
+    TEST_ASSERT_EQUAL_INT(1, is_cross_origin("https://example.com/",
+                                             "https://example.com:8443/f.iso"));
+}
+
+
 /* ========================================================================= */
 /* external_url_to_filename() tests                                          */
 /* ========================================================================= */
@@ -583,6 +608,10 @@ int main(void)
     RUN_TEST(test_is_cross_origin_null);
     RUN_TEST(test_is_cross_origin_case_insensitive);
     RUN_TEST(test_is_cross_origin_with_query_and_fragment);
+    RUN_TEST(test_is_cross_origin_default_port_normalization_http);
+    RUN_TEST(test_is_cross_origin_default_port_normalization_https);
+    RUN_TEST(test_is_cross_origin_non_default_port_not_equal);
+
 
     /* external_url_to_filename */
     RUN_TEST(test_external_url_to_filename_simple);
