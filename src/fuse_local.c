@@ -29,6 +29,7 @@
 #include "fuse_local.h"
 
 #include "cache.h"
+#include "config.h"
 #include "link.h"
 #include "log.h"
 
@@ -122,8 +123,17 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
         if (fi->fh) {
             received = Cache_read((Cache *)fi->fh, buf, size, offset);
         } else {
-            /* zero-length file: fi->fh was set to 0 in fs_open; return EOF */
-            received = 0;
+            Link *link = path_to_Link(path);
+            if (link) {
+                if (link->content_length == 0) {
+                    received = 0;
+                } else {
+                    received = path_download(path, buf, size, offset);
+                }
+                LinkTable_unref(link->parent_table);
+            } else {
+                received = -ENOENT;
+            }
         }
     } else {
         received = path_download(path, buf, size, offset);
@@ -146,6 +156,30 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (CACHE_SYSTEM_INIT) {
         if (link->content_length == 0) {
             fi->fh = 0; /* valid empty file: bypass cache creation */
+            LinkTable_unref(link->parent_table);
+            return 0;
+        }
+        int bypass_cache = 0;
+        /* Portable overflow guard: compare against the maximum value
+         * that off_t can represent. If content_length exceeds this,
+         * it cannot be safely cast to off_t, so we skip cache for
+         * abnormally large files (if a max threshold is configured).
+         */
+        const size_t off_t_max
+            = (sizeof(off_t) >= 8) ? (size_t)LLONG_MAX : (size_t)INT_MAX;
+        if (link->content_length > off_t_max) {
+            bypass_cache = 1;
+        } else {
+            off_t file_size = (off_t)link->content_length;
+            if ((CONFIG.cache_min_size >= 0
+                 && file_size < CONFIG.cache_min_size)
+                || (CONFIG.cache_max_size >= 0
+                    && file_size > CONFIG.cache_max_size)) {
+                bypass_cache = 1;
+            }
+        }
+        if (bypass_cache) {
+            fi->fh = 0; /* bypass cache creation due to size thresholds */
             LinkTable_unref(link->parent_table);
             return 0;
         }
