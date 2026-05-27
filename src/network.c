@@ -145,13 +145,13 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
         CURLcode ret
             = curl_easy_getinfo(curl_msg->easy_handle, CURLINFO_PRIVATE, &ts);
         if (ret) {
-            lprintf(error, "%s", curl_easy_strerror(ret));
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
         ts->transferring = 0;
         char *url = NULL;
         ret = curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
         if (ret) {
-            lprintf(error, "%s", curl_easy_strerror(ret));
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
 
         if (!curl_msg->data.result) {
@@ -283,7 +283,7 @@ void transfer_blocking(CURL *curl)
     TransferStruct *ts;
     CURLcode ret = curl_easy_getinfo(curl, CURLINFO_PRIVATE, &ts);
     if (ret) {
-        lprintf(error, "%s", curl_easy_strerror(ret));
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
 
     lprintf(network_lock_debug, "thread %lx: locking transfer_lock;\n",
