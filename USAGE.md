@@ -1,7 +1,7 @@
 ## HTTPDirFS Usage
 
 As of commit
-[e86afe825aeca9b8fc28ad226aba50dbf2c26a77](https://github.com/fangfufu/httpdirfs/commit/e86afe825aeca9b8fc28ad226aba50dbf2c26a77),
+[94ced41859639e94c13408bc9f5506269abb2667](https://github.com/fangfufu/httpdirfs/commit/94ced41859639e94c13408bc9f5506269abb2667),
 HTTPDirFS supports the following usage flags:
 
     usage: ./httpdirfs [options] URL mountpoint
@@ -23,6 +23,7 @@ HTTPDirFS supports the following usage flags:
             --proxy-username    Username for the proxy
             --proxy-password    Password for the proxy
             --proxy-cacert      Certificate authority for the proxy
+            --proxy-capath      Certificate authority directory for the proxy
             --cache             Enable cache (default: off)
             --cache-location    Set a custom cache location
                                 (default: "${XDG_CACHE_HOME}/httpdirfs")
@@ -30,12 +31,13 @@ HTTPDirFS supports the following usage flags:
                                 specified with `--cache-location`, if the option is
                                 seen first. Then exit in either case.
             --cacert            Certificate authority for the server
+            --capath            Certificate authority directory for the server
             --dl-seg-size       Set cache download segment size, in MB (default: 8)
                                 Note: this setting is ignored if previously
                                 cached data is found for the requested file.
             --http-header       Set one or more HTTP headers
             --max-conns         Set maximum number of network connections that
-                                libcurl is allowed to make. (default: 10)
+                                libcurl is allowed to make. (default: 6)
             --refresh-timeout   The directories are refreshed after the specified
                                 time, in seconds (default: 3600)
             --retry-wait        Set delay in seconds before retrying an HTTP request
