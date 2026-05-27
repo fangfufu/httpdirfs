@@ -10,6 +10,36 @@ and this project adheres to
 
 ### Added
 
+- Dynamically scale the number of background prefetch worker threads to match up
+  to half of the maximum concurrent connection capacity (`CONFIG.max_conns`
+  capped at `DEFAULT_NETWORK_MAX_CONNS`), transitioning from a single hardcoded
+  thread to improve performance when multiple concurrent active downloads are
+  supported ([2c39a7a](https://github.com/fangfufu/httpdirfs/commit/2c39a7a)).
+- Add a unit test `test_Cache_alloc_num_bg_workers` to verify correct background
+  worker allocation scaling under different network connection capacities
+  ([2c39a7a](https://github.com/fangfufu/httpdirfs/commit/2c39a7a)).
+- Implement a thread-safe manual reference-counting mechanism
+  (`ActiveDownload_ref` and `ActiveDownload_unref`) for `ActiveDownload` nodes
+  to prevent Use-After-Free (UAF) vulnerabilities during concurrent read
+  operations, background transfers, and cache teardown
+  ([9c34463](https://github.com/fangfufu/httpdirfs/commit/9c34463)).
+- Add a unit test `test_Cache_free_active_downloads` to verify that active
+  download nodes are not prematurely freed while waiter threads are still active
+  ([9c34463](https://github.com/fangfufu/httpdirfs/commit/9c34463)).
+- Implement a robust shutdown handshake mechanism in `Cache_free` to coordinate
+  safe cache teardown when reader threads are actively blocked on segment
+  downloads, ensuring all threads unregister before mutexes and condition
+  variables are destroyed
+  ([a01c9b1](https://github.com/fangfufu/httpdirfs/commit/a01c9b1)).
+- Add a unit test `test_Cache_free_active_downloads_with_waiters` to exercise
+  and verify proper thread synchronization and early-exit cleanup during cache
+  shutdown ([a01c9b1](https://github.com/fangfufu/httpdirfs/commit/a01c9b1)).
+- Add standardized GPLv3/OpenSSL copyright headers and detailed Doxygen
+  file-level `\brief` annotations to all C source and header files under the
+  `src/` directory to improve legal compliance and maintain consistent
+  documentation headers
+  ([f621da7](https://github.com/fangfufu/httpdirfs/commit/f621da7),
+  [666d53a](https://github.com/fangfufu/httpdirfs/commit/666d53a)).
 - Add `CURLOPT_PIPEWAIT` setting to curl easy handles to optimize HTTP/2
   multiplexing during concurrent file and directory transfers
   ([4114977](https://github.com/fangfufu/httpdirfs/commit/4114977)).
@@ -56,6 +86,37 @@ and this project adheres to
 
 ### Changed
 
+- Transition from a single global condition variable (`dl_cond`) to granular,
+  block-specific condition variables integrated directly within `ActiveDownload`
+  nodes to eliminate redundant wakeups of unrelated FUSE waiter threads and
+  reduce thread scheduling overhead
+  ([a40bd74](https://github.com/fangfufu/httpdirfs/commit/a40bd74)).
+- Optimize the cache wait loop inside `Cache_read_segment` to check status in
+  $O(1)$ time by introducing an `unlinked` state flag on the `ActiveDownload`
+  structure, avoiding expensive $O(N)$ list lookups on every loop iteration
+  ([42a4dd3](https://github.com/fangfufu/httpdirfs/commit/42a4dd3)).
+- Clean up and standardize `#include` directives across all source files,
+  headers, and test suites, using forward struct declarations to break circular
+  dependency chains
+  ([94ced41](https://github.com/fangfufu/httpdirfs/commit/94ced41)).
+- Extract common cache test setup logic into dedicated helper functions
+  (`setup_mock_link_table` and `setup_temp_cache_dir`) inside
+  `tests/test_cache.c`
+  ([2c39a7a](https://github.com/fangfufu/httpdirfs/commit/2c39a7a)).
+- Replace raw octal literals with symbolic permission constants (such as
+  `S_IRWXU`) in test directory creation calls to address SonarCloud security
+  hotspot alerts
+  ([2c39a7a](https://github.com/fangfufu/httpdirfs/commit/2c39a7a)).
+- Update `README.md` to document the permanent cache thread-safety improvements,
+  including granular signaling, manual reference counting, and the shutdown
+  handshake mechanism
+  ([7eea0ea](https://github.com/fangfufu/httpdirfs/commit/7eea0ea)).
+- Update `USAGE.md` to document the `--proxy-capath` and `--capath` flags,
+  update the default value of `--max-conns` to 6, and update internal commit
+  reference links
+  ([1864cce](https://github.com/fangfufu/httpdirfs/commit/1864cce),
+  [7bcbcb2](https://github.com/fangfufu/httpdirfs/commit/7bcbcb2),
+  [7d76285](https://github.com/fangfufu/httpdirfs/commit/7d76285)).
 - Lower the default maximum network connection count
   (`DEFAULT_NETWORK_MAX_CONNS`) from `10` to `6` to align with the standard
   persistent connection limits agreed upon by all major modern web browsers
@@ -135,6 +196,10 @@ and this project adheres to
 
 ### Fixed
 
+- Resolve a critical Use-After-Free (UAF) deadlock vulnerability in the
+  `Cache_free` teardown path by safely coordinating waiter exits via the new
+  shutdown handshake and reference-counting mechanisms
+  ([a01c9b1](https://github.com/fangfufu/httpdirfs/commit/a01c9b1)).
 - Intercept size-zero allocations early in `REALLOC_wrapper` by freeing the
   pointer and returning `NULL` to resolve a double-free on glibc and standardize
   behavior on BSD/macOS where `realloc(ptr, 0)` returns a non-NULL sentinel
