@@ -266,4 +266,10 @@ int is_cross_origin(const char *page_url, const char *link_url);
  */
 char *external_url_to_filename(const char *url);
 
+/**
+ * \brief Safely generate the cache path for a given URL, handling cross-origin
+ * external links.
+ * \note The caller must free the returned string with FREE().
+ */
+char *url_to_cache_path(const char *url);
 #endif

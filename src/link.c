@@ -1068,14 +1068,56 @@ LinkTable *LinkTable_alloc(const char *url)
     return linktbl;
 }
 
+char *url_to_cache_path(const char *url)
+{
+    if (!url) {
+        return NULL;
+    }
+    char *unescaped_path;
+    /*
+     * When --external-links is active a directory link from an external
+     * server may be navigated. Its URL won't share the root server's
+     * origin, so applying ROOT_LINK_OFFSET would produce garbage. Detect
+     * this case by checking whether url is cross-origin from root.
+     */
+    if (ROOT_LINK_TBL && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, url)) {
+        /* External URL: use the full URL as the cache key path. */
+        char *temp = curl_easy_unescape(NULL, url, 0, NULL);
+        unescaped_path = temp ? STRDUP(temp) : STRDUP(url);
+        if (temp) {
+            curl_free(temp);
+        }
+        /* Sanitize unescaped_path to prevent path traversal via ".." */
+        char *p = unescaped_path;
+        while ((p = strstr(p, ".."))) {
+            p[0] = '_';
+            p[1] = '_';
+            p += 2;
+        }
+        /* Sanitize unescaped_path to prevent path traversal and invalid
+         * directory structures */
+        for (char *sp = unescaped_path; *sp; sp++) {
+            if (*sp == '/' || *sp == ':') {
+                *sp = '_';
+            }
+        }
+    } else {
+        size_t url_len = strlen(url);
+        const char *offset_url = (url_len >= (size_t)ROOT_LINK_OFFSET)
+                                     ? url + ROOT_LINK_OFFSET
+                                     : url;
+        char *temp = curl_easy_unescape(NULL, offset_url, 0, NULL);
+        unescaped_path = temp ? STRDUP(temp) : STRDUP(offset_url);
+        if (temp) {
+            curl_free(temp);
+        }
+    }
+    return unescaped_path;
+}
 
 LinkTable *LinkTable_new(const char *url)
 {
-    char *unescaped_path;
-    size_t url_len = strlen(url);
-    const char *offset_url
-        = (url_len >= (size_t)ROOT_LINK_OFFSET) ? url + ROOT_LINK_OFFSET : url;
-    unescaped_path = curl_easy_unescape(NULL, offset_url, 0, NULL);
+    char *unescaped_path = url_to_cache_path(url);
     LinkTable *linktbl = NULL;
 
     /*
@@ -1138,9 +1180,7 @@ LinkTable *LinkTable_new(const char *url)
         }
     }
 
-    if (unescaped_path) {
-        curl_free(unescaped_path);
-    }
+    FREE(unescaped_path);
     LinkTable_print(linktbl);
     return linktbl;
 }
