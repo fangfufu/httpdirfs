@@ -1,7 +1,7 @@
 ## HTTPDirFS Usage
 
 As of commit
-[f621da761117198b264a5fe211db71666d2bf115](https://github.com/fangfufu/httpdirfs/commit/f621da761117198b264a5fe211db71666d2bf115),
+[666d53ae281a5a5a71f9fed2e5483e6f7dac812f](https://github.com/fangfufu/httpdirfs/commit/666d53ae281a5a5a71f9fed2e5483e6f7dac812f),
 HTTPDirFS supports the following usage flags:
 
     usage: ./httpdirfs [options] URL mountpoint
