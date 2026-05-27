@@ -1061,6 +1061,9 @@ LinkTable *LinkTable_alloc(const char *url)
 
 char *url_to_cache_path(const char *url)
 {
+    if (!url) {
+        return NULL;
+    }
     char *unescaped_path;
     /*
      * When --external-links is active a directory link from an external
@@ -1081,6 +1084,13 @@ char *url_to_cache_path(const char *url)
             p[0] = '_';
             p[1] = '_';
             p += 2;
+        }
+        /* Sanitize unescaped_path to prevent path traversal and invalid
+         * directory structures */
+        for (char *sp = unescaped_path; *sp; sp++) {
+            if (*sp == '/' || *sp == ':') {
+                *sp = '_';
+            }
         }
     } else {
         size_t url_len = strlen(url);

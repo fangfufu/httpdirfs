@@ -359,6 +359,34 @@ void test_LinkTable_fill_skips_external(void)
 }
 
 /* ========================================================================= */
+/* url_to_cache_path() tests                                                 */
+/* ========================================================================= */
+
+void test_url_to_cache_path_null(void)
+{
+    TEST_ASSERT_NULL(url_to_cache_path(NULL));
+}
+
+void test_url_to_cache_path_local(void)
+{
+    char *path = url_to_cache_path("http://localhost/my%20file.iso");
+    TEST_ASSERT_NOT_NULL(path);
+    TEST_ASSERT_EQUAL_STRING("http://localhost/my file.iso", path);
+    FREE(path);
+}
+
+void test_url_to_cache_path_external_sanitization(void)
+{
+    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/");
+    char *path = url_to_cache_path("http://external.com/my%20file.iso?param=1");
+    TEST_ASSERT_NOT_NULL(path);
+    TEST_ASSERT_EQUAL_STRING("http___external.com_my file.iso?param=1", path);
+    FREE(path);
+    LinkTable_free(ROOT_LINK_TBL);
+    ROOT_LINK_TBL = NULL;
+}
+
+/* ========================================================================= */
 /* Pre-existing tests                                                        */
 /* ========================================================================= */
 
@@ -537,6 +565,11 @@ int main(void)
 
     /* LinkTable_fill skip */
     RUN_TEST(test_LinkTable_fill_skips_external);
+
+    /* url_to_cache_path */
+    RUN_TEST(test_url_to_cache_path_null);
+    RUN_TEST(test_url_to_cache_path_local);
+    RUN_TEST(test_url_to_cache_path_external_sanitization);
 
     /* Pre-existing tests */
     RUN_TEST(test_LinkTable_alloc);
