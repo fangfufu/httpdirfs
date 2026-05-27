@@ -832,11 +832,15 @@ static int Cache_exist(const char *fn)
 void Cache_delete(const char *fn)
 {
     Link *link = path_to_Link(fn);
+    char *cache_key = NULL;
     if (CONFIG.mode == SONIC) {
         if (!link) {
             return;
         }
         fn = link->sonic.id;
+    } else if (CONFIG.mode == NORMAL && link) {
+        cache_key = url_to_cache_path(link->f_url);
+        fn = cache_key;
     }
 
     char *metafn = path_append(META_DIR, fn);
@@ -850,6 +854,9 @@ void Cache_delete(const char *fn)
     }
     FREE(metafn);
     FREE(datafn);
+    if (cache_key) {
+        FREE(cache_key);
+    }
     if (link) {
         LinkTable_unref(link->parent_table);
     }
@@ -933,11 +940,12 @@ int Cache_create(const char *path)
         return 1;
     }
 
-    char *fn;
+    char *fn = NULL;
+    char *fn_alloc = NULL;
 
     if (CONFIG.mode == NORMAL) {
-        fn = curl_easy_unescape(NULL, this_link->f_url + ROOT_LINK_OFFSET, 0,
-                                NULL);
+        fn_alloc = url_to_cache_path(this_link->f_url);
+        fn = fn_alloc;
     } else if (CONFIG.mode == SINGLE) {
         fn = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
     } else if (CONFIG.mode == SONIC) {
@@ -988,7 +996,9 @@ int Cache_create(const char *path)
         lprintf(fatal, "Cache file creation failed for %s\n", path);
     }
 
-    if (CONFIG.mode == NORMAL || CONFIG.mode == SONIC) {
+    if (CONFIG.mode == NORMAL) {
+        FREE(fn_alloc);
+    } else if (CONFIG.mode == SONIC || CONFIG.mode == SINGLE) {
         curl_free(fn);
     }
 
@@ -1025,9 +1035,13 @@ Cache *Cache_open(const char *fn)
         return link->cache_ptr;
     }
 
+    char *actual_fn_alloc = NULL;
     const char *actual_fn = fn;
     if (CONFIG.mode == SONIC) {
         actual_fn = link->sonic.id;
+    } else if (CONFIG.mode == NORMAL) {
+        actual_fn_alloc = url_to_cache_path(link->f_url);
+        actual_fn = actual_fn_alloc;
     }
 
     if (link->content_length <= 0) {
@@ -1036,6 +1050,9 @@ Cache *Cache_open(const char *fn)
                 (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         LinkTable_unref(link->parent_table);
+        if (actual_fn_alloc) {
+            FREE(actual_fn_alloc);
+        }
         return NULL;
     }
 
@@ -1050,6 +1067,9 @@ Cache *Cache_open(const char *fn)
                         (unsigned long)pthread_self());
                 PTHREAD_MUTEX_UNLOCK(&cf_lock);
                 LinkTable_unref(link->parent_table);
+                if (actual_fn_alloc) {
+                    FREE(actual_fn_alloc);
+                }
                 return NULL;
             }
         }
@@ -1101,6 +1121,9 @@ Cache *Cache_open(const char *fn)
             lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
                     (unsigned long)pthread_self());
             PTHREAD_MUTEX_UNLOCK(&cf_lock);
+            if (actual_fn_alloc) {
+                FREE(actual_fn_alloc);
+            }
             return cf;
         }
 
@@ -1121,6 +1144,9 @@ Cache *Cache_open(const char *fn)
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
     LinkTable_unref(link->parent_table);
+    if (actual_fn_alloc) {
+        FREE(actual_fn_alloc);
+    }
     return NULL;
 }
 

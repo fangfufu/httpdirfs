@@ -130,6 +130,11 @@ int main(int argc, char **argv)
         goto fuse_start;
     }
 
+    if (CONFIG.cache_enabled && CONFIG.external_links) {
+        lprintf(fatal,
+                "Error: Caching is not supported with --external-links.\n");
+    }
+
     if (optind + 2 != all_argc) {
         fprintf(
             stderr,
