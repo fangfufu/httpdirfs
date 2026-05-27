@@ -22,6 +22,8 @@ struct TransferStruct;
 typedef struct ActiveDownload {
     off_t offset;
     struct TransferStruct *ts;
+    pthread_cond_t cond;
+    int refcount;
     struct ActiveDownload *next;
 } ActiveDownload;
 
@@ -67,8 +69,6 @@ struct Cache {
 
     /** \brief mutex lock for background download progress */
     pthread_mutex_t dl_lock;
-    /** \brief condition variable for background download progress */
-    pthread_cond_t dl_cond;
     /** \brief active downloads list */
     ActiveDownload *active_dls;
 };

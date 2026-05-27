@@ -1,5 +1,6 @@
 #include "memcache.h"
 
+#include "cache.h"
 #include "log.h"
 #include "util.h"
 
@@ -28,7 +29,14 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
     ts->data[ts->curr_size] = '\0';
 
     if (ts->cache_ptr) {
-        PTHREAD_COND_BROADCAST(&ts->cache_ptr->dl_cond);
+        ActiveDownload *ad = ts->cache_ptr->active_dls;
+        while (ad) {
+            if (ad->ts == ts) {
+                PTHREAD_COND_BROADCAST(&ad->cond);
+                break;
+            }
+            ad = ad->next;
+        }
         PTHREAD_MUTEX_UNLOCK(&ts->cache_ptr->dl_lock);
     }
 
