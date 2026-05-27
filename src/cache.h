@@ -71,6 +71,9 @@ struct Cache {
     pthread_cond_t dl_cond;
     /** \brief active downloads list */
     ActiveDownload *active_dls;
+
+    /** \brief Number of background workers */
+    int num_bg_workers;
 };
 
 /**

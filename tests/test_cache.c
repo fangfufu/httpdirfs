@@ -9,6 +9,7 @@
 #include "../src/config.h"
 #include "../src/util.h"
 #include "../src/link.h"
+#include <sys/param.h>
 
 void setUp(void)
 {
@@ -158,6 +159,12 @@ static void cleanup_temp_dir(const char *tmp_cache_dir)
     snprintf(filepath, sizeof(filepath), "%s/data/file.bin", tmp_cache_dir);
     (void)unlink(filepath);
 
+    snprintf(filepath, sizeof(filepath), "%s/meta/dummy.bin", tmp_cache_dir);
+    (void)unlink(filepath);
+
+    snprintf(filepath, sizeof(filepath), "%s/data/dummy.bin", tmp_cache_dir);
+    (void)unlink(filepath);
+
     // Remove directories
     snprintf(filepath, sizeof(filepath), "%s/meta", tmp_cache_dir);
     (void)rmdir(filepath);
@@ -168,42 +175,47 @@ static void cleanup_temp_dir(const char *tmp_cache_dir)
     (void)rmdir(tmp_cache_dir);
 }
 
-void test_Cache_invalid_zero_length_disk_files(void)
+static LinkTable *setup_mock_link_table(const char *link_name)
 {
-    // Set up a temp cache directory
-    const char *tmp_cache_dir = "./test_cache_invalidation_dir";
-    char meta_dir[256];
-    char data_dir[256];
-    snprintf(meta_dir, sizeof(meta_dir), "%s/meta", tmp_cache_dir);
-    snprintf(data_dir, sizeof(data_dir), "%s/data", tmp_cache_dir);
-
-    // Make sure they exist and are empty
-    cleanup_temp_dir(tmp_cache_dir);
-    TEST_ASSERT_EQUAL_INT(0, mkdir(tmp_cache_dir, 0700));
-    TEST_ASSERT_EQUAL_INT(0, mkdir(meta_dir, 0700));
-    TEST_ASSERT_EQUAL_INT(0, mkdir(data_dir, 0700));
-
-    // Store old CONFIG.cache_dir
-    char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
-
-    // Set up a mock Link with a non-zero content_length
     LinkTable *table = LinkTable_alloc("https://example.com/");
     Link *link = CALLOC(1, sizeof(Link));
     link->type = LINK_FILE;
     link->content_length = 100;
     link->parent_table = table;
-    strncpy(link->linkname, "file.bin", NAME_MAX);
-    strncpy(link->f_url, "https://example.com/file.bin", PATH_MAX);
+    strncpy(link->linkname, link_name, NAME_MAX);
+    snprintf(link->f_url, PATH_MAX, "https://example.com/%s", link_name);
     LinkTable_add(table, link);
+    return table;
+}
 
-    // Expose ROOT_LINK_TBL and ROOT_LINK_OFFSET
+static void setup_temp_cache_dir(const char *tmp_cache_dir)
+{
+    char meta_dir[256];
+    char data_dir[256];
+    snprintf(meta_dir, sizeof(meta_dir), "%s/meta", tmp_cache_dir);
+    snprintf(data_dir, sizeof(data_dir), "%s/data", tmp_cache_dir);
+
+    cleanup_temp_dir(tmp_cache_dir);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tmp_cache_dir, S_IRWXU));
+    TEST_ASSERT_EQUAL_INT(0, mkdir(meta_dir, S_IRWXU));
+    TEST_ASSERT_EQUAL_INT(0, mkdir(data_dir, S_IRWXU));
+}
+
+void test_Cache_invalid_zero_length_disk_files(void)
+{
+    const char *tmp_cache_dir = "./test_cache_invalidation_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = (char *)tmp_cache_dir;
+
+    LinkTable *table = setup_mock_link_table("file.bin");
+
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
     int old_root_link_offset = ROOT_LINK_OFFSET;
     ROOT_LINK_OFFSET = 20;
 
-    // Initialize cache system with our temp directory
     CacheSystem_init(tmp_cache_dir, 0);
 
     // Scenario 1: Metadata file exists but is 0 bytes (empty)
@@ -277,6 +289,49 @@ void test_Cache_invalid_zero_length_disk_files(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_Cache_alloc_num_bg_workers(void)
+{
+    // Mock the external global CONFIG
+    int old_max_conns = CONFIG.max_conns;
+
+    const char *tmp_cache_dir = "./test_cache_bg_workers_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = (char *)tmp_cache_dir;
+
+    LinkTable *table = setup_mock_link_table("dummy.bin");
+
+    LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
+    ROOT_LINK_TBL = table;
+    int old_root_link_offset = ROOT_LINK_OFFSET;
+    ROOT_LINK_OFFSET = 20;
+
+    CacheSystem_init(tmp_cache_dir, 0);
+
+    int test_conns[] = {10, 4, 1};
+    for (int i = 0; i < 3; i++) {
+        CONFIG.max_conns = test_conns[i];
+        Cache *cf = Cache_open("dummy.bin");
+        TEST_ASSERT_NOT_NULL(cf);
+        int expected = MIN(CONFIG.max_conns, DEFAULT_NETWORK_MAX_CONNS) / 2;
+        if (expected <= 0) {
+            expected = 1;
+        }
+        TEST_ASSERT_EQUAL_INT(expected, cf->num_bg_workers);
+        Cache_close(cf);
+    }
+
+    // Cleanup
+    ROOT_LINK_TBL = old_root_link_tbl;
+    ROOT_LINK_OFFSET = old_root_link_offset;
+    LinkTable_free(table);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+    CONFIG.max_conns = old_max_conns;
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -288,5 +343,6 @@ int main(void)
     RUN_TEST(test_Cache_read_null_cf);
     RUN_TEST(test_Cache_read_null_link);
     RUN_TEST(test_Cache_invalid_zero_length_disk_files);
+    RUN_TEST(test_Cache_alloc_num_bg_workers);
     return UNITY_END();
 }

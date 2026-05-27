@@ -6,6 +6,7 @@
 #include "util.h"
 #include <curl/curl.h>
 
+#include <sys/param.h>
 #include <sys/stat.h>
 
 #include <dirent.h>
@@ -662,7 +663,13 @@ static Cache *Cache_alloc(void)
     PTHREAD_COND_INIT(&cf->dl_cond, NULL);
     cf->active_dls = NULL;
     cf->cache_opened = 1;
-    SEM_INIT(&cf->bgt_sem, 0, 1);
+
+    cf->num_bg_workers = MIN(CONFIG.max_conns, DEFAULT_NETWORK_MAX_CONNS) / 2;
+    if (cf->num_bg_workers <= 0) {
+        cf->num_bg_workers = 1;
+    }
+
+    SEM_INIT(&cf->bgt_sem, 0, cf->num_bg_workers);
     return cf;
 }
 
@@ -1065,7 +1072,9 @@ void Cache_close(Cache *cf)
     lprintf(cache_lock_debug,
             "thread %lx: waiting for background download to finish for %s\n",
             (unsigned long)pthread_self(), cf->path);
-    SEM_WAIT(&cf->bgt_sem);
+    for (int i = 0; i < cf->num_bg_workers; i++) {
+        SEM_WAIT(&cf->bgt_sem);
+    }
 
     if (cf->mfp && Meta_write(cf)) {
         lprintf(error, "Meta_write() error.");
