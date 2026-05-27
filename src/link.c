@@ -178,16 +178,35 @@ static CURL *Link_to_curl(Link *link)
     }
 
     if (CONFIG.http_username) {
-        ret = curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        /*
+         * Only apply credentials to the mounted server. When
+         * --external-links is active, cross-origin links must NOT receive
+         * the user's credentials for the primary server.
+         */
+        int apply_creds
+            = !CONFIG.external_links
+              || !ROOT_LINK_TBL
+              || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link->f_url);
+        if (apply_creds) {
+            ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
+                                   CONFIG.http_username);
+            if (ret) {
+                lprintf(error, "%s\n", curl_easy_strerror(ret));
+            }
         }
     }
 
     if (CONFIG.http_password) {
-        ret = curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        int apply_creds
+            = !CONFIG.external_links
+              || !ROOT_LINK_TBL
+              || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link->f_url);
+        if (apply_creds) {
+            ret = curl_easy_setopt(curl, CURLOPT_PASSWORD,
+                                   CONFIG.http_password);
+            if (ret) {
+                lprintf(error, "%s\n", curl_easy_strerror(ret));
+            }
         }
     }
 
@@ -557,7 +576,7 @@ int LinkHashSet_add(LinkHashSet *set, const char *linkname)
         }
         bucket = (bucket + 1) & (set->capacity - 1);
     }
-    set->buckets[bucket] = linkname;
+    set->buckets[bucket] = STRDUP(linkname);
     set->size++;
     return 1;
 }
@@ -567,8 +586,136 @@ void LinkHashSet_free(LinkHashSet *set)
     if (!set) {
         return;
     }
+    for (int i = 0; i < set->capacity; i++) {
+        if (set->buckets[i]) {
+            char *ptr = (char *)set->buckets[i];
+            FREE(ptr);
+        }
+    }
     FREE(set->buckets);
     FREE(set);
+}
+
+/**
+ * \brief Check if a URL is an external (absolute) URL.
+ * \return 1 if the URL starts with http:// or https://, 0 otherwise
+ */
+int is_external_url(const char *url)
+{
+    return (strncmp(url, "http://", 7) == 0
+            || strncmp(url, "https://", 8) == 0);
+}
+
+/**
+ * \brief Check if link_url has a different origin than page_url.
+ * \details Compares scheme + host + port by finding the path component
+ *          (the third '/') of each URL and doing a prefix comparison.
+ * \return 1 if cross-origin, 0 if same origin
+ */
+int is_cross_origin(const char *page_url, const char *link_url)
+{
+    /*
+     * Walk past "scheme://host:port" in both URLs and compare the
+     * prefix up to (but not including) the first path slash.
+     * If either URL has fewer than 3 slashes it is malformed; treat
+     * as cross-origin to be safe.
+     */
+    int slashes = 0;
+    const char *p = page_url;
+    while (*p && slashes < 3) {
+        if (*p == '/') {
+            slashes++;
+        }
+        p++;
+    }
+    if (slashes < 3) {
+        return 1; /* malformed page_url */
+    }
+    /* p is one past the third slash; back up to point at the slash */
+    size_t page_origin_len = (size_t)(p - page_url) - 1;
+
+    slashes = 0;
+    const char *l = link_url;
+    while (*l && slashes < 3) {
+        if (*l == '/') {
+            slashes++;
+        }
+        l++;
+    }
+    if (slashes < 3) {
+        return 1; /* malformed link_url */
+    }
+    size_t link_origin_len = (size_t)(l - link_url) - 1;
+
+    if (page_origin_len != link_origin_len) {
+        return 1;
+    }
+    return strncmp(page_url, link_url, page_origin_len) != 0;
+}
+
+/**
+ * \brief Extract the filename component from an external URL.
+ * \details For "http://example.com/path/file.iso" returns "file.iso".
+ *          For "http://example.com/path/dir/" returns "dir".
+ *          Query strings ("?") are stripped.
+ *          Returns empty string for a root-only URL.
+ * \note The caller must free the returned string with FREE().
+ */
+char *external_url_to_filename(const char *url)
+{
+    /*
+     * Skip the scheme://host:port/ prefix — walk past the third slash.
+     */
+    int slashes = 0;
+    const char *p = url;
+    while (*p && slashes < 3) {
+        if (*p == '/') {
+            slashes++;
+        }
+        p++;
+    }
+    /* p now points to the first character of the path (after the
+     * trailing slash of the origin, e.g. "path/file.iso"). */
+
+    if (*p == '\0') {
+        /* Root-only URL — no filename to extract. */
+        return STRDUP("");
+    }
+
+    size_t path_len = strlen(p);
+    char *path_copy = STRNDUP(p, path_len);
+
+    /* Strip query string if present (must be done before trailing slash check). */
+    char *q = strchr(path_copy, '?');
+    if (q) {
+        *q = '\0';
+    }
+
+    /* Strip trailing slash if present. */
+    path_len = strlen(path_copy);
+    if (path_len > 0 && path_copy[path_len - 1] == '/') {
+        path_copy[path_len - 1] = '\0';
+    }
+
+    /* Find the last '/' and take everything after it. */
+    char *last_slash = strrchr(path_copy, '/');
+    char *filename;
+    if (last_slash) {
+        filename = STRDUP(last_slash + 1);
+    } else {
+        filename = STRDUP(path_copy);
+    }
+    FREE(path_copy);
+
+    /* URL-decode the filename so it can be used as a filesystem name. */
+    char *decoded = curl_easy_unescape(NULL, filename, 0, NULL);
+    if (!decoded) {
+        return filename;
+    }
+    char *result = STRDUP(decoded);
+    curl_free(decoded);
+    FREE(filename);
+    return result;
 }
 
 /**
@@ -584,27 +731,60 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     GumboAttribute *href;
     href = gumbo_get_attribute(&node->v.element.attributes, "href");
     if (node->v.element.tag == GUMBO_TAG_A && href) {
-        char *relative_url = (char *)href->value;
-        make_link_relative(url, relative_url);
+        const char *raw_href = href->value;
 
-        /* Truncate at the first slash to support links to subdirectories */
-        char *slash = strchr(relative_url, '/');
-        if (slash && slash != relative_url) {
-            /* Don't truncate full URIs like http://... */
-            if (*(slash - 1) != ':' && slash[1] != '/') {
-                slash[1] = '\0';
+        if (CONFIG.external_links && is_external_url(raw_href)
+            && is_cross_origin(url, raw_href)) {
+            /*
+             * -------- External (cross-origin) link handling --------
+             * Extract the filename from the external URL and create a
+             * Link with f_url already pointing to the external server.
+             * LinkTable_fill() will skip URL-construction for these.
+             */
+            char *filename = external_url_to_filename(raw_href);
+            if (filename && filename[0] != '\0') {
+                /* Determine type: directory if URL ends with '/' */
+                size_t href_len = strlen(raw_href);
+                LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
+                                    ? LINK_UNINITIALISED_DIR
+                                    : LINK_UNINITIALISED_FILE;
+
+                /* First-wins: skip if a link with this name already exists */
+                if (LinkHashSet_add(set, filename)) {
+                    Link *link = Link_new(filename, type);
+                    strncpy(link->f_url, raw_href, PATH_MAX);
+                    LinkTable_add(linktbl, link);
+                }
             }
-        }
+            FREE(filename);
+        } else {
+            /*
+             * -------- Same-origin / relative link handling (unchanged)
+             * --------
+             */
+            char *relative_url = STRNDUP(raw_href, PATH_MAX);
+            make_link_relative(url, relative_url);
 
-        /* if it is valid, copy the link onto the heap */
-        LinkType type = linkname_to_LinkType(relative_url);
-
-        /* Check if the new link is a duplicate */
-        if ((type == LINK_UNINITIALISED_DIR)
-            || (type == LINK_UNINITIALISED_FILE)) {
-            if (LinkHashSet_add(set, relative_url)) {
-                LinkTable_add(linktbl, Link_new(relative_url, type));
+            /* Truncate at the first slash to support links to subdirectories */
+            char *slash = strchr(relative_url, '/');
+            if (slash && slash != relative_url) {
+                /* Don't truncate full URIs like http://... */
+                if (*(slash - 1) != ':' && slash[1] != '/') {
+                    slash[1] = '\0';
+                }
             }
+
+            /* if it is valid, copy the link onto the heap */
+            LinkType type = linkname_to_LinkType(relative_url);
+
+            /* Check if the new link is a duplicate */
+            if ((type == LINK_UNINITIALISED_DIR)
+                || (type == LINK_UNINITIALISED_FILE)) {
+                if (LinkHashSet_add(set, relative_url)) {
+                    LinkTable_add(linktbl, Link_new(relative_url, type));
+                }
+            }
+            FREE(relative_url);
         }
     }
 
@@ -631,8 +811,6 @@ void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
     LinkHashSet_free(set);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 }
-
-
 void Link_set_file_stat(Link *this_link, CURL *curl)
 {
     long http_resp;
@@ -666,6 +844,21 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
 
     } else {
         lprintf(warning, "%s: HTTP %ld\n", this_link->f_url, http_resp);
+        /*
+         * Emit a targeted warning if an external link needs authentication
+         * that we are not providing.
+         */
+        if (CONFIG.external_links && (http_resp == 401 || http_resp == 403)
+            && ROOT_LINK_TBL
+            && strncmp(this_link->f_url, ROOT_LINK_TBL->links[0]->f_url,
+                       (size_t)ROOT_LINK_OFFSET)
+                   != 0) {
+            lprintf(warning,
+                    "External link %s requires authentication (HTTP %ld). "
+                    "Credentials are only applied to the mounted "
+                    "server.\n",
+                    this_link->f_url, http_resp);
+        }
         if (HTTP_temp_failure(http_resp) || CONFIG.invalid_refresh) {
             lprintf(warning, ", retrying later.\n");
         } else {
@@ -679,6 +872,19 @@ static void LinkTable_fill(LinkTable *linktbl)
     Link *head_link = linktbl->links[0];
     for (int i = 1; i < linktbl->size; i++) {
         Link *this_link = linktbl->links[i];
+
+        /*
+         * External links have f_url pre-populated by HTML_to_LinkTable().
+         * Skip URL construction for them; just unescape the linkname.
+         */
+        if (this_link->f_url[0] != '\0') {
+            char *unescaped_linkname
+                = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
+            strncpy(this_link->linkname, unescaped_linkname, NAME_MAX);
+            curl_free(unescaped_linkname);
+            continue;
+        }
+
         /* Some web sites use characters in their href attributes that really
            shouldn't be in their href attributes, most commonly spaces. And
            some web sites _do_ properly encode their href attributes. So we
@@ -819,7 +1025,22 @@ LinkTable *LinkTable_alloc(const char *url)
 LinkTable *LinkTable_new(const char *url)
 {
     char *unescaped_path;
-    unescaped_path = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
+    /*
+     * When --external-links is active a directory link from an external
+     * server may be navigated. Its URL won't share the root server's
+     * origin, so applying ROOT_LINK_OFFSET would produce garbage. Detect
+     * this case by checking whether url starts with the root URL prefix.
+     */
+    if (ROOT_LINK_TBL
+        && strncmp(url, ROOT_LINK_TBL->links[0]->f_url,
+                   (size_t)ROOT_LINK_OFFSET)
+               != 0) {
+        /* External URL: use the full URL as the cache key path. */
+        unescaped_path = curl_easy_unescape(NULL, url, 0, NULL);
+    } else {
+        unescaped_path
+            = curl_easy_unescape(NULL, url + ROOT_LINK_OFFSET, 0, NULL);
+    }
     LinkTable *linktbl = NULL;
 
     /*

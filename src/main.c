@@ -342,6 +342,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"invalid-refresh", no_argument, NULL, 'L'},       /* 28 */
            {"capath", required_argument, NULL, 'L'},          /* 29 */
            {"proxy-capath", required_argument, NULL, 'L'},    /* 30 */
+           {"external-links", no_argument, NULL, 'L'},        /* 31 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -463,6 +464,9 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 30:
                 CONFIG.proxy_capath = STRDUP(optarg);
                 break;
+            case 31:
+                CONFIG.external_links = 1;
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -547,6 +551,8 @@ HTTPDirFS options:\n\
         --zero-len-is-dir   If a file has a zero length, treat it as a directory\n\
         --insecure-tls      Disable licurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
+        --external-links    Include external (cross-origin) links from\n\
+                            directory listings (default: off)\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
                             directory.\n\
