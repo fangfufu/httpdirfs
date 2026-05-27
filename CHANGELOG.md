@@ -10,6 +10,30 @@ and this project adheres to
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [1.3.0] - 2026-05-27
+
+Creating a new minor release, because of the following major changes:
+
+- The new threading model of the cache system, which allows multiple downloads
+  (blocking foreground and background) to be done simultaneously.
+- When cache system is enabled, the downloading thread yields as soon as there
+  is enough data to reply to the FUSE read call.
+- New pre-commit hooks to help developers to maintain a basic level of quality
+  in each commit.
+- New unit tests which test individual software components.
+- New system integration tests which launch a HTTP server, then mount it for
+  read testing. There are two variants:
+  - A short test which tests the filesystem against different edge case
+    filenames.
+  - A long test which do multithread read on a 1GB file with different block
+    sizes.
+
+### Added
+
 - Dynamically scale the number of background prefetch worker threads to match up
   to half of the maximum concurrent connection capacity (`CONFIG.max_conns`
   capped at `DEFAULT_NETWORK_MAX_CONNS`), transitioning from a single hardcoded
@@ -861,7 +885,8 @@ and this project adheres to
 
 - Initial release, everything works correctly, as far as I know.
 
-[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.2.11...master
+[Unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.3.0...master
+[1.3.0]: https://github.com/fangfufu/httpdirfs/compare/1.2.11...1.3.0
 [1.2.11]: https://github.com/fangfufu/httpdirfs/compare/1.2.10...1.2.11
 [1.2.10]: https://github.com/fangfufu/httpdirfs/compare/1.2.9...1.2.10
 [1.2.9]: https://github.com/fangfufu/httpdirfs/compare/1.2.8...1.2.9
