@@ -10,7 +10,7 @@
 /**
  * \brief The default maximum number of network connections
  */
-#define DEFAULT_NETWORK_MAX_CONNS 10
+#define DEFAULT_NETWORK_MAX_CONNS 6
 
 /**
  * \brief The default refresh_timeout
