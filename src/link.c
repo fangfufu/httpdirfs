@@ -435,10 +435,7 @@ static LinkType linkname_to_LinkType(const char *linkname)
     return LINK_UNINITIALISED_FILE;
 }
 
-/**
- * \brief check if two link names are equal, after taking the '/' into account.
- */
-static int linknames_equal(const char *str_a, const char *str_b)
+int link_linknames_equal(const char *str_a, const char *str_b)
 {
     if (!str_a || !str_b) {
         return 0;
@@ -474,13 +471,13 @@ end:
     return identical;
 }
 
-typedef struct {
+struct LinkHashSet {
     const char **buckets;
     int capacity;
     int size;
-} LinkHashSet;
+};
 
-static unsigned int hash_str(const char *str)
+unsigned int link_hash_str(const char *str)
 {
     unsigned int hash = 5381;
     int c;
@@ -498,7 +495,7 @@ static unsigned int hash_str(const char *str)
     return hash;
 }
 
-static LinkHashSet *LinkHashSet_new(int capacity)
+LinkHashSet *LinkHashSet_new(int capacity)
 {
     if (capacity <= 0) {
         capacity = 16;
@@ -541,7 +538,7 @@ static void LinkHashSet_resize(LinkHashSet *set)
     FREE(old_buckets);
 }
 
-static int LinkHashSet_add(LinkHashSet *set, const char *linkname)
+int LinkHashSet_add(LinkHashSet *set, const char *linkname)
 {
     if (!set || !linkname || set->capacity <= 0) {
         return 0;
@@ -552,7 +549,7 @@ static int LinkHashSet_add(LinkHashSet *set, const char *linkname)
     unsigned int hash = link_hash_str(linkname);
     int bucket = hash & (set->capacity - 1);
     while (set->buckets[bucket] != NULL) {
-        if (linknames_equal(set->buckets[bucket], linkname)) {
+        if (link_linknames_equal(set->buckets[bucket], linkname)) {
             return 0;
         }
         bucket = (bucket + 1) & (set->capacity - 1);
@@ -562,7 +559,7 @@ static int LinkHashSet_add(LinkHashSet *set, const char *linkname)
     return 1;
 }
 
-static void LinkHashSet_free(LinkHashSet *set)
+void LinkHashSet_free(LinkHashSet *set)
 {
     if (!set) {
         return;
@@ -868,12 +865,9 @@ LinkTable *LinkTable_new(const char *url)
         /*
          * Otherwise parsed the received data
          */
-        GumboOutput *output = gumbo_parse(ts.data);
-        LinkHashSet *set = LinkHashSet_new(4096);
-        HTML_to_LinkTable(url, output->root, linktbl, set);
-        LinkHashSet_free(set);
-        gumbo_destroy_output(&kGumboDefaultOptions, output);
+        LinkTable_parse_html(linktbl, url, ts.data);
         FREE(ts.data);
+
 
         LinkTable_fill(linktbl);
 
