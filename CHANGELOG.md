@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Update macOS build job in GitHub Actions workflow to only run unit tests and
+  exclude integration tests, which are unsupported due to the lack of
+  FUSE/macFUSE in the GitHub Actions runner environment
+  ([93bb8b5](https://github.com/fangfufu/httpdirfs/commit/93bb8b5)).
+- Optimize macOS CI workflow by removing redundant packages (`openssl`, `curl`,
+  and `pkg-config`) from the brew installation step, as these are pre-installed
+  in the runner environment
+  ([bd3503c](https://github.com/fangfufu/httpdirfs/commit/bd3503c)).
+- Suppress zero-length file checks in the long integration test suite,
+  preventing redundant skip messages when running integration tests under the
+  long profile since zero-length files are only generated under the short
+  profile ([e8c6e16](https://github.com/fangfufu/httpdirfs/commit/e8c6e16)).
+
 ## [1.3.1] - 2026-05-27
 
 ### Added
