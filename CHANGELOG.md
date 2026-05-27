@@ -11,9 +11,11 @@ and this project adheres to
 ### Added
 
 - Add `CURLOPT_PIPEWAIT` setting to curl easy handles to optimize HTTP/2
-  multiplexing during concurrent file and directory transfers.
+  multiplexing during concurrent file and directory transfers
+  ([4114977](https://github.com/fangfufu/httpdirfs/commit/4114977)).
 - Support HTTP/3 (QUIC) protocol version negotiation with automatic and seamless
-  fallback to HTTP/2 or HTTP/1.1 when unavailable.
+  fallback to HTTP/2 or HTTP/1.1 when unavailable
+  ([4114977](https://github.com/fangfufu/httpdirfs/commit/4114977)).
 - Implement shutdown memory leak detection in `DEBUG` builds, recursively
   traversing the virtual filesystem at shutdown to tear down resources and
   verify that no memory leaks exist
@@ -56,9 +58,11 @@ and this project adheres to
 
 - Lower the default maximum network connection count
   (`DEFAULT_NETWORK_MAX_CONNS`) from `10` to `6` to align with the standard
-  persistent connection limits agreed upon by all major modern web browsers.
+  persistent connection limits agreed upon by all major modern web browsers
+  ([c049e6d](https://github.com/fangfufu/httpdirfs/commit/c049e6d)).
 - Update `tests/test_config.c` configuration initialization test to assert
-  `max_conns` against the configuration macro instead of a hardcoded value.
+  `max_conns` against the configuration macro instead of a hardcoded value
+  ([c049e6d](https://github.com/fangfufu/httpdirfs/commit/c049e6d)).
 - Optimize GitHub Actions workflows by separating short and long integration
   tests and removing redundant manual pre-commit hook stages to avoid duplicate,
   slow sequential CI execution
