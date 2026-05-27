@@ -456,6 +456,313 @@ wait "${HTTPDIRFS_PID}" 2>/dev/null || true
 log_info "Unmounted successfully."
 fi
 
+# ─── Step 5b: External-links tests ─────────────────────────────────────────
+
+if [[ "${MODE}" != "long" ]]; then
+log_info "=== External-links tests ==="
+
+# Create the external server's root directory inside WORK_DIR
+EXT_SERVE_DIR="${WORK_DIR}/ext_serve"
+EXT_MOUNT_DIR="${WORK_DIR}/ext_mnt"
+EXT_PORT_FILE="${WORK_DIR}/ext_port"
+mkdir -p "${EXT_SERVE_DIR}/external_subdir" "${EXT_MOUNT_DIR}"
+
+# Create test files on the external server
+EXT_FILE_CONTENT="Hello from the external server"
+echo -n "${EXT_FILE_CONTENT}" > "${EXT_SERVE_DIR}/external_file.txt"
+EXT_FILE_SHA=$(echo -n "${EXT_FILE_CONTENT}" | sha256sum | awk '{print $1}')
+
+# 1 MB file for content integrity verification
+dd if=/dev/urandom bs=1M count=1 \
+    of="${EXT_SERVE_DIR}/external_large.bin" 2>/dev/null
+EXT_LARGE_SHA=$(sha256sum "${EXT_SERVE_DIR}/external_large.bin" \
+    | awk '{print $1}')
+
+# File in external subdirectory
+echo -n "nested content" > "${EXT_SERVE_DIR}/external_subdir/nested_file.txt"
+NESTED_SHA=$(echo -n "nested content" | sha256sum | awk '{print $1}')
+
+# Two files with the same name on different paths (dedup test)
+echo -n "first duplicate" > "${EXT_SERVE_DIR}/duplicate.txt"
+DUP_SHA=$(echo -n "first duplicate" | sha256sum | awk '{print $1}')
+mkdir -p "${EXT_SERVE_DIR}/other"
+echo -n "second duplicate" > "${EXT_SERVE_DIR}/other/duplicate.txt"
+
+# Start the external HTTP server
+python3 "${SCRIPT_DIR}/range_http_server.py" \
+    "${EXT_SERVE_DIR}" 0 "${EXT_PORT_FILE}" &
+EXT_HTTP_PID=$!
+
+# Register for cleanup
+cleanup_ext() {
+    # Unmount any FUSE mounts still attached to the external server
+    # before killing it, to avoid in-flight request aborts.
+    if [[ -d "${EXT_MOUNT_DIR}" ]] \
+        && mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
+        do_unmount "${EXT_MOUNT_DIR}"
+        sleep 1
+    fi
+    if [[ -n "${EXT_HTTP_PID:-}" ]] \
+        && kill -0 "${EXT_HTTP_PID}" 2>/dev/null; then
+        kill "${EXT_HTTP_PID}" 2>/dev/null || true
+        wait "${EXT_HTTP_PID}" 2>/dev/null || true
+    fi
+}
+trap 'cleanup_ext; cleanup' EXIT
+
+# Wait for the external server port file
+for i in $(seq 1 10); do
+    [[ -f "${EXT_PORT_FILE}" ]] && break
+    sleep 0.5
+done
+if [[ ! -f "${EXT_PORT_FILE}" ]]; then
+    log_error "External HTTP server did not write port file."
+    exit 1
+fi
+
+EXT_PORT="$(cat "${EXT_PORT_FILE}")"
+log_info "External HTTP server on port ${EXT_PORT} (PID: ${EXT_HTTP_PID})"
+EXT_BASE_URL="http://127.0.0.1:${EXT_PORT}"
+
+# Add a local file on the primary server for baseline comparison
+echo -n "local content" > "${SERVE_DIR}/local_ext_test.txt"
+LOCAL_SHA=$(echo -n "local content" | sha256sum | awk '{print $1}')
+
+# Write the mixed-link index.html into the primary server directory.
+# The primary server's SimpleHTTPRequestHandler will serve both the
+# auto-generated listing AND this custom index.html.  We place it
+# directly in SERVE_DIR so it is available alongside the real files.
+# NOTE: httpdirfs fetches the root URL and parses whatever HTML it gets
+# back; Python's http.server serves the auto-generated directory listing,
+# not index.html.  We therefore create a dedicated subdirectory on Server A
+# that contains ONLY the hand-crafted index.html, so httpdirfs parses
+# our known HTML rather than the auto-generated listing.
+EXT_TEST_DIR="${SERVE_DIR}/ext_test_dir"
+mkdir -p "${EXT_TEST_DIR}"
+echo -n "local content" > "${EXT_TEST_DIR}/local_ext_test.txt"
+
+cat > "${EXT_TEST_DIR}/index.html" <<HTML
+<!DOCTYPE html>
+<html>
+<body>
+<a href="local_ext_test.txt">local_ext_test.txt</a>
+<a href="${EXT_BASE_URL}/external_file.txt">external_file.txt</a>
+<a href="${EXT_BASE_URL}/external_large.bin">external_large.bin</a>
+<a href="${EXT_BASE_URL}/external_subdir/">external_subdir</a>
+<a href="${EXT_BASE_URL}/duplicate.txt">duplicate.txt</a>
+<a href="${EXT_BASE_URL}/other/duplicate.txt">duplicate.txt</a>
+</body>
+</html>
+HTML
+
+EXT_TEST_URL="${BASE_URL}ext_test_dir/"
+
+# ── Test 1: file listing with --external-links ─────────────────────────────
+log_info "Test group: External-links file listing"
+
+"${HTTPDIRFS_BIN}" \
+    -f \
+    --external-links \
+    "${EXT_TEST_URL}" \
+    "${EXT_MOUNT_DIR}" &
+EXT_HTTPDIRFS_PID=$!
+
+for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+    mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null && break
+    sleep 1
+done
+if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
+    fail "httpdirfs (--external-links) failed to mount."
+    kill "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
+else
+    # local file is present
+    if [[ -e "${EXT_MOUNT_DIR}/local_ext_test.txt" ]]; then
+        pass "external_link_file_listing: local file present"
+    else
+        fail "external_link_file_listing: local file missing"
+    fi
+
+    # external files appear in listing
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        pass "external_link_file_listing: external_file.txt present"
+    else
+        fail "external_link_file_listing: external_file.txt missing"
+    fi
+
+    if [[ -e "${EXT_MOUNT_DIR}/external_large.bin" ]]; then
+        pass "external_link_file_listing: external_large.bin present"
+    else
+        fail "external_link_file_listing: external_large.bin missing"
+    fi
+
+    # ── Test 2: content integrity ───────────────────────────────────────────
+    log_info "Test group: External-links content integrity"
+
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        actual=$(sha256sum "${EXT_MOUNT_DIR}/external_file.txt" \
+            | awk '{print $1}')
+        if [[ "${actual}" == "${EXT_FILE_SHA}" ]]; then
+            pass "external_link_content_integrity: external_file.txt OK"
+        else
+            fail "external_link_content_integrity: external_file.txt checksum mismatch"
+        fi
+    else
+        skip "external_link_content_integrity: external_file.txt missing"
+    fi
+
+    if [[ -e "${EXT_MOUNT_DIR}/external_large.bin" ]]; then
+        actual=$(sha256sum "${EXT_MOUNT_DIR}/external_large.bin" \
+            | awk '{print $1}')
+        if [[ "${actual}" == "${EXT_LARGE_SHA}" ]]; then
+            pass "external_link_content_integrity: external_large.bin OK"
+        else
+            fail "external_link_content_integrity: external_large.bin checksum mismatch"
+        fi
+    else
+        skip "external_link_content_integrity: external_large.bin missing"
+    fi
+
+    # ── Test 4: external directory ──────────────────────────────────────────
+    log_info "Test group: External-links directory traversal"
+
+    if [[ -d "${EXT_MOUNT_DIR}/external_subdir" ]]; then
+        pass "external_link_directory: external_subdir is a directory"
+        if [[ -e "${EXT_MOUNT_DIR}/external_subdir/nested_file.txt" ]]; then
+            pass "external_link_directory: nested_file.txt present"
+            nested_sha=$(sha256sum \
+                "${EXT_MOUNT_DIR}/external_subdir/nested_file.txt" \
+                | awk '{print $1}')
+            if [[ "${nested_sha}" == "${NESTED_SHA}" ]]; then
+                pass "external_link_directory: nested_file.txt content OK"
+            else
+                fail "external_link_directory: nested_file.txt checksum mismatch"
+            fi
+        else
+            fail "external_link_directory: nested_file.txt missing"
+        fi
+    else
+        fail "external_link_directory: external_subdir not a directory"
+    fi
+
+    # ── Test 5: first-wins dedup ────────────────────────────────────────────
+    log_info "Test group: External-links first-wins deduplication"
+
+    dup_count=$(ls -1 "${EXT_MOUNT_DIR}" | grep -c "^duplicate\.txt$" || true)
+    if [[ "${dup_count}" -eq 1 ]]; then
+        pass "external_link_dedup_first_wins: exactly one duplicate.txt"
+        dup_sha=$(sha256sum "${EXT_MOUNT_DIR}/duplicate.txt" \
+            | awk '{print $1}')
+        if [[ "${dup_sha}" == "${DUP_SHA}" ]]; then
+            pass "external_link_dedup_first_wins: first duplicate wins"
+        else
+            fail "external_link_dedup_first_wins: wrong duplicate content"
+        fi
+    else
+        fail "external_link_dedup_first_wins: expected 1 duplicate.txt, got ${dup_count}"
+    fi
+
+    do_unmount "${EXT_MOUNT_DIR}"
+    wait "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
+fi
+
+# ── Test 3: backward compatibility (no --external-links) ───────────────────
+log_info "Test group: External-links backward compatibility"
+
+"${HTTPDIRFS_BIN}" \
+    -f \
+    "${EXT_TEST_URL}" \
+    "${EXT_MOUNT_DIR}" &
+COMPAT_PID=$!
+
+for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+    mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null && break
+    sleep 1
+done
+if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
+    fail "httpdirfs (no --external-links) failed to mount."
+    kill "${COMPAT_PID}" 2>/dev/null || true
+else
+    if [[ ! -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        pass "external_link_backward_compat: external_file.txt not present (correct)"
+    else
+        fail "external_link_backward_compat: external_file.txt unexpectedly present"
+    fi
+
+    if [[ -e "${EXT_MOUNT_DIR}/local_ext_test.txt" ]]; then
+        pass "external_link_backward_compat: local_ext_test.txt still present"
+    else
+        fail "external_link_backward_compat: local_ext_test.txt missing"
+    fi
+
+    do_unmount "${EXT_MOUNT_DIR}"
+    wait "${COMPAT_PID}" 2>/dev/null || true
+fi
+
+# ── Test 6: cache mode with --external-links ───────────────────────────────
+log_info "Test group: External-links cache mode"
+
+# Remove and recreate the cache directory for a completely clean state
+rm -rf "${CACHE_DIR:?}"
+mkdir -p "${CACHE_DIR}"
+
+"${HTTPDIRFS_BIN}" \
+    -f \
+    --external-links \
+    --cache \
+    --cache-location "${CACHE_DIR}" \
+    "${EXT_TEST_URL}" \
+    "${EXT_MOUNT_DIR}" &
+EXT_CACHE_PID=$!
+
+for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+    mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null && break
+    sleep 1
+done
+
+if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
+    fail "httpdirfs (--external-links --cache) failed to mount."
+    kill "${EXT_CACHE_PID}" 2>/dev/null || true
+else
+    # 6a. Check file presence
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        pass "external_link_cache_mode: file present"
+    else
+        fail "external_link_cache_mode: file missing"
+    fi
+
+    # 6b. Verify content integrity (downloads and caches the file)
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        actual=$(sha256sum "${EXT_MOUNT_DIR}/external_file.txt" \
+            | awk '{print $1}')
+        if [[ "${actual}" == "${EXT_FILE_SHA}" ]]; then
+            pass "external_link_cache_mode: content OK"
+        else
+            fail "external_link_cache_mode: content checksum mismatch"
+        fi
+    else
+        skip "external_link_cache_mode: content check skipped (file missing)"
+    fi
+
+    # 6c. Verify re-reading from cache works
+    if [[ -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
+        actual_cached=$(sha256sum "${EXT_MOUNT_DIR}/external_file.txt" \
+            | awk '{print $1}')
+        if [[ "${actual_cached}" == "${EXT_FILE_SHA}" ]]; then
+            pass "external_link_cache_mode: cached re-read OK"
+        else
+            fail "external_link_cache_mode: cached re-read checksum mismatch"
+        fi
+    fi
+
+    do_unmount "${EXT_MOUNT_DIR}"
+    wait "${EXT_CACHE_PID}" 2>/dev/null || true
+fi
+
+# Stop the external HTTP server
+cleanup_ext
+log_info "External HTTP server stopped."
+fi
+
 # ─── Step 6: Cache mode with multithreaded reads ────────────────────────────
 
 if [[ "${MODE}" != "short" ]]; then

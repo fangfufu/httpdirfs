@@ -8,6 +8,21 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- Add opt-in `--external-links` feature to parse absolute cross-origin directory
+  links from HTML listings and expose them as local files and subdirectories,
+  featuring first-wins deduplication and same-origin scoping of headers and
+  credentials ([edce0ca](https://github.com/fangfufu/httpdirfs/commit/edce0ca)).
+- Add persistent caching support for external links, mapping and sanitizing
+  cache paths dynamically to prevent directory traversal
+  ([855e134](https://github.com/fangfufu/httpdirfs/commit/855e134)).
+- Introduce comprehensive unit and integration tests verifying external links
+  detection, filename sanitization, same-origin credential isolation, cache
+  mapping, and robust error handling
+  ([edce0ca](https://github.com/fangfufu/httpdirfs/commit/edce0ca),
+  [855e134](https://github.com/fangfufu/httpdirfs/commit/855e134)).
+
 ### Changed
 
 - Update macOS build job in GitHub Actions workflow to only run unit tests and
@@ -22,6 +37,20 @@ and this project adheres to
   preventing redundant skip messages when running integration tests under the
   long profile since zero-length files are only generated under the short
   profile ([e8c6e16](https://github.com/fangfufu/httpdirfs/commit/e8c6e16)).
+- Rewrite and expand `USAGE.md` into a comprehensive reference manual detailing
+  all 35 command-line flags, option syntax, security considerations, and
+  defaults ([37bb031](https://github.com/fangfufu/httpdirfs/commit/37bb031)).
+- Implement complete dynamic global state reset in `tearDown()` in
+  `tests/test_link.c` to prevent configuration and root link table mutations
+  from leaking between unit tests
+  ([1a13d41](https://github.com/fangfufu/httpdirfs/commit/1a13d41)).
+
+### Fixed
+
+- Fix origin validation by canonicalizing default ports (HTTP/80 and HTTPS/443)
+  in `is_cross_origin()` checks, ensuring same-origin URLs utilizing default
+  ports are not misclassified as cross-origin
+  ([7ca2f2a](https://github.com/fangfufu/httpdirfs/commit/7ca2f2a)).
 
 ## [1.3.1] - 2026-05-27
 
