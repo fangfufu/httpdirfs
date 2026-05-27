@@ -10,6 +10,10 @@ and this project adheres to
 
 ### Added
 
+- Add `CURLOPT_PIPEWAIT` setting to curl easy handles to optimize HTTP/2
+  multiplexing during concurrent file and directory transfers.
+- Support HTTP/3 (QUIC) protocol version negotiation with automatic and seamless
+  fallback to HTTP/2 or HTTP/1.1 when unavailable.
 - Implement shutdown memory leak detection in `DEBUG` builds, recursively
   traversing the virtual filesystem at shutdown to tear down resources and
   verify that no memory leaks exist
@@ -50,6 +54,11 @@ and this project adheres to
 
 ### Changed
 
+- Lower the default maximum network connection count
+  (`DEFAULT_NETWORK_MAX_CONNS`) from `10` to `6` to align with the standard
+  persistent connection limits agreed upon by all major modern web browsers.
+- Update `tests/test_config.c` configuration initialization test to assert
+  `max_conns` against the configuration macro instead of a hardcoded value.
 - Optimize GitHub Actions workflows by separating short and long integration
   tests and removing redundant manual pre-commit hook stages to avoid duplicate,
   slow sequential CI execution
