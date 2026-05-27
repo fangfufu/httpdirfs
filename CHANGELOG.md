@@ -28,6 +28,25 @@ and this project adheres to
   variable APIs (`PTHREAD_COND_INIT`, `PTHREAD_COND_DESTROY`,
   `PTHREAD_COND_BROADCAST`, and `PTHREAD_COND_WAIT`)
   ([af0e263](https://github.com/fangfufu/httpdirfs/commit/af0e263)).
+- Support concurrent background segment downloads in cache mode by replacing the
+  single active download tracker with a linked list of `ActiveDownload` structs;
+  add `ActiveDownload_find`, `ActiveDownload_add`, and `ActiveDownload_remove`
+  helpers and implement double-checked locking in `Cache_read_segment` to
+  prevent duplicate downloads under concurrent FUSE workers
+  ([7286314](https://github.com/fangfufu/httpdirfs/commit/7286314)).
+- Add unit test for `ActiveDownload_find` verifying lookup behavior on both
+  empty and populated active download lists
+  ([0441ced](https://github.com/fangfufu/httpdirfs/commit/0441ced)).
+- Define a custom `sys_sem_t` type and emulate unnamed POSIX semaphores
+  (`sem_init`, `sem_destroy`, `sem_wait`, `sem_post`, and `sem_trywait`) using
+  pthread mutex and condition variables on Apple/macOS platforms, where unnamed
+  POSIX semaphores are unsupported
+  ([af24b36](https://github.com/fangfufu/httpdirfs/commit/af24b36)).
+- Add zero-length file coverage to integration and unit test suites, including a
+  dedicated test group verifying size, content, and SHA-256 digest in both
+  direct and cache modes; add unit tests for negative-len, NULL `cf`, and NULL
+  `cf->link` guards in `Cache_read`
+  ([d02ac05](https://github.com/fangfufu/httpdirfs/commit/d02ac05)).
 
 ### Changed
 
@@ -70,6 +89,36 @@ and this project adheres to
   actions version
   ([68dd7bb](https://github.com/fangfufu/httpdirfs/commit/68dd7bb),
   [f819603](https://github.com/fangfufu/httpdirfs/commit/f819603)).
+- Add `--short` and `--long` flags to `generate_test_files.py` and isolate short
+  and long integration test suites so that long cache tests no longer generate
+  short fixture files redundantly; dynamically select the range-check probe file
+  to match the active test mode
+  ([2225d0d](https://github.com/fangfufu/httpdirfs/commit/2225d0d)).
+- Default `generate_test_files.py` to a no-op when no flag is given, removing
+  the implicit `--large` alias; `--all` remains the canonical way to generate
+  both the short fixture set and the 1 GB large file
+  ([3bb8737](https://github.com/fangfufu/httpdirfs/commit/3bb8737)).
+- Refactor `struct Cache` to remove redundant `time`, `content_length`, and
+  `fs_path` fields; update `Meta_read`/`Meta_write` to preserve the on-disk
+  binary format using local variables, keeping `struct Link` as the single
+  source of truth for core link attributes
+  ([63860bc](https://github.com/fangfufu/httpdirfs/commit/63860bc)).
+- Statically initialize `link_lock` using `PTHREAD_MUTEX_INITIALIZER`, removing
+  redundant runtime initialization and resolving `EINVAL` crashes in unit tests
+  where `LinkSystem_init` is bypassed
+  ([af24b36](https://github.com/fangfufu/httpdirfs/commit/af24b36)).
+- Extract repeated transfer-cleanup logic from `Link_download` into a single
+  static `Link_download_finish_transfer` helper, replacing three identical
+  lock/clear/broadcast/reset blocks
+  ([12c6888](https://github.com/fangfufu/httpdirfs/commit/12c6888)).
+- Update `README.md` to describe high-performance concurrent and asynchronous
+  cache downloads, and add a developer section on memory management and
+  synchronization wrappers
+  ([3c0d145](https://github.com/fangfufu/httpdirfs/commit/3c0d145),
+  [439264f](https://github.com/fangfufu/httpdirfs/commit/439264f)).
+- Update `src/README.md` to reflect the split integration test stages present in
+  the GitHub Actions `build.yml` configuration
+  ([439264f](https://github.com/fangfufu/httpdirfs/commit/439264f)).
 
 ### Fixed
 
@@ -94,6 +143,44 @@ and this project adheres to
   GCC/Clang-specific `__attribute__((noreturn))` with the C11 standard
   `_Noreturn` keyword in `log.h` and `util.h`
   ([5ed8167](https://github.com/fangfufu/httpdirfs/commit/5ed8167)).
+- Prevent duplicate background downloads by re-verifying segment existence under
+  `w_lock` after `sem_trywait()` succeeds, closing the TOCTOU race where another
+  thread could complete the download between the initial `Seg_exist` check and
+  the `dl_lock` acquisition
+  ([c11aad6](https://github.com/fangfufu/httpdirfs/commit/c11aad6)).
+- Prevent null pointer dereference in `Cache_read_segment` by verifying that
+  `ad->ts->data` is not `NULL` before performing the early-return `memcpy`
+  ([935b1e6](https://github.com/fangfufu/httpdirfs/commit/935b1e6)).
+- Add strict defensive bounds checks in `Seg_exist` and `Seg_set` to reject
+  negative or out-of-bounds offsets before dividing by block size; clamp
+  requested read length in `Cache_read` to remaining file size to prevent
+  false-positive `-EIO` errors near EOF; add `NULL` checks for `cf->link` and
+  offset bounds checks in `Cache_read_segment`
+  ([a527469](https://github.com/fangfufu/httpdirfs/commit/a527469)).
+- Eliminate TOCTOU race conditions in `Cache_exist` and `Cache_delete` by
+  calling `unlink` directly and checking for `ENOENT`, removing the redundant
+  `access` calls; replace `stat` with `fstat` in tests to prevent CodeQL TOCTOU
+  warnings ([f911f7c](https://github.com/fangfufu/httpdirfs/commit/f911f7c)).
+- Change `expected_segbc` in `Meta_write` from `long` to `off_t` to prevent
+  silent truncation on 32-bit platforms before the `INT_MAX` cap; use a `size_t`
+  intermediate in `Cache_create` to avoid 32-bit overflow when computing
+  `content_length / blksz`; add a `len < 0` guard in `Cache_read` to prevent
+  negative values wrapping to a large `size_t`
+  ([96baffe](https://github.com/fangfufu/httpdirfs/commit/96baffe)).
+- Add a memory-only `Cache` bypass shortcut in `Cache_open` for empty files and
+  skip cache operations early in `fs_open` for zero-length files; treat stale or
+  corrupt zero-byte cache metadata and data files as invalid in `Cache_exist`
+  and trigger automatic cleanup; skip network activity early in `Link_download`
+  for zero-byte downloads to avoid invalid HTTP range headers
+  ([6c92d03](https://github.com/fangfufu/httpdirfs/commit/6c92d03)).
+- Restructure `fs_read` so that cache-enabled zero-length files (where
+  `fi->fh == 0`) return `0` immediately without falling through to
+  `path_download`, avoiding a redundant path lookup and directory traversal
+  ([a491ade](https://github.com/fangfufu/httpdirfs/commit/a491ade)).
+- Cap `req_size` in `Link_download` using a subtraction-based bounds check to
+  prevent potential integer overflow when the requested range extends beyond the
+  remaining file content
+  ([a527469](https://github.com/fangfufu/httpdirfs/commit/a527469)).
 
 ## [1.2.11] - 2026-05-23
 
