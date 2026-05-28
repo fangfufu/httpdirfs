@@ -17,3 +17,6 @@ doxygen
 /subprojects/*
 !/subprojects/*.wrap
 !/subprojects/.wraplock
+
+# OpenCode language server cache
+/.cache/
