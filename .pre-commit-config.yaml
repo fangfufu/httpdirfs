@@ -1,3 +1,4 @@
+fail_fast: true
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -11,18 +12,12 @@ repos:
     rev: v2.2.6
     hooks:
     -   id: codespell
-
 -   repo: https://github.com/pre-commit/mirrors-prettier
     rev: v3.1.0
     hooks:
     -   id: prettier
         args: [--prose-wrap, always, --print-width, "80"]
         types: [markdown]
--   repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5
-    hooks:
-    -   id: clang-tidy
-        args: ["-p=builddir", "--warnings-as-errors=*"]
 -   repo: local
     hooks:
     -   id: clang-format
@@ -95,3 +90,8 @@ repos:
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
+-   repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+    -   id: clang-tidy
+        args: ["-p=builddir", "--warnings-as-errors=*"]
