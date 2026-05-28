@@ -43,7 +43,6 @@
 #include <unistd.h>
 
 void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
-static void print_help(char *program_name, int long_help);
 static void print_long_help(void);
 static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                           int *fuse_argc);
@@ -51,13 +50,19 @@ void parse_config_file(char ***argv, int *argc);
 
 static char *config_path = NULL;
 
+static void print_help(char *program_name)
+{
+    /* FUSE prints its help to stderr */
+    fprintf(stderr, "usage: %s [options] URL mountpoint\n", program_name);
+}
+
 int main(int argc, char **argv)
 {
     /*
      * Automatically print help if not enough arguments are supplied
      */
     if (argc < 2) {
-        print_help(argv[0], 0);
+        print_help(argv[0]);
         fprintf(stderr, "For more information, run \"%s --help.\"\n", argv[0]);
         exit(EXIT_FAILURE);
     }
@@ -122,7 +127,9 @@ int main(int argc, char **argv)
      * parse the combined argument list
      */
     optind = 1;
-    if (parse_arg_list(all_argc, all_argv, &fuse_argv, &fuse_argc)) {
+
+    int skip = parse_arg_list(all_argc, all_argv, &fuse_argv, &fuse_argc);
+    if (skip) {
         /*
          * The user basically didn't supply enough arguments, if we reach here
          * The point is to print some error messages
@@ -134,7 +141,7 @@ int main(int argc, char **argv)
         fprintf(
             stderr,
             "Error: You must provide exactly one URL and one mountpoint.\n");
-        print_help(argv[0], 0);
+        print_help(argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -149,7 +156,7 @@ int main(int argc, char **argv)
     if (!abs_mountpoint) {
         fprintf(stderr, "Error: Invalid mountpoint %s: %s\n",
                 all_argv[optind + 1], strerror(errno));
-        print_help(argv[0], 0);
+        print_help(argv[0]);
         exit(EXIT_FAILURE);
     }
 
@@ -179,7 +186,7 @@ int main(int argc, char **argv)
     if (strncmp(base_url, "http://", 7) != 0
         && strncmp(base_url, "https://", 8) != 0) {
         fprintf(stderr, "Error: Please supply a valid URL.\n");
-        print_help(argv[0], 0);
+        print_help(argv[0]);
         exit(EXIT_FAILURE);
     } else {
         if (CONFIG.sonic_username && CONFIG.sonic_password) {
@@ -210,6 +217,10 @@ fuse_start:
     FREE(fuse_argv);
 
     FREE(config_path);
+
+    if (skip == 2) {
+        print_long_help();
+    }
 
     return res;
 }
@@ -308,9 +319,8 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
     int long_index = 0;
     const char *short_opts = "o:hVdfsp:u:P:";
     const struct option long_opts[]
-        = {                                                   /*
-                                                               * Note that 'L' is returned for long options
-                                                               */
+
+        = {/* Note that 'L' is returned for long options */
            {"help", no_argument, NULL, 'h'},                  /* 0 */
            {"version", no_argument, NULL, 'V'},               /* 1 */
            {"debug", no_argument, NULL, 'd'},                 /* 2 */
@@ -352,25 +362,17 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             add_arg(fuse_argv, fuse_argc, optarg);
             break;
         case 'h':
-            print_help(argv[0], 1);
-            add_arg(fuse_argv, fuse_argc, "-ho");
-            /*
-             * skip everything else to print the help
-             */
-            return 1;
+            add_arg(fuse_argv, fuse_argc, "-h");
+            /* skip everything else to print the help. */
+            return 2;
         case 'V':
             print_version();
             add_arg(fuse_argv, fuse_argc, "-V");
+            /* skip everything else to print the version info. */
             return 1;
         case 'd':
             add_arg(fuse_argv, fuse_argc, "-d");
             CONFIG.log_type |= debug;
-            break;
-        case 'f':
-            add_arg(fuse_argv, fuse_argc, "-f");
-            break;
-        case 's':
-            add_arg(fuse_argv, fuse_argc, "-s");
             break;
         case 'u':
             CONFIG.http_username = STRDUP(optarg);
@@ -473,8 +475,16 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             }
             break;
         default:
-            fprintf(stderr, "see httpdirfs -h for usage\n");
-            return 1;
+            /* The blank statement below is intentional.*/
+            {
+            }
+            /* We are doing it this way to stop wide characters from overwriting
+             * the '\0'*/
+            char arg_buf[3];
+            arg_buf[0] = '-';
+            arg_buf[1] = c;
+            arg_buf[2] = '\0';
+            add_arg(fuse_argv, fuse_argc, arg_buf);
         }
     };
     return 0;
@@ -492,15 +502,6 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
     char **fuse_argv = *fuse_argv_ptr;
     fuse_argv[*fuse_argc] = STRDUP(opt_string);
     (*fuse_argc)++;
-}
-
-static void print_help(char *program_name, int long_help)
-{
-    /* FUSE prints its help to stderr */
-    fprintf(stderr, "usage: %s [options] URL mountpoint\n", program_name);
-    if (long_help) {
-        print_long_help();
-    }
 }
 
 static void print_long_help(void)
