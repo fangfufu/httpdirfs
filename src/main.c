@@ -374,6 +374,12 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             add_arg(fuse_argv, fuse_argc, "-d");
             CONFIG.log_type |= debug;
             break;
+        case 'f':
+            add_arg(fuse_argv, fuse_argc, "-f");
+            break;
+        case 's':
+            add_arg(fuse_argv, fuse_argc, "-s");
+            break;
         case 'u':
             CONFIG.http_username = STRDUP(optarg);
             break;
@@ -475,16 +481,8 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             }
             break;
         default:
-            /* The blank statement below is intentional.*/
-            {
-            }
-            /* We are doing it this way to stop wide characters from overwriting
-             * the '\0'*/
-            char arg_buf[3];
-            arg_buf[0] = '-';
-            arg_buf[1] = c;
-            arg_buf[2] = '\0';
-            add_arg(fuse_argv, fuse_argc, arg_buf);
+            fprintf(stderr, "see httpdirfs -h for usage\n");
+            return 1;
         }
     };
     return 0;
