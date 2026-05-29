@@ -51,10 +51,6 @@ and this project adheres to
   `tests/test_link.c` to prevent configuration and root link table mutations
   from leaking between unit tests
   ([1a13d41](https://github.com/fangfufu/httpdirfs/commit/1a13d41)).
-- Remove redundant `-f` and `-s` short options from `short_opts` and
-  synchronization switch cases in `parse_arg_list` to resolve command-line
-  parser ambiguities
-  ([73a992f](https://github.com/fangfufu/httpdirfs/commit/73a992f)).
 - Improve integration test compatibility with BSD and macOS systems by replacing
   GNU-specific `find -print -quit` options with portable POSIX pipelines using
   `head -n 1` ([47d79de](https://github.com/fangfufu/httpdirfs/commit/47d79de)).
