@@ -101,14 +101,16 @@ int main(int argc, char **argv)
         add_arg(&all_argv, &all_argc, argv[i]);
         if (!strncmp(argv[i], "--config=", 9)) {
             if (argv[i][9] == '\0') {
-                lprintf(fatal, "--config requires a path\n");
+                lprintf(error, "--config requires a path\n");
+                exit(EXIT_FAILURE);
             }
             FREE(config_path);
             config_path = STRDUP(argv[i] + 9);
         } else if (!strcmp(argv[i], "--config")) {
             if (i + 1 >= argc || argv[i + 1][0] == '\0'
                 || argv[i + 1][0] == '-') {
-                lprintf(fatal, "--config requires a path\n");
+                lprintf(error, "--config requires a path\n");
+                exit(EXIT_FAILURE);
             }
             FREE(config_path);
             config_path = STRDUP(argv[i + 1]);
@@ -486,7 +488,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                     fprintf(stderr,
                             "Error: --cache-min-size requires a "
                             "non-negative integer within off_t range\n");
-                    return 1;
+                    exit(EXIT_FAILURE);
                 }
                 CONFIG.cache_min_size = (off_t)val;
             } break;
@@ -499,25 +501,25 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                     fprintf(stderr,
                             "Error: --cache-max-size requires a "
                             "non-negative integer within off_t range\n");
-                    return 1;
+                    exit(EXIT_FAILURE);
                 }
                 CONFIG.cache_max_size = (off_t)val;
             } break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
-                return 1;
+                exit(EXIT_FAILURE);
             }
             break;
         default:
             fprintf(stderr, "see httpdirfs -h for usage\n");
-            return 1;
+            exit(EXIT_FAILURE);
         }
     };
     if (CONFIG.cache_min_size >= 0 && CONFIG.cache_max_size >= 0
         && CONFIG.cache_min_size > CONFIG.cache_max_size) {
         fprintf(stderr, "Error: --cache-min-size cannot be greater than "
                         "--cache-max-size\n");
-        return 1;
+        exit(EXIT_FAILURE);
     }
     return 0;
 }
