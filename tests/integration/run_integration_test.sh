@@ -761,6 +761,150 @@ fi
 # Stop the external HTTP server
 cleanup_ext
 log_info "External HTTP server stopped."
+
+    # ── Test 7: Cache size thresholds ───────────────────────────────────────────
+    log_info "Test group: Cache size thresholds"
+
+    # --- Test 7a: cache-min-size threshold ---
+    log_info "Subgroup: Cache minimum size threshold"
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --cache \
+        --cache-location "${CACHE_DIR}" \
+        --cache-min-size 1024 \
+        "${BASE_URL}" \
+        "${CACHE_MOUNT_DIR}" &
+    THRESH_PID=$!
+
+    # Wait for mount
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        if mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (cache-min-size) failed to mount."
+        kill "${THRESH_PID}" 2>/dev/null || true
+    else
+        # Read tiny.txt (1 byte, should not be cached)
+        tiny_content=$(cat "${CACHE_MOUNT_DIR}/tiny.txt")
+        if [[ -n "${tiny_content}" ]]; then
+            pass "cache-min-size: tiny.txt read successfully"
+        else
+            fail "cache-min-size: tiny.txt read failed"
+        fi
+
+        # Read simple.txt (should be cached as it is > 1024 bytes)
+        cat "${CACHE_MOUNT_DIR}/simple.txt" > /dev/null
+
+        # Check cache directory
+        # tiny.txt should NOT have a cache file
+        tiny_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*tiny.txt" 2>/dev/null | head -n 1 || true)
+        if [[ -z "${tiny_cache_file}" ]]; then
+            pass "cache-min-size: tiny.txt (1 byte) was NOT cached (correct)"
+        else
+            fail "cache-min-size: tiny.txt (1 byte) was unexpectedly cached"
+        fi
+
+        # simple.txt should have a cache file
+        simple_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*simple.txt" 2>/dev/null | head -n 1 || true)
+        if [[ -n "${simple_cache_file}" ]]; then
+            pass "cache-min-size: simple.txt was cached (correct)"
+        else
+            fail "cache-min-size: simple.txt was NOT cached"
+        fi
+
+        do_unmount "${CACHE_MOUNT_DIR}"
+        wait "${THRESH_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 7b: cache-max-size threshold ---
+    log_info "Subgroup: Cache maximum size threshold"
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}"
+
+    # We set max size to 100 bytes. tiny.txt (1 byte) is cached, simple.txt (> 1024 bytes) is not.
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --cache \
+        --cache-location "${CACHE_DIR}" \
+        --cache-max-size 100 \
+        "${BASE_URL}" \
+        "${CACHE_MOUNT_DIR}" &
+    THRESH_PID=$!
+
+    # Wait for mount
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        if mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
+        fail "cache-max-size: httpdirfs failed to mount"
+        kill "${THRESH_PID}" 2>/dev/null || true
+    else
+        log_info "Subgroup: Test cache-max-size (max size=100)"
+
+        # Read tiny.txt (should be cached)
+        cat "${CACHE_MOUNT_DIR}/tiny.txt" > /dev/null
+
+        # Read simple.txt (should not be cached)
+        cat "${CACHE_MOUNT_DIR}/simple.txt" > /dev/null
+
+        # Check cache directory
+        # tiny.txt should have a cache file
+        tiny_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*tiny.txt" 2>/dev/null | head -n 1 || true)
+        if [[ -n "${tiny_cache_file}" ]]; then
+            pass "cache-max-size: tiny.txt (1 byte) was cached (correct)"
+        else
+            fail "cache-max-size: tiny.txt (1 byte) was NOT cached"
+        fi
+
+        # simple.txt should NOT have a cache file
+        simple_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*simple.txt" 2>/dev/null | head -n 1 || true)
+        if [[ -z "${simple_cache_file}" ]]; then
+            pass "cache-max-size: simple.txt (>100 bytes) was NOT cached (correct)"
+        else
+            fail "cache-max-size: simple.txt (>100 bytes) was unexpectedly cached"
+        fi
+
+        do_unmount "${CACHE_MOUNT_DIR}"
+        wait "${THRESH_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 7c: cache size invalid and inconsistent parameter checks ---
+    log_info "Subgroup: Cache size threshold invalid parameter validation"
+
+    # Test negative cache-min-size
+    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-min-size -50 "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --cache-min-size requires a non-negative integer"* ]]; then
+        pass "cache size validation: negative --cache-min-size rejected (correct)"
+    else
+        fail "cache size validation: negative --cache-min-size not rejected correctly: ${err_out}"
+    fi
+
+    # Test non-numeric cache-max-size
+    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-max-size abc "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --cache-max-size requires a non-negative integer"* ]]; then
+        pass "cache size validation: non-numeric --cache-max-size rejected (correct)"
+    else
+        fail "cache size validation: non-numeric --cache-max-size not rejected correctly: ${err_out}"
+    fi
+
+    # Test min-size > max-size inconsistency
+    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-min-size 1000 --cache-max-size 500 "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --cache-min-size cannot be greater than --cache-max-size"* ]]; then
+        pass "cache size validation: min > max consistency check rejected (correct)"
+    else
+        fail "cache size validation: min > max inconsistency not rejected correctly: ${err_out}"
+    fi
 fi
 
 # ─── Step 6: Cache mode with multithreaded reads ────────────────────────────
