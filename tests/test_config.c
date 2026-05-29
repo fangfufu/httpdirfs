@@ -26,6 +26,8 @@ void test_Config_init(void)
     TEST_ASSERT_EQUAL_INT(0, CONFIG.cache_enabled);
     TEST_ASSERT_EQUAL_STRING(DEFAULT_USER_AGENT, CONFIG.user_agent);
     TEST_ASSERT_NULL(CONFIG.http_username);
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)CONFIG.cache_min_size);
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)CONFIG.cache_max_size);
 }
 
 int main(void)

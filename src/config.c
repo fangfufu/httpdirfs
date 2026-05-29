@@ -86,6 +86,9 @@ void Config_init(void)
 
     CONFIG.data_blksz = DEFAULT_DATA_BLKSZ;
 
+    CONFIG.cache_min_size = -1;
+    CONFIG.cache_max_size = -1;
+
     /*-------------- Sonic related -------------*/
     CONFIG.sonic_username = NULL;
 

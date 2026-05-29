@@ -29,8 +29,13 @@
 #include "fuse_local.h"
 
 #include "cache.h"
+#include "config.h"
 #include "link.h"
 #include "log.h"
+
+/* clang-format off */
+#define BYPASS_FH ((uint64_t)-1)
+/* clang-format on */
 
 /*
  * must be included before including <fuse.h>
@@ -58,7 +63,7 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 {
     lprintf(info, "%s\n", path);
     (void)path;
-    if (CACHE_SYSTEM_INIT && fi->fh) {
+    if (CACHE_SYSTEM_INIT && fi->fh && fi->fh != BYPASS_FH) {
         Cache_close((Cache *)fi->fh);
     }
     return 0;
@@ -119,10 +124,11 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 {
     long received;
     if (CACHE_SYSTEM_INIT) {
-        if (fi->fh) {
+        if (fi->fh == BYPASS_FH) {
+            received = path_download(path, buf, size, offset);
+        } else if (fi->fh) {
             received = Cache_read((Cache *)fi->fh, buf, size, offset);
         } else {
-            /* zero-length file: fi->fh was set to 0 in fs_open; return EOF */
             received = 0;
         }
     } else {
@@ -146,6 +152,20 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if (CACHE_SYSTEM_INIT) {
         if (link->content_length == 0) {
             fi->fh = 0; /* valid empty file: bypass cache creation */
+            LinkTable_unref(link->parent_table);
+            return 0;
+        }
+        int bypass_cache = 0;
+        off_t file_size = (off_t)link->content_length;
+        if (file_size < 0 || (size_t)file_size != link->content_length
+            || (CONFIG.cache_min_size >= 0 && file_size < CONFIG.cache_min_size)
+            || (CONFIG.cache_max_size >= 0
+                && file_size > CONFIG.cache_max_size)) {
+            bypass_cache = 1;
+        }
+        if (bypass_cache) {
+            /* bypass cache creation due to size thresholds */
+            fi->fh = BYPASS_FH;
             LinkTable_unref(link->parent_table);
             return 0;
         }
