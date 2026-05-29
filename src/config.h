@@ -29,6 +29,7 @@
  */
 
 #include <limits.h>
+#include <sys/types.h>
 
 /**
  * \brief the default user agent string
@@ -126,6 +127,10 @@ typedef struct {
     int data_blksz;
     /** \brief The maximum segment count for a single cache file */
     int max_segbc;
+    /** \brief The minimum file size threshold for caching */
+    off_t cache_min_size;
+    /** \brief The maximum file size threshold for caching */
+    off_t cache_max_size;
     /*-------------- Sonic related -------------*/
     /** \brief The Sonic server username */
     char *sonic_username;
