@@ -353,6 +353,8 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"capath", required_argument, NULL, 'L'},          /* 29 */
            {"proxy-capath", required_argument, NULL, 'L'},    /* 30 */
            {"external-links", no_argument, NULL, 'L'},        /* 31 */
+           {"cache-min-size", required_argument, NULL, 'L'},  /* 32 */
+           {"cache-max-size", required_argument, NULL, 'L'},  /* 33 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -469,6 +471,32 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 31:
                 CONFIG.external_links = 1;
                 break;
+            case 32: {
+                char *endptr;
+                errno = 0;
+                long long val = strtoll(optarg, &endptr, 10);
+                if (errno != 0 || endptr == optarg || *endptr != '\0' || val < 0
+                    || (long long)(off_t)val != val) {
+                    fprintf(stderr,
+                            "Error: --cache-min-size requires a "
+                            "non-negative integer within off_t range\n");
+                    return 1;
+                }
+                CONFIG.cache_min_size = (off_t)val;
+            } break;
+            case 33: {
+                char *endptr;
+                errno = 0;
+                long long val = strtoll(optarg, &endptr, 10);
+                if (errno != 0 || endptr == optarg || *endptr != '\0' || val < 0
+                    || (long long)(off_t)val != val) {
+                    fprintf(stderr,
+                            "Error: --cache-max-size requires a "
+                            "non-negative integer within off_t range\n");
+                    return 1;
+                }
+                CONFIG.cache_max_size = (off_t)val;
+            } break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 return 1;
@@ -487,6 +515,12 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             add_arg(fuse_argv, fuse_argc, arg_buf);
         }
     };
+    if (CONFIG.cache_min_size >= 0 && CONFIG.cache_max_size >= 0
+        && CONFIG.cache_min_size > CONFIG.cache_max_size) {
+        fprintf(stderr, "Error: --cache-min-size cannot be greater than "
+                        "--cache-max-size\n");
+        return 1;
+    }
     return 0;
 }
 
@@ -532,6 +566,10 @@ HTTPDirFS options:\n\
         --cache-clear       Delete the cache directory or the custom location\n\
                             specified with `--cache-location`, if the option is\n\
                             seen first. Then exit in either case.\n\
+        --cache-min-size    Set minimum file size threshold for caching, in bytes\n\
+                            (default: none)\n\
+        --cache-max-size    Set maximum file size threshold for caching, in bytes\n\
+                            (default: none)\n\
         --cacert            Certificate authority for the server\n\
         --capath            Certificate authority directory for the server\n\
         --dl-seg-size       Set cache download segment size, in MB (default: " XSTR(
@@ -550,7 +588,7 @@ HTTPDirFS options:\n\
         --no-range-check    Disable the built-in check for the server's support\n\
                             for HTTP range requests\n\
         --zero-len-is-dir   If a file has a zero length, treat it as a directory\n\
-        --insecure-tls      Disable licurl TLS certificate verification by\n\
+        --insecure-tls      Disable libcurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
         --external-links    Include external (cross-origin) links from\n\
                             directory listings (default: off)\n\
