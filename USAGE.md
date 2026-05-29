@@ -52,7 +52,7 @@ HTTPDirFS options:
         --retry-wait        Set delay in seconds before retrying an HTTP request
                             after encountering an error. (default: 5)
         --invalid-refresh   Try refreshing invalid links when reading a directory.
-        --user-agent        Set user agent string (default: "HTTPDirFS-1.3.1")
+        --user-agent        Set user agent string (default: "HTTPDirFS-1.3.2")
         --no-range-check    Disable the built-in check for the server's support
                             for HTTP range requests
         --zero-len-is-dir   If a file has a zero length, treat it as a directory
