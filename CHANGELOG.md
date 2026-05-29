@@ -22,6 +22,13 @@ and this project adheres to
   mapping, and robust error handling
   ([edce0ca](https://github.com/fangfufu/httpdirfs/commit/edce0ca),
   [855e134](https://github.com/fangfufu/httpdirfs/commit/855e134)).
+- Add `--cache-min-size` and `--cache-max-size` command-line flags and
+  configuration options to dynamically enforce file size thresholds for
+  persistent caching
+  ([1547e39](https://github.com/fangfufu/httpdirfs/commit/1547e39)).
+- Introduce unit and integration tests verifying caching thresholds, including
+  boundary conditions and bypass behavior
+  ([1547e39](https://github.com/fangfufu/httpdirfs/commit/1547e39)).
 
 ### Changed
 
@@ -44,6 +51,13 @@ and this project adheres to
   `tests/test_link.c` to prevent configuration and root link table mutations
   from leaking between unit tests
   ([1a13d41](https://github.com/fangfufu/httpdirfs/commit/1a13d41)).
+- Remove redundant `-f` and `-s` short options from `short_opts` and
+  synchronization switch cases in `parse_arg_list` to resolve command-line
+  parser ambiguities
+  ([73a992f](https://github.com/fangfufu/httpdirfs/commit/73a992f)).
+- Improve integration test compatibility with BSD and macOS systems by replacing
+  GNU-specific `find -print -quit` options with portable POSIX pipelines using
+  `head -n 1` ([47d79de](https://github.com/fangfufu/httpdirfs/commit/47d79de)).
 
 ### Fixed
 
@@ -51,6 +65,13 @@ and this project adheres to
   in `is_cross_origin()` checks, ensuring same-origin URLs utilizing default
   ports are not misclassified as cross-origin
   ([7ca2f2a](https://github.com/fangfufu/httpdirfs/commit/7ca2f2a)).
+- Fix argument parsing and help output when parsing `--help` or `--version`
+  options internally
+  ([860453a](https://github.com/fangfufu/httpdirfs/commit/860453a)).
+- Harden argument parsing error handling by terminating early with
+  `exit(EXIT_FAILURE)` instead of returning non-zero error codes from
+  `parse_arg_list`
+  ([8d13093](https://github.com/fangfufu/httpdirfs/commit/8d13093)).
 
 ## [1.3.1] - 2026-05-27
 
