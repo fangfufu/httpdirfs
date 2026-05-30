@@ -9,20 +9,18 @@ on:
     - cron: '18 19 * * 1'
 
 jobs:
-  analyze:
-    name: Analyze
+  analyze-c:
+    name: Analyze C
     runs-on: 'ubuntu-latest'
     timeout-minutes: 360
     permissions:
       security-events: write
-
       actions: read
       contents: read
 
     strategy:
       fail-fast: true
       matrix:
-        language: [ 'c-cpp' ]
         buildtype: [ 'debug', 'release' ]
 
     steps:
@@ -39,7 +37,7 @@ jobs:
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
-        languages: ${{ matrix.language }}
+        languages: c
 
     - name: Setup Meson
       run: meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
@@ -50,4 +48,27 @@ jobs:
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
       with:
-        category: "/language:${{matrix.language}}/buildtype:${{matrix.buildtype}}"
+        category: "/language:c/buildtype:${{matrix.buildtype}}"
+
+  analyze-actions:
+    name: Analyze Actions
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 360
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: actions
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:actions"
