@@ -1,108 +1,87 @@
 fail_fast: true
 ci:
-    autofix_commit_msg: |
-        [pre-commit.ci] auto fixes from pre-commit.com hooks
+  autofix_commit_msg: |
+    [pre-commit.ci] auto fixes from pre-commit.com hooks
 
-        for more information, see https://pre-commit.ci
-    autofix_prs: true
-    autoupdate_branch: ''
-    autoupdate_commit_msg: '[pre-commit.ci] pre-commit autoupdate'
-    autoupdate_schedule: weekly
-    skip: [clang-format, meson-test-debug, clang-tidy]
-
+    for more information, see https://pre-commit.ci
+  autofix_prs: true
+  autoupdate_branch: ""
+  autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
+  autoupdate_schedule: weekly
+  skip: [clang-format, meson-test-debug, clang-tidy]
 repos:
--   repo: https://github.com/pre-commit/pre-commit-hooks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
     hooks:
-    -   id: trailing-whitespace
-    -   id: end-of-file-fixer
-    -   id: check-yaml
-    -   id: check-added-large-files
-    -   id: check-merge-conflict
--   repo: https://github.com/codespell-project/codespell
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+  - repo: https://github.com/codespell-project/codespell
     rev: v2.2.6
     hooks:
-    -   id: codespell
--   repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v3.1.0
+      - id: codespell
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.21
     hooks:
-    -   id: prettier
-        args: [--prose-wrap, always, --print-width, "80"]
-        types: [markdown]
--   repo: local
+      - id: mdformat
+        args: [--wrap, "80"]
+        additional_dependencies:
+          - mdformat-gfm
+          - mdformat-gfm-alerts
+  - repo: https://github.com/google/yamlfmt
+    rev: v0.16.0
     hooks:
-    -   id: clang-format
+      - id: yamlfmt
+  - repo: local
+    hooks:
+      - id: clang-format
         name: clang-format
         entry: clang-format -i
         language: system
         files: \.(c|h)$
-    -   id: meson-test-debug
+      - id: meson-test-debug
         name: Meson Test (Debug)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/default-debug ]; then
-          meson setup .pre-commit-builds/default-debug --buildtype=debug; fi &&
-          meson test -C .pre-commit-builds/default-debug'
+          bash -c 'if [ ! -d .pre-commit-builds/default-debug ]; then meson setup .pre-commit-builds/default-debug --buildtype=debug; fi && meson test -C .pre-commit-builds/default-debug'
         language: system
         pass_filenames: false
         files: \.(c|h)$
-    -   id: all-tests-gcc
+      - id: all-tests-gcc
         name: All Tests (GCC)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/gcc-release ]; then
-          CC=gcc meson setup .pre-commit-builds/gcc-release; fi &&
-          meson test -C .pre-commit-builds/gcc-release
-          --suite unit_test
-          --suite integration_short
-          --suite integration_long
-          --verbose'
+          bash -c 'if [ ! -d .pre-commit-builds/gcc-release ]; then CC=gcc meson setup .pre-commit-builds/gcc-release; fi && meson test -C .pre-commit-builds/gcc-release --suite unit_test --suite integration_short --suite integration_long --verbose'
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
-    -   id: all-tests-gcc-debug
+      - id: all-tests-gcc-debug
         name: All Tests (GCC Debug)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/gcc-debug ]; then
-          CC=gcc meson setup .pre-commit-builds/gcc-debug --buildtype=debug; fi &&
-          meson test -C .pre-commit-builds/gcc-debug
-          --suite unit_test
-          --suite integration_short
-          --suite integration_long
-          --verbose'
+          bash -c 'if [ ! -d .pre-commit-builds/gcc-debug ]; then CC=gcc meson setup .pre-commit-builds/gcc-debug --buildtype=debug; fi && meson test -C .pre-commit-builds/gcc-debug --suite unit_test --suite integration_short --suite integration_long --verbose'
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
-    -   id: all-tests-clang
+      - id: all-tests-clang
         name: All Tests (Clang)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/clang-release ]; then
-          CC=clang meson setup .pre-commit-builds/clang-release; fi &&
-          meson test -C .pre-commit-builds/clang-release
-          --suite unit_test
-          --suite integration_short
-          --suite integration_long
-          --verbose'
+          bash -c 'if [ ! -d .pre-commit-builds/clang-release ]; then CC=clang meson setup .pre-commit-builds/clang-release; fi && meson test -C .pre-commit-builds/clang-release --suite unit_test --suite integration_short --suite integration_long --verbose'
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
-    -   id: all-tests-clang-debug
+      - id: all-tests-clang-debug
         name: All Tests (Clang Debug)
         entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/clang-debug ]; then
-          CC=clang meson setup .pre-commit-builds/clang-debug --buildtype=debug; fi &&
-          meson test -C .pre-commit-builds/clang-debug
-          --suite unit_test
-          --suite integration_short
-          --suite integration_long
-          --verbose'
+          bash -c 'if [ ! -d .pre-commit-builds/clang-debug ]; then CC=clang meson setup .pre-commit-builds/clang-debug --buildtype=debug; fi && meson test -C .pre-commit-builds/clang-debug --suite unit_test --suite integration_short --suite integration_long --verbose'
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
--   repo: https://github.com/pocc/pre-commit-hooks
+  - repo: https://github.com/pocc/pre-commit-hooks
     rev: v1.3.5
     hooks:
-    -   id: clang-tidy
+      - id: clang-tidy
         args: ["-p=builddir", "--warnings-as-errors=*"]

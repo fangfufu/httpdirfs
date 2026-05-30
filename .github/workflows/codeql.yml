@@ -1,74 +1,61 @@
 name: "CodeQL"
-
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
+    branches: ["master"]
   schedule:
-    - cron: '18 19 * * 1'
-
+    - cron: "18 19 * * 1"
 jobs:
   analyze-c:
     name: Analyze C
-    runs-on: 'ubuntu-latest'
+    runs-on: "ubuntu-latest"
     timeout-minutes: 360
     permissions:
       security-events: write
       actions: read
       contents: read
-
     strategy:
       fail-fast: true
       matrix:
-        buildtype: [ 'debug', 'release' ]
-
+        buildtype: ["debug", "release"]
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y libgumbo-dev libfuse3-dev libssl-dev \
-          libcurl4-openssl-dev uuid-dev help2man libexpat1-dev pkg-config \
-          meson ninja-build
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
-      with:
-        languages: c
-
-    - name: Setup Meson
-      run: meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
-
-    - name: Compile
-      run: meson compile -C builddir
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
-      with:
-        category: "/language:c/buildtype:${{matrix.buildtype}}"
-
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgumbo-dev libfuse3-dev libssl-dev \
+            libcurl4-openssl-dev uuid-dev help2man libexpat1-dev pkg-config \
+            meson ninja-build
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: c
+      - name: Setup Meson
+        run: meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
+      - name: Compile
+        run: meson compile -C builddir
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:c/buildtype:${{matrix.buildtype}}"
   analyze-actions:
     name: Analyze Actions
-    runs-on: 'ubuntu-latest'
+    runs-on: "ubuntu-latest"
     timeout-minutes: 360
     permissions:
       security-events: write
       actions: read
       contents: read
-
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v6
-
-    - name: Initialize CodeQL
-      uses: github/codeql-action/init@v4
-      with:
-        languages: actions
-
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v4
-      with:
-        category: "/language:actions"
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: actions
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:actions"

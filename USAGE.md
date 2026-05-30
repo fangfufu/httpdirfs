@@ -115,7 +115,7 @@ HTTPDirFS options:
                             scheme
 ```
 
----
+______________________________________________________________________
 
 ### General Options
 
@@ -187,7 +187,7 @@ HTTPDirFS options:
   curl request logs and FUSE kernel-level interaction logs. Note that this flag
   automatically implies foreground operation (`-f`).
 
----
+______________________________________________________________________
 
 ### HTTPDirFS Core Options
 
@@ -247,7 +247,7 @@ HTTPDirFS options:
 - **Warning:** Disabling certificate verification exposes connections to
   potential man-in-the-middle (MitM) attacks.
 
----
+______________________________________________________________________
 
 ### Cache Settings
 
@@ -294,7 +294,7 @@ HTTPDirFS options:
   and be downloaded directly from the network upon access.
 - **Default:** None (no maximum limit is set).
 
----
+______________________________________________________________________
 
 ### Network & Performance Options
 
@@ -340,7 +340,7 @@ HTTPDirFS options:
 - **Warning:** If the remote server truly does not support Range requests,
   reading files from the mountpoint will be extremely slow or fail.
 
----
+______________________________________________________________________
 
 ### Behavioral & Advanced Flags
 
@@ -363,7 +363,7 @@ HTTPDirFS options:
   URL as a single virtual file inside the mountpoint. This is highly useful for
   files hosted on servers that do not present any directory listings.
 
----
+______________________________________________________________________
 
 ### External Links (`--external-links`)
 
@@ -399,7 +399,7 @@ external (cross-origin) URLs.
   (returning HTTP 401 or 403) will log a warning indicating that credentials are
   restricted to the main server.
 
----
+______________________________________________________________________
 
 ### Airsonic / Subsonic Mounting Options
 

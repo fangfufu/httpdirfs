@@ -28,7 +28,7 @@ Manual formatting can be triggered via Meson:
 meson compile format
 ```
 
----
+______________________________________________________________________
 
 ## Building and Debugging
 
@@ -69,7 +69,7 @@ When building with the `debug` build type, the `DEBUG` macro is automatically
 defined in `meson.build`. This enables debug-level logging messages by default
 in `httpdirfs`.
 
----
+______________________________________________________________________
 
 ## Development Workflow
 
@@ -96,7 +96,8 @@ code formatting, static analysis, and basic sanity checks.
    pip install pre-commit
    ```
 
-2. Install the git hooks:
+1. Install the git hooks:
+
    ```bash
    pre-commit install
    ```
@@ -110,7 +111,6 @@ files:
 pre-commit run --all-files
 ```
 
-<!-- prettier-ignore -->
 > [!IMPORTANT]
 > The `clang-tidy` hook requires `compile_commands.json` to be present in the
 > `builddir`. If you haven't configured the project yet, run:
@@ -119,12 +119,11 @@ pre-commit run --all-files
 > meson setup builddir
 > ```
 
-<!-- prettier-ignore -->
 > [!IMPORTANT]
-> **Manual Hooks Requirement Before Pushing:**
-> While basic unit tests and short integration tests run automatically on every
-> commit, the slow/intensive integration tests (`integration_long`) are placed
-> in the `manual` stage to keep the default local commit feedback loop fast.
+> **Manual Hooks Requirement Before Pushing:** While basic unit tests and short
+> integration tests run automatically on every commit, the slow/intensive
+> integration tests (`integration_long`) are placed in the `manual` stage to
+> keep the default local commit feedback loop fast.
 >
 > **You are required to manually run the full test suite hooks before pushing
 > your changes:**
@@ -142,6 +141,7 @@ pre-commit run --all-files
 > # Run all tests (Clang Debug)
 > pre-commit run all-tests-clang-debug --hook-stage manual --all-files
 > ```
+>
 > Note that the Clang-based hooks require `clang` to be installed (e.g.,
 > `sudo apt install clang` on Debian/Ubuntu systems).
 
@@ -151,10 +151,10 @@ We support three test suites configured and managed via Meson:
 
 1. **`unit_test`**: Runs all C-level unit tests (`test_util`, `test_cache`,
    `test_config`, `test_link`).
-2. **`integration_short`**: Runs fast integration tests (excludes the large 1 GB
+1. **`integration_short`**: Runs fast integration tests (excludes the large 1 GB
    file) verifying core mounting, directory traversal, read-only structures, and
    integrity. Completes in **~3 seconds**.
-3. **`integration_long`**: Runs resource-intensive cache integration tests
+1. **`integration_long`**: Runs resource-intensive cache integration tests
    involving concurrent multithreaded reads of a 1 GB file. Completes in **~25
    seconds**.
 
@@ -206,7 +206,7 @@ pre-commit run all-tests-clang --hook-stage manual --all-files
 pre-commit run all-tests-clang-debug --hook-stage manual --all-files
 ```
 
----
+______________________________________________________________________
 
 #### Running Specific Suites Manually via Meson
 
@@ -282,7 +282,7 @@ to the compiled `httpdirfs` binary and the desired mode flag:
 ./tests/integration/run_integration_test.sh --long builddir/httpdirfs
 ```
 
----
+______________________________________________________________________
 
 ## Logging and Error Handling
 
@@ -294,7 +294,7 @@ to the compiled `httpdirfs` binary and the desired mode flag:
 - `lprintf(fatal, ...)` will automatically call `exit_failure()`, which prints a
   backtrace and terminates the program.
 
----
+______________________________________________________________________
 
 ## Wrapper Functions
 
@@ -319,11 +319,16 @@ configurations.
 | `realpath`        | `REALPATH(p, r)`      | Resolving path names with wrapper checks.                                                |
 | `free`            | `FREE(ptr)`           | Automatically sets the pointer variable to `NULL` after freeing to prevent double-frees. |
 
-<!-- prettier-ignore -->
 > [!WARNING]
 > **Important rules for `FREE(ptr)`:**
-> - `FREE` modifies the pointer itself by setting it to `NULL`. This will fail to compile if used on const-qualified pointer variables (e.g., `char * const p`).
-> - When used on function parameters (e.g., `void func(void *ptr) { FREE(ptr); }`), it only nullifies the local parameter copy. The caller's original pointer remains unchanged (and dangling), so be sure to nullify the caller's pointer manually.
+>
+> - `FREE` modifies the pointer itself by setting it to `NULL`. This will fail
+>   to compile if used on const-qualified pointer variables (e.g.,
+>   `char * const p`).
+> - When used on function parameters (e.g.,
+>   `void func(void *ptr) { FREE(ptr); }`), it only nullifies the local
+>   parameter copy. The caller's original pointer remains unchanged (and
+>   dangling), so be sure to nullify the caller's pointer manually.
 
 ### 2. Concurrency and Synchronization Wrappers
 
@@ -352,7 +357,7 @@ that no errors occur during locking, unlocking, waiting, or signaling.
 - **Post**: `SEM_POST(sem)` (wraps `sem_post`)
 - **Destroy**: `SEM_DESTROY(sem)` (wraps `sem_destroy`)
 
----
+______________________________________________________________________
 
 ## Documentation
 
@@ -363,7 +368,7 @@ We use Doxygen to generate comprehensive API documentation.
 To generate the documentation:
 
 1. Enter your build directory.
-2. Run the Doxygen target:
+1. Run the Doxygen target:
 
 ```bash
 meson compile doxygen
