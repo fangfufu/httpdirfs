@@ -296,7 +296,7 @@ using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages
 using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 [libfuse](https://github.com/libfuse/libfuse).
 
-For \*sonic servers, rather than using the Gumbo parser, this program parse
+For \*sonic servers, rather than using the Gumbo parser, this program parses
 \*sonic servers' XML responses using
 [expat](https://github.com/libexpat/libexpat).
 
