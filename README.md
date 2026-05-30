@@ -41,7 +41,9 @@ directory listing.
 
 Basic usage:
 
-    ./httpdirfs -f --cache $URL $MOUNT_POINT
+```
+./httpdirfs -f --cache $URL $MOUNT_POINT
+```
 
 An example URL would be
 [Debian CD Image Server](https://cdimage.debian.org/debian-cd/). The `-f` flag
@@ -50,11 +52,15 @@ the filesystem is visiting.
 
 For more usage related help, run
 
-    ./httpdirfs --help
+```
+./httpdirfs --help
+```
 
 or
 
-    man httpdirfs
+```
+man httpdirfs
+```
 
 Please note that the man page only works if you have installed HTTPDirFS
 properly.
@@ -71,27 +77,37 @@ For important development related documentation, please refer
 Under Debian 13 "Trixie" and newer versions, you need the following
 dependencies:
 
-    libgumbo-dev libfuse3-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
-    libexpat1-dev pkg-config meson clang-format
+```
+libgumbo-dev libfuse3-dev libssl-dev libcurl4-openssl-dev uuid-dev help2man
+libexpat1-dev pkg-config meson clang-format
+```
 
 You can then compile the program similar to how you compile a typical program
 that uses the Meson build system:
 
-    meson setup builddir
-    cd builddir
-    meson compile
+```
+meson setup builddir
+cd builddir
+meson compile
+```
 
 To install the program, do the following:
 
-    sudo meson install
+```
+sudo meson install
+```
 
 To uninstall the program, do the following:
 
-    sudo ninja uninstall
+```
+sudo ninja uninstall
+```
 
 To clean the build directory, run:
 
-    ninja clean
+```
+ninja clean
+```
 
 For more information, please refer to this
 [tutorial](https://mesonbuild.com/Tutorial.html).
@@ -101,16 +117,20 @@ For more information, please refer to this
 Under macOS, you can use [Homebrew](https://brew.sh/) to install the
 dependencies:
 
-    brew install gumbo-parser openssl curl expat meson pkg-config ossp-uuid
-    brew install --cask macfuse
+```
+brew install gumbo-parser openssl curl expat meson pkg-config ossp-uuid
+brew install --cask macfuse
+```
 
 To compile the program, you might need to set the `PKG_CONFIG_PATH` so that
 `meson` can find `openssl`:
 
-    export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
-    meson setup builddir
-    cd builddir
-    meson compile
+```
+export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
+meson setup builddir
+cd builddir
+meson compile
+```
 
 Please note that while macOS build instructions are provided, macOS build
 testing is primarily done via GitHub Actions CI, as I do not have regular access
@@ -133,7 +153,9 @@ HTTPDirFS is developed on Debian, and it is available as a package in Debian 13
 "Trixie". If you are on Debian Trixie, you can simply run the following command
 as `root`:
 
-    apt install httpdirfs
+```
+apt install httpdirfs
+```
 
 For more information on the status of HTTDirFS in Debian, please refer to
 [Debian package tracker](https://tracker.debian.org/pkg/httpdirfs-fuse)
@@ -153,7 +175,9 @@ Subsonic server (\*sonic), and browse them using your favourite file browser.
 You simply have to supply both `--sonic-username` and `--sonic-password` to
 trigger the \*sonic server mode. For example:
 
-    ./httpdirfs -f --cache --sonic-username $USERNAME --sonic-password $PASSWORD $URL $MOUNT_POINT
+```
+./httpdirfs -f --cache --sonic-username $USERNAME --sonic-password $PASSWORD $URL $MOUNT_POINT
+```
 
 You definitely want to enable the cache for this one, otherwise it is painfully
 slow.
@@ -168,10 +192,10 @@ In the index mode, the filesystem is presented based on the listing on the
 
 In ID3 mode, the filesystem is presented using the following hierarchy: 0. Root
 
-1.  Alphabetical indices of the artists' names
-2.  The arists' names
-3.  All of the albums by a single artist
-4.  All the songs in an album.
+1. Alphabetical indices of the artists' names
+1. The artists' names
+1. All of the albums by a single artist
+1. All the songs in an album.
 
 By default, \*sonic server is mounted in the index mode. If you want to mount in
 ID3 mode, please use the `--sonic-id3` flag.
@@ -203,7 +227,9 @@ operating mode is similar to the unmaintained
 
 e.g.
 
-    ./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
+```
+./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
+```
 
 This can be useful if the web server does not present a HTTP directory listing.
 This feature was implemented due to Github
@@ -215,7 +241,6 @@ You can cache the files you have accessed permanently on your hard drive by
 using the `--cache` flag. The file it caches persist across sessions, but can
 clear the cache using `--cache-clear`
 
-<!-- prettier-ignore -->
 > [!WARNING]
 > If `--cache-location <dir>` appears before `--cache-clear`, the entire
 > directory `<dir>` will be deleted instead. Take caution when specifying
@@ -247,9 +272,11 @@ configuration file which the program reads is
 and the configuration file yourself. In the configuration file, please supply
 one option per line. For example:
 
-    --username test
-    --password test
-    -f
+```
+--username test
+--password test
+-f
+```
 
 Alternatively, you can specify your own configuration file by using the
 `--config` option.
@@ -269,8 +296,8 @@ using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages
 using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 [libfuse](https://github.com/libfuse/libfuse).
 
-For *sonic servers, rather than using the Gumbo parser, this program parse
-*sonic servers' XML responses using
+For \*sonic servers, rather than using the Gumbo parser, this program parse
+\*sonic servers' XML responses using
 [expat](https://github.com/libexpat/libexpat).
 
 The cache system stores the metadata and the downloaded file into two separate
