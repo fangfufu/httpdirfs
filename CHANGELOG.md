@@ -8,6 +8,12 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Changed
+
+- Update and expand `USAGE.md` to comprehensively document raw help options and
+  FUSE/module flags, linking to Git commit `0855c0a`
+  ([2bc5306](https://github.com/fangfufu/httpdirfs/commit/2bc5306da9155998a666e138379440c95029cdbf)).
+
 ## [1.3.2] - 2026-05-29
 
 ### Added
