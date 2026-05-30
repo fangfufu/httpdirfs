@@ -6,10 +6,51 @@ configuration and usage flags supported by HTTPDirFS.
 
 ### Command Syntax
 
-Below is the raw help output displaying all available flags:
+Below is the raw help output displaying all available flags, generated from Git
+commit SHA
+[`0855c0a`](https://github.com/fangfufu/httpdirfs/commit/0855c0a46a2fa8f8e2d4d084f51d5d124092d067):
 
 ```bash
 usage: httpdirfs [options] URL mountpoint
+
+FUSE options:
+    -h   --help            print help
+    -V   --version         print version
+    -d   -o debug          enable debug output (implies -f)
+    -f                     foreground operation
+    -s                     disable multi-threaded operation
+    -o clone_fd            use separate fuse device fd for each thread
+                           (may improve performance)
+    -o max_idle_threads    the maximum number of idle worker threads
+                           allowed (default: -1)
+    -o max_threads         the maximum number of worker threads
+                           allowed (default: 10)
+    -o kernel_cache        cache files in kernel
+    -o [no]auto_cache      enable caching based on modification times (off)
+    -o no_rofd_flush       disable flushing of read-only fd on close (off)
+    -o umask=M             set file permissions (octal)
+    -o fmask=M             set file permissions (octal)
+    -o dmask=M             set dir  permissions (octal)
+    -o uid=N               set file owner
+    -o gid=N               set file group
+    -o entry_timeout=T     cache timeout for names (1.0s)
+    -o negative_timeout=T  cache timeout for deleted names (0.0s)
+    -o attr_timeout=T      cache timeout for attributes (1.0s)
+    -o ac_attr_timeout=T   auto cache timeout for attributes (attr_timeout)
+    -o noforget            never forget cached inodes
+    -o remember=T          remember cached inodes for T seconds (0s)
+    -o modules=M1[:M2...]  names of modules to push onto filesystem stack
+    -o allow_other         allow access by all users
+    -o allow_root          allow access by root
+    -o auto_unmount        auto unmount on process termination
+
+Options for subdir module:
+    -o subdir=DIR           prepend this directory to all paths (mandatory)
+    -o [no]rellinks         transform absolute symlinks to relative
+
+Options for iconv module:
+    -o from_code=CHARSET   original encoding of file names (default: UTF-8)
+    -o to_code=CHARSET     new encoding of the file names (default: UTF-8)
 
 general options:
         --config            Specify a configuration file
@@ -88,10 +129,36 @@ HTTPDirFS options:
 
 #### `-o opt,[opt...]`
 
-- **Description:** Pass options directly to the underlying FUSE library.
-  Commonly used options include `allow_other` (to let other users access the
-  mountpoint) or `ro` (to mount as read-only).
-- **Example:** `httpdirfs -o allow_other,ro http://example.com/dir /mnt/dir`
+- **Description:** Pass options directly to the underlying FUSE library or load
+  modules. This is extremely powerful for customizing filesystem behavior,
+  permission maps, performance tweaks, and character encoding.
+
+  **Commonly Used FUSE Options:**
+
+  - `ro`: Mount the filesystem as read-only.
+  - `allow_other`: Allow other users on the system to access the mountpoint. By
+    default, only the mounting user has access.
+  - `allow_root`: Allow the root user to access the mountpoint.
+  - `auto_unmount`: Automatically unmount the filesystem when the mounting
+    process terminates.
+  - `kernel_cache`: Cache files in the kernel to significantly speed up repeated
+    reads.
+  - `umask=M`, `fmask=M`, `dmask=M`: Customize permission masks for files and
+    directories (specified in octal, e.g., `umask=022`).
+  - `uid=N`, `gid=N`: Override the user ID and group ID ownership of all virtual
+    files.
+
+  **Commonly Used Module Options:**
+
+  - `subdir=DIR`: Prepend the specified directory `DIR` to all paths (loads the
+    subdir module).
+  - `rellinks` / `norellinks`: Transform absolute symlinks to relative ones
+    within the subdir module.
+  - `from_code=CHARSET` / `to_code=CHARSET`: Translate character encodings of
+    filenames (e.g., from UTF-8 to ISO-8859-1) (loads the iconv module).
+
+- **Example:**
+  `httpdirfs -o allow_other,ro,auto_unmount http://example.com/dir /mnt/dir`
 
 #### `-h, --help`
 
@@ -262,7 +329,7 @@ HTTPDirFS options:
 
 - **Description:** Customizes the HTTP `User-Agent` header sent with each
   request.
-- **Default:** `HTTPDirFS-VERSION`
+- **Default:** `HTTPDirFS-1.3.2`
 
 #### `--no-range-check`
 
