@@ -193,7 +193,7 @@ In the index mode, the filesystem is presented based on the listing on the
 In ID3 mode, the filesystem is presented using the following hierarchy: 0. Root
 
 1. Alphabetical indices of the artists' names
-1. The arists' names
+1. The artists' names
 1. All of the albums by a single artist
 1. All the songs in an album.
 
