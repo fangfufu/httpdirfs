@@ -1,5 +1,5 @@
 # Documentation
-doxygen
+/docs/html/
 
 # Editor related
 .vscode
