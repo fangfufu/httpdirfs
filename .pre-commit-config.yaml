@@ -43,39 +43,80 @@ repos:
         files: \.(c|h)$
       - id: meson-test-debug
         name: Meson Test (Debug)
-        entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/default-debug ]; then meson setup .pre-commit-builds/default-debug --buildtype=debug; fi && meson test -C .pre-commit-builds/default-debug'
+        entry: |
+          bash -c '
+          if [ ! -d .pre-commit-builds/default-debug ]; then
+            meson setup .pre-commit-builds/default-debug --buildtype=debug
+          fi &&
+          meson test -C .pre-commit-builds/default-debug
+          '
         language: system
         pass_filenames: false
         files: \.(c|h)$
       - id: all-tests-gcc
         name: All Tests (GCC)
-        entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/gcc-release ]; then CC=gcc meson setup .pre-commit-builds/gcc-release; fi && meson test -C .pre-commit-builds/gcc-release --suite unit_test --suite integration_short --suite integration_long --verbose'
+        entry: |
+          bash -c '
+          if [ ! -d .pre-commit-builds/gcc-release ]; then
+            CC=gcc meson setup .pre-commit-builds/gcc-release
+          fi &&
+          meson test -C .pre-commit-builds/gcc-release \
+            --suite unit_test \
+            --suite integration_short \
+            --suite integration_long \
+            --verbose
+          '
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
       - id: all-tests-gcc-debug
         name: All Tests (GCC Debug)
-        entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/gcc-debug ]; then CC=gcc meson setup .pre-commit-builds/gcc-debug --buildtype=debug; fi && meson test -C .pre-commit-builds/gcc-debug --suite unit_test --suite integration_short --suite integration_long --verbose'
+        entry: |
+          bash -c '
+          if [ ! -d .pre-commit-builds/gcc-debug ]; then
+            CC=gcc meson setup .pre-commit-builds/gcc-debug --buildtype=debug
+          fi &&
+          meson test -C .pre-commit-builds/gcc-debug \
+            --suite unit_test \
+            --suite integration_short \
+            --suite integration_long \
+            --verbose
+          '
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
       - id: all-tests-clang
         name: All Tests (Clang)
-        entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/clang-release ]; then CC=clang meson setup .pre-commit-builds/clang-release; fi && meson test -C .pre-commit-builds/clang-release --suite unit_test --suite integration_short --suite integration_long --verbose'
+        entry: |
+          bash -c '
+          if [ ! -d .pre-commit-builds/clang-release ]; then
+            CC=clang meson setup .pre-commit-builds/clang-release
+          fi &&
+          meson test -C .pre-commit-builds/clang-release \
+            --suite unit_test \
+            --suite integration_short \
+            --suite integration_long \
+            --verbose
+          '
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$
         stages: [manual]
       - id: all-tests-clang-debug
         name: All Tests (Clang Debug)
-        entry: >-
-          bash -c 'if [ ! -d .pre-commit-builds/clang-debug ]; then CC=clang meson setup .pre-commit-builds/clang-debug --buildtype=debug; fi && meson test -C .pre-commit-builds/clang-debug --suite unit_test --suite integration_short --suite integration_long --verbose'
+        entry: |
+          bash -c '
+          if [ ! -d .pre-commit-builds/clang-debug ]; then
+            CC=clang meson setup .pre-commit-builds/clang-debug --buildtype=debug
+          fi &&
+          meson test -C .pre-commit-builds/clang-debug \
+            --suite unit_test \
+            --suite integration_short \
+            --suite integration_long \
+            --verbose
+          '
         language: system
         pass_filenames: false
         files: \.(c|h|py|sh)$

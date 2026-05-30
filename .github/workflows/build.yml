@@ -1,11 +1,9 @@
 name: Build
-
 on:
   push:
-    branches: [ "master" ]
+    branches: ["master"]
   pull_request:
-    branches: [ "master" ]
-
+    branches: ["master"]
 jobs:
   build-mac:
     name: Build (macOS, ${{ matrix.buildtype }})
@@ -14,38 +12,33 @@ jobs:
       matrix:
         buildtype: [debug, release]
     steps:
-    - uses: actions/checkout@v6
-
-    - name: Install dependencies
-      run: |
-        brew update
-        brew install \
-          gumbo-parser \
-          expat \
-          meson \
-          ossp-uuid
-        brew install --cask macfuse
-
-    - name: Setup Meson
-      run: |
-        OPENSSL_PREFIX=$(brew --prefix openssl@3)
-        BREW_PREFIX=$(brew --prefix)
-        export PKG_CONFIG_PATH="$OPENSSL_PREFIX/lib/pkgconfig:$BREW_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
-        meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
-
-    - name: Compile
-      run: meson compile -C builddir
-
-    - name: Unit tests
-      run: meson test -C builddir --no-suite integration --verbose
-
-    - name: Upload Meson logs
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: meson-logs-mac-${{ matrix.buildtype }}
-        path: builddir/meson-logs/
-
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          brew update
+          brew install \
+            gumbo-parser \
+            expat \
+            meson \
+            ossp-uuid
+          brew install --cask macfuse
+      - name: Setup Meson
+        run: |
+          OPENSSL_PREFIX=$(brew --prefix openssl@3)
+          BREW_PREFIX=$(brew --prefix)
+          export PKG_CONFIG_PATH="$OPENSSL_PREFIX/lib/pkgconfig"
+          export PKG_CONFIG_PATH="$BREW_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
+          meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
+      - name: Compile
+        run: meson compile -C builddir
+      - name: Unit tests
+        run: meson test -C builddir --no-suite integration --verbose
+      - name: Upload Meson logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: meson-logs-mac-${{ matrix.buildtype }}
+          path: builddir/meson-logs/
   build-ubuntu:
     name: Build (Ubuntu, ${{ matrix.compiler }}, ${{ matrix.buildtype }})
     runs-on: ubuntu-latest
@@ -54,45 +47,38 @@ jobs:
         compiler: [gcc, clang]
         buildtype: [debug, release]
     steps:
-    - uses: actions/checkout@v6
-
-    - name: Install dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y \
-          libgumbo-dev \
-          libcurl4-openssl-dev \
-          libfuse3-dev \
-          fuse3 \
-          uuid-dev \
-          libexpat1-dev \
-          libssl-dev \
-          meson \
-          ninja-build \
-          help2man \
-          python3 \
-          clang
-
-    - name: Setup Meson
-      run: |
-        export CC=${{ matrix.compiler }}
-        meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
-
-    - name: Compile
-      run: meson compile -C builddir
-
-    - name: Unit tests
-      run: meson test -C builddir --no-suite integration --verbose
-
-    - name: Integration tests (short)
-      run: meson test -C builddir --suite integration_short --verbose
-
-    - name: Integration tests (long)
-      run: meson test -C builddir --suite integration_long --verbose
-
-    - name: Upload Meson logs
-      if: always()
-      uses: actions/upload-artifact@v7
-      with:
-        name: meson-logs-ubuntu-${{ matrix.compiler }}-${{ matrix.buildtype }}
-        path: builddir/meson-logs/
+      - uses: actions/checkout@v6
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libgumbo-dev \
+            libcurl4-openssl-dev \
+            libfuse3-dev \
+            fuse3 \
+            uuid-dev \
+            libexpat1-dev \
+            libssl-dev \
+            meson \
+            ninja-build \
+            help2man \
+            python3 \
+            clang
+      - name: Setup Meson
+        run: |
+          export CC=${{ matrix.compiler }}
+          meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
+      - name: Compile
+        run: meson compile -C builddir
+      - name: Unit tests
+        run: meson test -C builddir --no-suite integration --verbose
+      - name: Integration tests (short)
+        run: meson test -C builddir --suite integration_short --verbose
+      - name: Integration tests (long)
+        run: meson test -C builddir --suite integration_long --verbose
+      - name: Upload Meson logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: meson-logs-ubuntu-${{ matrix.compiler }}-${{ matrix.buildtype }}
+          path: builddir/meson-logs/
