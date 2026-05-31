@@ -4,6 +4,8 @@ on:
     branches: ["master"]
   pull_request:
     branches: ["master"]
+permissions:
+  contents: read
 jobs:
   build-mac:
     name: Build (macOS, ${{ matrix.buildtype }})
