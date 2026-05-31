@@ -8,11 +8,36 @@ and this project adheres to
 
 ## [Unreleased]
 
+### Added
+
+- ci: Add a dedicated CodeQL scanning job targeting GitHub Actions workflows
+  while streamlining the C/C++ analysis job
+  ([d8e07c0](https://github.com/fangfufu/httpdirfs/commit/d8e07c0a62e1b465d51034afb07cec02b9814076),
+  [c02c0d1](https://github.com/fangfufu/httpdirfs/commit/c02c0d1d8a7ee7bd474ce340dc5e48aac4d0c68b)).
+
 ### Changed
 
 - Update and expand `USAGE.md` to comprehensively document raw help options and
   FUSE/module flags, linking to Git commit `0855c0a`
   ([2bc5306](https://github.com/fangfufu/httpdirfs/commit/2bc5306da9155998a666e138379440c95029cdbf)).
+- ci: Replace legacy Prettier hooks with `yamlfmt` and `mdformat` (with GFM and
+  alerts plugins) to format all Markdown and YAML files repo-wide, removing
+  obsolete formatting bypass tags
+  ([a7d2931](https://github.com/fangfufu/httpdirfs/commit/a7d2931699ae98e847df4a14594601a7935af45b)).
+- ci: Restrict automated pull request pre-commit hook runs to branches targeting
+  the `master` branch
+  ([30dac3e](https://github.com/fangfufu/httpdirfs/commit/30dac3e231263f4f4b22a48ba3e1423c37f1af24)).
+- ci: Modernize pre-commit configuration readability with clean multi-line block
+  literal scripts and structure the `PKG_CONFIG_PATH` definition in `build.yml`
+  incrementally
+  ([4c8f561](https://github.com/fangfufu/httpdirfs/commit/4c8f56113b4c7674bd95446f7060792946fc1fec)).
+- doc: Fix grammar regarding parsing options in `README.md`
+  ([3746293](https://github.com/fangfufu/httpdirfs/commit/374629327241405a557e1b5226e1d35ff9d3bbe2)).
+
+### Fixed
+
+- doc: Fix typos in documentation
+  ([ca848fc](https://github.com/fangfufu/httpdirfs/commit/ca848fc657b4fb60467070d1123fd9b0f839c154)).
 
 ## [1.3.2] - 2026-05-29
 
