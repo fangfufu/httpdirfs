@@ -11,7 +11,7 @@ ci:
   skip: [clang-format, meson-test-debug, clang-tidy]
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
@@ -19,11 +19,11 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
   - repo: https://github.com/codespell-project/codespell
-    rev: v2.2.6
+    rev: v2.4.2
     hooks:
       - id: codespell
   - repo: https://github.com/executablebooks/mdformat
-    rev: 0.7.21
+    rev: 1.0.0
     hooks:
       - id: mdformat
         args: [--wrap, "80"]
@@ -31,7 +31,7 @@ repos:
           - mdformat-gfm
           - mdformat-gfm-alerts
   - repo: https://github.com/google/yamlfmt
-    rev: v0.16.0
+    rev: v0.21.0
     hooks:
       - id: yamlfmt
   - repo: local
