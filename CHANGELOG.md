@@ -8,6 +8,8 @@ and this project adheres to
 
 ## [Unreleased]
 
+## [1.3.3] - 2026-06-11
+
 ### Added
 
 - ci: Add a dedicated CodeQL scanning job targeting GitHub Actions workflows
@@ -20,6 +22,12 @@ and this project adheres to
 - Update and expand `USAGE.md` to comprehensively document raw help options and
   FUSE/module flags, linking to Git commit `0855c0a`
   ([2bc5306](https://github.com/fangfufu/httpdirfs/commit/2bc5306da9155998a666e138379440c95029cdbf)).
+- ci: Update pre-commit hook revisions for `pre-commit-hooks`, `codespell`,
+  `mdformat`, and `yamlfmt`
+  ([8cf9d4c](https://github.com/fangfufu/httpdirfs/commit/8cf9d4c9aa1a989f1b3ef0466e8b09a84ff2aa64)).
+- test: Update unity test framework subproject wrap file to track the latest
+  master branch commit
+  ([2b4c765](https://github.com/fangfufu/httpdirfs/commit/2b4c7654a772e275bdc014ddd3d51f39152a9ee3)).
 - ci: Replace legacy Prettier hooks with `yamlfmt` and `mdformat` (with GFM and
   alerts plugins) to format all Markdown and YAML files repo-wide, removing
   obsolete formatting bypass tags
@@ -36,6 +44,11 @@ and this project adheres to
 
 ### Fixed
 
+- ci: Harden GitHub Actions workflows (`build.yml` and `pre-commit.yml`) by
+  explicitly defining read-only contents permissions to resolve CodeQL workflow
+  permissions alerts
+  ([81b87a0](https://github.com/fangfufu/httpdirfs/commit/81b87a03dd7c21858e89c8b86b3bfb16b2489eb9),
+  [52b9baa](https://github.com/fangfufu/httpdirfs/commit/52b9baa0414345d253738e471b82b01e61e148c5)).
 - doc: Fix typos in documentation
   ([ca848fc](https://github.com/fangfufu/httpdirfs/commit/ca848fc657b4fb60467070d1123fd9b0f839c154)).
 
@@ -1038,4 +1051,5 @@ Creating a new minor release, because of the following major changes:
 [1.3.0]: https://github.com/fangfufu/httpdirfs/compare/1.2.11...1.3.0
 [1.3.1]: https://github.com/fangfufu/httpdirfs/compare/1.3.0...1.3.1
 [1.3.2]: https://github.com/fangfufu/httpdirfs/compare/1.3.1...1.3.2
-[unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.3.2...master
+[1.3.3]: https://github.com/fangfufu/httpdirfs/compare/1.3.2...1.3.3
+[unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.3.3...master
