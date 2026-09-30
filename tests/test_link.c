@@ -850,6 +850,420 @@ void test_diagnostics_empty(void)
     LinkTable_free(tbl);
 }
 
+/*
+ * Phase 2: Advanced Parsing Mode Unit Tests
+ */
+
+static GumboNode *find_anchor_node(GumboNode *node)
+{
+    if (!node) {
+        return NULL;
+    }
+    if (node->type == GUMBO_NODE_ELEMENT
+        && node->v.element.tag == GUMBO_TAG_A) {
+        return node;
+    }
+    if (node->type == GUMBO_NODE_ELEMENT) {
+        GumboVector *children = &node->v.element.children;
+        for (size_t i = 0; i < children->length; ++i) {
+            GumboNode *res = find_anchor_node((GumboNode *)children->data[i]);
+            if (res) {
+                return res;
+            }
+        }
+    }
+    return NULL;
+}
+
+void test_resolve_target_url(void)
+{
+    char out[1024];
+
+    // 1. Absolute URLs
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/dir/",
+                                                "http://other.org/file.iso",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("http://other.org/file.iso", out);
+
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/dir/",
+                                                "https://other.org/file.iso",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://other.org/file.iso", out);
+
+    // 2. Scheme-relative URLs
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/dir/",
+                                                "//other.org/file.iso", out,
+                                                sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://other.org/file.iso", out);
+
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("http://example.com/dir/",
+                                                "//other.org/file.iso", out,
+                                                sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("http://other.org/file.iso", out);
+
+    // 3. Origin-relative URLs
+    TEST_ASSERT_EQUAL_INT(
+        1, resolve_target_url("https://example.com/browse/38600",
+                              "/file/38600/disc.iso", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/file/38600/disc.iso", out);
+
+    // 4. Path-relative with trailing slash
+    TEST_ASSERT_EQUAL_INT(1,
+                          resolve_target_url("https://example.com/dir/",
+                                             "sub/file.txt", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/sub/file.txt", out);
+
+    // 5. Path-relative without trailing slash
+    TEST_ASSERT_EQUAL_INT(1,
+                          resolve_target_url("https://example.com/dir/page",
+                                             "sub/file.txt", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/sub/file.txt", out);
+
+    // 6. Path-relative on origin root
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com",
+                                                "file.txt", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/file.txt", out);
+
+    // 7. Fragment stripping and whitespace trimming
+    TEST_ASSERT_EQUAL_INT(1,
+                          resolve_target_url("https://example.com/",
+                                             "  /browse/38600?v=1#comments  ",
+                                             out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/browse/38600?v=1", out);
+
+    // 8. Intra-page fragment link alone
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url("https://example.com/",
+                                                "#section", out, sizeof(out)));
+
+    // 9. Null or empty
+    TEST_ASSERT_EQUAL_INT(0,
+                          resolve_target_url(NULL, "/path", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url("https://example.com/", NULL, out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url("https://example.com/", "", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url("https://example.com/", "   ", out, sizeof(out)));
+
+    // 10. Raw spaces in href percent-encoded as %20
+    TEST_ASSERT_EQUAL_INT(
+        1, resolve_target_url(
+               "https://example.com/browse/1001",
+               "/browse/1001/Sample Archive - Collection 1.0.iso/001", out,
+               sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/browse/1001/"
+                             "Sample%20Archive%20-%20Collection%201.0.iso/001",
+                             out);
+}
+
+void test_extract_anchor_text(void)
+{
+    // Plain text
+    GumboOutput *out = gumbo_parse("<a href='/test'>readme.txt</a>");
+    char *text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_STRING("readme.txt", text);
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
+
+    // Nested tags
+    out = gumbo_parse("<a href='/test'><b>Download</b> <span>File</span> "
+                      "<code>v1</code></a>");
+    text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_STRING("Download File v1", text);
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
+
+    // Entities and sanitization
+    out = gumbo_parse(
+        "<a href='/test'> &lt;Disc &amp; Sleeve/Cover&gt; &#39;A&#39; "
+        "&quot;B&quot; &nbsp; </a>");
+    text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_STRING("<Disc & Sleeve_Cover> 'A' \"B\"", text);
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
+
+    // Empty anchor or image only
+    out = gumbo_parse("<a href='/test'><img src='icon.png' /></a>");
+    text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_STRING("", text);
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
+
+    // NULL node
+    text = extract_anchor_text(NULL);
+    TEST_ASSERT_EQUAL_STRING("", text);
+    FREE(text);
+}
+
+void test_extract_url_path_segments(void)
+{
+    char **segs = NULL;
+    int count = 0;
+
+    // Multi-segment with trailing slash
+    count = extract_url_path_segments("https://example.com/browse/38600/",
+                                      &segs, &count);
+    TEST_ASSERT_EQUAL_INT(2, count);
+    TEST_ASSERT_EQUAL_STRING("browse", segs[0]);
+    TEST_ASSERT_EQUAL_STRING("38600", segs[1]);
+    free_url_path_segments(segs, count);
+
+    // Query string and fragment
+    count = extract_url_path_segments(
+        "https://example.com/file/38600/disc.iso?v=1#download", &segs, &count);
+    TEST_ASSERT_EQUAL_INT(3, count);
+    TEST_ASSERT_EQUAL_STRING("file", segs[0]);
+    TEST_ASSERT_EQUAL_STRING("38600", segs[1]);
+    TEST_ASSERT_EQUAL_STRING("disc.iso", segs[2]);
+    free_url_path_segments(segs, count);
+
+    // Encoded spaces and characters
+    count = extract_url_path_segments("/archive/my%20file%20name.txt", &segs,
+                                      &count);
+    TEST_ASSERT_EQUAL_INT(2, count);
+    TEST_ASSERT_EQUAL_STRING("archive", segs[0]);
+    TEST_ASSERT_EQUAL_STRING("my file name.txt", segs[1]);
+    free_url_path_segments(segs, count);
+
+    // Encoded slashes sanitized to underscores
+    count = extract_url_path_segments("/archive/a%2Fb", &segs, &count);
+    TEST_ASSERT_EQUAL_INT(2, count);
+    TEST_ASSERT_EQUAL_STRING("archive", segs[0]);
+    TEST_ASSERT_EQUAL_STRING("a_b", segs[1]);
+    free_url_path_segments(segs, count);
+
+    // Root URL has 0 segments
+    count = extract_url_path_segments("https://example.com/", &segs, &count);
+    TEST_ASSERT_EQUAL_INT(0, count);
+    TEST_ASSERT_NULL(segs);
+}
+
+void test_generate_collision_free_name(void)
+{
+    LinkHashSet *set = LinkHashSet_new(64);
+
+    // Candidate 1: anchor differs from last component
+    char *segs1[] = {"browse", "38600"};
+    char *name1 = generate_collision_free_name(set, "001", segs1, 2);
+    TEST_ASSERT_EQUAL_STRING("001-38600", name1);
+    FREE(name1);
+
+    // Candidate 1: anchor identical to last component (case-insensitive) ->
+    // omit anchor
+    char *segs2[] = {"file", "38600", "Disc.iso"};
+    char *name2 = generate_collision_free_name(set, "disc.iso", segs2, 3);
+    TEST_ASSERT_EQUAL_STRING("Disc.iso", name2);
+    FREE(name2);
+
+    // Candidate 1: anchor is empty
+    char *segs3[] = {"images", "logo.png"};
+    char *name3 = generate_collision_free_name(set, "", segs3, 2);
+    TEST_ASSERT_EQUAL_STRING("logo.png", name3);
+    FREE(name3);
+
+    // Collision resolution with backward escalation:
+    // First: "Download-disc.iso"
+    char *segs_dl1[] = {"file", "38600", "disc.iso"};
+    char *name_dl1 = generate_collision_free_name(set, "Download", segs_dl1, 3);
+    TEST_ASSERT_EQUAL_STRING("Download-disc.iso", name_dl1);
+    FREE(name_dl1);
+
+    // Second: clashes on "Download-disc.iso", escalates to 2nd component ->
+    // "Download-38601-disc.iso"
+    char *segs_dl2[] = {"file", "38601", "disc.iso"};
+    char *name_dl2 = generate_collision_free_name(set, "Download", segs_dl2, 3);
+    TEST_ASSERT_EQUAL_STRING("Download-38601-disc.iso", name_dl2);
+    FREE(name_dl2);
+
+    // Third: clashes on "Download-disc.iso", then "Download-38601-disc.iso",
+    // escalates to 3rd component -> "Download-archive-38601-disc.iso"
+    char *segs_dl3[] = {"archive", "38601", "disc.iso"};
+    char *name_dl3 = generate_collision_free_name(set, "Download", segs_dl3, 3);
+    TEST_ASSERT_EQUAL_STRING("Download-archive-38601-disc.iso", name_dl3);
+    FREE(name_dl3);
+
+    // Complete exhaustion fallback to numeric suffix:
+    char *segs_dl3_dup[] = {"archive", "38601", "disc.iso"};
+    char *name_dl3_suffixed
+        = generate_collision_free_name(set, "Download", segs_dl3_dup, 3);
+    TEST_ASSERT_EQUAL_STRING("Download-archive-38601-disc.iso-1",
+                             name_dl3_suffixed);
+    FREE(name_dl3_suffixed);
+
+    LinkHashSet_free(set);
+}
+
+void test_is_html_content_type(void)
+{
+    TEST_ASSERT_EQUAL_INT(1, is_html_content_type("text/html"));
+    TEST_ASSERT_EQUAL_INT(1, is_html_content_type("text/html; charset=utf-8"));
+    TEST_ASSERT_EQUAL_INT(
+        1, is_html_content_type("TEXT/HTML; CHARSET=ISO-8859-1"));
+    TEST_ASSERT_EQUAL_INT(1, is_html_content_type("  text/html  "));
+    TEST_ASSERT_EQUAL_INT(0, is_html_content_type("text/htmlxyz"));
+    TEST_ASSERT_EQUAL_INT(0, is_html_content_type("application/octet-stream"));
+    TEST_ASSERT_EQUAL_INT(0, is_html_content_type("image/png"));
+    TEST_ASSERT_EQUAL_INT(0, is_html_content_type("text/plain"));
+    TEST_ASSERT_EQUAL_INT(0, is_html_content_type(""));
+    TEST_ASSERT_EQUAL_INT(0, is_html_content_type(NULL));
+}
+
+void test_Link_classify_response(void)
+{
+    size_t out_len = 0;
+
+    // 1. Vanilla mode (advanced_parsing_mode = 0)
+    CONFIG.advanced_parsing_mode = 0;
+    CONFIG.zero_len_is_dir = 0;
+    TEST_ASSERT_EQUAL_INT(LINK_FILE,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 1000, "text/html", &out_len));
+    TEST_ASSERT_EQUAL_INT(1000, (int)out_len);
+    TEST_ASSERT_EQUAL_INT(LINK_INVALID,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 -1, "text/html", &out_len));
+    TEST_ASSERT_EQUAL_INT(LINK_INVALID,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 404,
+                                                 1000, "text/html", &out_len));
+
+    // Vanilla zero-len
+    CONFIG.zero_len_is_dir = 1;
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 0, "text/html", &out_len));
+
+    // 2. Advanced parsing mode (advanced_parsing_mode = 1)
+    CONFIG.advanced_parsing_mode = 1;
+    CONFIG.max_html_size = 2097152; // 2 MiB
+
+    // HTML <= max_html_size -> LINK_DIR
+    TEST_ASSERT_EQUAL_INT(
+        LINK_DIR, Link_classify_response(LINK_UNINITIALISED_FILE, 200, 50000,
+                                         "text/html; charset=utf-8", &out_len));
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 0, "text/html", &out_len));
+
+    // HTML chunked (-1) -> tentative LINK_DIR
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 -1, "text/html", &out_len));
+
+    // HTML > max_html_size -> LINK_FILE (readable file fallback)
+    TEST_ASSERT_EQUAL_INT(
+        LINK_FILE, Link_classify_response(LINK_UNINITIALISED_FILE, 200, 5000000,
+                                          "text/html", &out_len));
+    TEST_ASSERT_EQUAL_INT(5000000, (int)out_len);
+
+    // Non-HTML (e.g. image, ISO) -> LINK_FILE
+    TEST_ASSERT_EQUAL_INT(LINK_FILE,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 50000, "image/png", &out_len));
+    TEST_ASSERT_EQUAL_INT(50000, (int)out_len);
+
+    // Non-HTML chunked -> LINK_INVALID
+    TEST_ASSERT_EQUAL_INT(LINK_INVALID,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 -1, "image/png", &out_len));
+
+    // Directory types preserved
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
+                          Link_classify_response(LINK_UNINITIALISED_DIR, 200, 0,
+                                                 "text/html", &out_len));
+
+    // Reset config
+    CONFIG.advanced_parsing_mode = 0;
+    CONFIG.zero_len_is_dir = 0;
+}
+
+void test_advanced_parsing_HTML_to_LinkTable(void)
+{
+    CONFIG.advanced_parsing_mode = 1;
+    CONFIG.same_origin_only = 0;
+
+    LinkTable *tbl = LinkTable_alloc("https://example.com/browse/38600");
+    TEST_ASSERT_NOT_NULL(tbl);
+
+    const char *html
+        = "<html><body>"
+          "<a href='/browse/38600/sub'>001 Subdir</a>"
+          "<a href='/browse/38600/sub'>Duplicate Link with Different Text</a>"
+          "<a href='/file/38600/readme.txt'>Readme</a>"
+          "<a href='/file/38601/readme.txt'>Readme</a>"
+          "<a href='/file/38602/disc.iso'>DISC.ISO</a>"
+          "<a href='https://other.server.com/external.iso'>External ISO</a>"
+          "</body></html>";
+
+    LinkTable_parse_html(tbl, "https://example.com/browse/38600", html);
+
+    // Total links: 1 root + 5 unique links (duplicate '/browse/38600/sub' was
+    // dropped!)
+    TEST_ASSERT_EQUAL_INT(6, tbl->size);
+
+    // Link 1: "001 Subdir-sub" (first anchor text kept!)
+    TEST_ASSERT_EQUAL_STRING("001 Subdir-sub", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/browse/38600/sub",
+                             tbl->links[1]->f_url);
+
+    // Link 2: "Readme-readme.txt"
+    TEST_ASSERT_EQUAL_STRING("Readme-readme.txt", tbl->links[2]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/file/38600/readme.txt",
+                             tbl->links[2]->f_url);
+
+    // Link 3: Clashed on "Readme-readme.txt" -> escalated to
+    // "Readme-38601-readme.txt"
+    TEST_ASSERT_EQUAL_STRING("Readme-38601-readme.txt",
+                             tbl->links[3]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/file/38601/readme.txt",
+                             tbl->links[3]->f_url);
+
+    // Link 4: "disc.iso" (anchor matched filename case-insensitively -> anchor
+    // omitted)
+    TEST_ASSERT_EQUAL_STRING("disc.iso", tbl->links[4]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/file/38602/disc.iso",
+                             tbl->links[4]->f_url);
+
+    // Link 5: External ISO link permitted under default same_origin_only = 0
+    TEST_ASSERT_EQUAL_STRING("External ISO-external.iso",
+                             tbl->links[5]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://other.server.com/external.iso",
+                             tbl->links[5]->f_url);
+
+    LinkTable_free(tbl);
+    CONFIG.advanced_parsing_mode = 0;
+}
+
+void test_advanced_parsing_same_origin_only(void)
+{
+    CONFIG.advanced_parsing_mode = 1;
+    CONFIG.same_origin_only = 1;
+
+    LinkTable *root_tbl = LinkTable_alloc("https://example.com/");
+    ROOT_LINK_TBL = root_tbl;
+
+    LinkTable *tbl = LinkTable_alloc("https://example.com/browse/38600");
+    TEST_ASSERT_NOT_NULL(tbl);
+
+    const char *html
+        = "<html><body>"
+          "<a href='/browse/38600/sub'>Subdir</a>"
+          "<a href='https://other.server.com/external.iso'>External ISO</a>"
+          "</body></html>";
+
+    LinkTable_parse_html(tbl, "https://example.com/browse/38600", html);
+
+    // External link must be omitted because same_origin_only = 1!
+    // Total links: 1 root + 1 same-origin link
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("Subdir-sub", tbl->links[1]->linkname);
+
+    LinkTable_free(tbl);
+    LinkTable_free(root_tbl);
+    ROOT_LINK_TBL = NULL;
+    CONFIG.advanced_parsing_mode = 0;
+    CONFIG.same_origin_only = 0;
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -926,6 +1340,16 @@ int main(void)
     RUN_TEST(test_diagnostics_path_lookup_and_read);
     RUN_TEST(test_diagnostics_subdirectory);
     RUN_TEST(test_diagnostics_empty);
+
+    /* Phase 2: Advanced Parsing Mode */
+    RUN_TEST(test_resolve_target_url);
+    RUN_TEST(test_extract_anchor_text);
+    RUN_TEST(test_extract_url_path_segments);
+    RUN_TEST(test_generate_collision_free_name);
+    RUN_TEST(test_is_html_content_type);
+    RUN_TEST(test_Link_classify_response);
+    RUN_TEST(test_advanced_parsing_HTML_to_LinkTable);
+    RUN_TEST(test_advanced_parsing_same_origin_only);
 
     return UNITY_END();
 }

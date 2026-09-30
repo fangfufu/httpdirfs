@@ -28,6 +28,19 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         """Suppress default request logging."""
         pass
 
+    def guess_type(self, path):
+        """Guess MIME type, falling back to inspecting file header for HTML."""
+        ctype = super().guess_type(path)
+        if ctype == "application/octet-stream" or ctype is None:
+            try:
+                with open(path, "rb") as test_f:
+                    prefix = test_f.read(128).lower()
+                    if b"<!doctype html" in prefix or b"<html" in prefix:
+                        return "text/html"
+            except Exception:
+                pass
+        return ctype
+
     def list_directory(self, path):
         """Override directory listing to inject duplicate/malformed URLs for deduplication testing."""
         try:

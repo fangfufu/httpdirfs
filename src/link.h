@@ -30,6 +30,7 @@
  */
 
 #include <curl/curl.h>
+#include <gumbo.h>
 #include <limits.h>
 #include <sys/types.h>
 
@@ -290,4 +291,44 @@ char *url_to_cache_path(const char *url);
  * \param link_url The URL from the href attribute to convert in-place.
  */
 void make_link_relative(const char *page_url, char *link_url);
+
+/**
+ * \brief Resolve an href attribute to a full canonical URL.
+ */
+int resolve_target_url(const char *page_url, const char *raw_href,
+                       char *out_url, size_t out_size);
+
+/**
+ * \brief Extract plain anchor text from a GumboNode anchor element.
+ */
+char *extract_anchor_text(const GumboNode *node);
+
+/**
+ * \brief Tokenize URL path into slash-delimited segments.
+ */
+int extract_url_path_segments(const char *url, char ***segments_out,
+                              int *num_segments_out);
+
+/**
+ * \brief Free URL path segments array.
+ */
+void free_url_path_segments(char **segments, int num_segments);
+
+/**
+ * \brief Generate a collision-free link name using backward path escalation.
+ */
+char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
+                                   char **segments, int num_segments);
+
+/**
+ * \brief Check if Content-Type string indicates HTML.
+ */
+int is_html_content_type(const char *ct);
+
+/**
+ * \brief Pure classification logic for HTTP response in link stat resolution.
+ */
+LinkType Link_classify_response(LinkType current_type, long http_resp,
+                                curl_off_t cl, const char *content_type,
+                                size_t *content_len_out);
 #endif

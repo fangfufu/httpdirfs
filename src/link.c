@@ -87,8 +87,13 @@ static Link *Link_new(const char *linkname, LinkType type)
 
 static int is_same_origin(const char *link_url)
 {
-    return !CONFIG.external_links || !ROOT_LINK_TBL
-           || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
+    if (!ROOT_LINK_TBL || !ROOT_LINK_TBL->links || !ROOT_LINK_TBL->links[0]) {
+        return 1;
+    }
+    if (!CONFIG.external_links && !CONFIG.advanced_parsing_mode) {
+        return 1;
+    }
+    return !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
 }
 
 static CURL *Link_to_curl(Link *link)
@@ -532,8 +537,8 @@ int link_linknames_equal(const char *str_a, const char *str_b)
     if (!str_a || !str_b) {
         return 0;
     }
-    size_t len_a = strnlen(str_a, NAME_MAX);
-    size_t len_b = strnlen(str_b, NAME_MAX);
+    size_t len_a = strnlen(str_a, PATH_MAX);
+    size_t len_b = strnlen(str_b, PATH_MAX);
     size_t max_len = MAX(len_a, len_b);
     size_t comp_len = MIN(len_a, len_b);
     int identical = 0;
@@ -573,7 +578,7 @@ unsigned int link_hash_str(const char *str)
 {
     unsigned int hash = 5381;
     int c;
-    size_t len = strnlen(str, NAME_MAX);
+    size_t len = strnlen(str, PATH_MAX);
 
     /* Strip all trailing slashes */
     while (len > 0 && str[len - 1] == '/') {
@@ -957,86 +962,645 @@ char *external_url_to_filename(const char *url)
     return result;
 }
 
-/**
- * Shamelessly copied and pasted from:
- * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
- */
-static void HTML_to_LinkTable(const char *url, GumboNode *node,
-                              LinkTable *linktbl, LinkHashSet *set)
+int resolve_target_url(const char *page_url, const char *raw_href,
+                       char *out_url, size_t out_size)
 {
-    if (node->type != GUMBO_NODE_ELEMENT) {
+    if (!page_url || !raw_href || !out_url || out_size == 0) {
+        return 0;
+    }
+
+    /* Trim leading and trailing whitespace from raw_href */
+    while (*raw_href && isspace((unsigned char)*raw_href)) {
+        raw_href++;
+    }
+    if (*raw_href == '\0') {
+        return 0;
+    }
+    size_t href_len = strlen(raw_href);
+    while (href_len > 0 && isspace((unsigned char)raw_href[href_len - 1])) {
+        href_len--;
+    }
+
+    /* Ignore fragment in href */
+    const char *hash_pos = memchr(raw_href, '#', href_len);
+    if (hash_pos) {
+        href_len = (size_t)(hash_pos - raw_href);
+    }
+    if (href_len == 0) {
+        return 0;
+    }
+
+    char resolved[PATH_MAX + 1];
+    size_t resolved_len = 0;
+
+    /* 1. Absolute URL (http:// or https://) */
+    if ((href_len >= 7 && strncasecmp(raw_href, "http://", 7) == 0)
+        || (href_len >= 8 && strncasecmp(raw_href, "https://", 8) == 0)) {
+        if (href_len >= sizeof(resolved)) {
+            return 0;
+        }
+        memcpy(resolved, raw_href, href_len);
+        resolved[href_len] = '\0';
+        resolved_len = href_len;
+    } else if (href_len >= 2 && raw_href[0] == '/' && raw_href[1] == '/') {
+        /* 2. Scheme-relative URL (//...) */
+        const char *colon = strchr(page_url, ':');
+        if (!colon) {
+            return 0;
+        }
+        size_t scheme_len = (size_t)(colon - page_url) + 1; /* includes ':' */
+        if (scheme_len + href_len >= sizeof(resolved)) {
+            return 0;
+        }
+        memcpy(resolved, page_url, scheme_len);
+        memcpy(resolved + scheme_len, raw_href, href_len);
+        resolved[scheme_len + href_len] = '\0';
+        resolved_len = scheme_len + href_len;
+    } else if (raw_href[0] == '/') {
+        /* 3. Origin-relative URL (/...) */
+        const char *scheme_sep = strstr(page_url, "://");
+        if (!scheme_sep) {
+            return 0;
+        }
+        const char *origin_end = strchr(scheme_sep + 3, '/');
+        size_t origin_len
+            = origin_end ? (size_t)(origin_end - page_url) : strlen(page_url);
+        if (origin_len + href_len >= sizeof(resolved)) {
+            return 0;
+        }
+        memcpy(resolved, page_url, origin_len);
+        memcpy(resolved + origin_len, raw_href, href_len);
+        resolved[origin_len + href_len] = '\0';
+        resolved_len = origin_len + href_len;
+    } else {
+        /* 4. Path-relative URL (does not start with '/') */
+        size_t page_len = strlen(page_url);
+        size_t base_len = 0;
+        if (page_url[page_len - 1] == '/') {
+            base_len = page_len;
+        } else {
+            const char *scheme_sep = strstr(page_url, "://");
+            const char *last_slash = strrchr(page_url, '/');
+            if (scheme_sep && last_slash && last_slash > scheme_sep + 2) {
+                base_len = (size_t)(last_slash - page_url) + 1;
+            } else {
+                base_len = page_len;
+            }
+        }
+
+        int need_slash = (page_url[base_len - 1] != '/');
+        if (base_len + (need_slash ? 1 : 0) + href_len >= sizeof(resolved)) {
+            return 0;
+        }
+
+        memcpy(resolved, page_url, base_len);
+        if (need_slash) {
+            resolved[base_len] = '/';
+            base_len++;
+        }
+        memcpy(resolved + base_len, raw_href, href_len);
+        resolved[base_len + href_len] = '\0';
+        resolved_len = base_len + href_len;
+    }
+
+    /* Encode spaces as %20 so that libcurl and web servers can parse the URL */
+    size_t out_pos = 0;
+    for (size_t i = 0; i < resolved_len; i++) {
+        if (resolved[i] == ' ') {
+            if (out_pos + 3 >= out_size) {
+                return 0;
+            }
+            out_url[out_pos++] = '%';
+            out_url[out_pos++] = '2';
+            out_url[out_pos++] = '0';
+        } else {
+            if (out_pos + 1 >= out_size) {
+                return 0;
+            }
+            out_url[out_pos++] = resolved[i];
+        }
+    }
+    out_url[out_pos] = '\0';
+    return 1;
+}
+
+static void collect_gumbo_text(const GumboNode *node, char **buf, size_t *len,
+                               size_t *cap)
+{
+    if (!node) {
         return;
     }
-    GumboAttribute *href;
-    href = gumbo_get_attribute(&node->v.element.attributes, "href");
-    if (node->v.element.tag == GUMBO_TAG_A && href) {
-        const char *raw_href = href->value;
-
-        if (CONFIG.ignore_anchors && raw_href[0] == '#') {
-            /* Skip intra-page HTML anchor / fragment links when requested */
-        } else if (CONFIG.external_links && is_external_url(raw_href)
-                   && is_cross_origin(url, raw_href)) {
-            /*
-             * -------- External (cross-origin) link handling --------
-             * Extract the filename from the external URL and create a
-             * Link with f_url already pointing to the external server.
-             * LinkTable_fill() will skip URL-construction for these.
-             */
-            char *filename = external_url_to_filename(raw_href);
-            if (filename && filename[0] != '\0' && strcmp(filename, ".") != 0
-                && strcmp(filename, "..") != 0) {
-                /* Determine type: directory if URL (ignoring query/fragment)
-                 * ends with '/' */
-                const char *qf = strpbrk(raw_href, "?#");
-                size_t href_len
-                    = qf ? (size_t)(qf - raw_href) : strlen(raw_href);
-                LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
-                                    ? LINK_UNINITIALISED_DIR
-                                    : LINK_UNINITIALISED_FILE;
-
-                /* First-wins: skip if a link with this name already exists */
-                if (LinkHashSet_add(set, filename)) {
-                    Link *link = Link_new(filename, type);
-                    snprintf(link->f_url, sizeof(link->f_url), "%s", raw_href);
-                    LinkTable_add(linktbl, link);
-                }
+    if (node->type == GUMBO_NODE_TEXT || node->type == GUMBO_NODE_WHITESPACE) {
+        const char *t = node->v.text.text;
+        if (t) {
+            size_t tlen = strlen(t);
+            if (*len + tlen + 1 > *cap) {
+                *cap = (*cap == 0) ? 256 : ((*cap * 2) + tlen + 1);
+                *buf = (char *)REALLOC(*buf, *cap);
             }
-            FREE(filename);
-        } else {
-            /*
-             * -------- Same-origin / relative link handling (unchanged)
-             * --------
-             */
-            char *relative_url = STRNDUP(raw_href, PATH_MAX);
-            make_link_relative(url, relative_url);
-
-            /* Truncate at the first slash to support links to subdirectories */
-            char *slash = strchr(relative_url, '/');
-            if (slash && slash != relative_url) {
-                /* Don't truncate full URIs like http://... */
-                if (*(slash - 1) != ':' && slash[1] != '/') {
-                    slash[1] = '\0';
-                }
-            }
-
-            /* if it is valid, copy the link onto the heap */
-            LinkType type = linkname_to_LinkType(relative_url);
-
-            /* Check if the new link is a duplicate */
-            if ((type == LINK_UNINITIALISED_DIR)
-                || (type == LINK_UNINITIALISED_FILE)) {
-                if (LinkHashSet_add(set, relative_url)) {
-                    LinkTable_add(linktbl, Link_new(relative_url, type));
-                }
-            }
-            FREE(relative_url);
+            memcpy(*buf + *len, t, tlen);
+            *len += tlen;
+            (*buf)[*len] = '\0';
         }
+    } else if (node->type == GUMBO_NODE_ELEMENT) {
+        const GumboVector *children = &node->v.element.children;
+        for (size_t i = 0; i < children->length; ++i) {
+            collect_gumbo_text((const GumboNode *)children->data[i], buf, len,
+                               cap);
+        }
+    }
+}
+
+char *extract_anchor_text(const GumboNode *node)
+{
+    if (!node) {
+        return STRDUP("");
+    }
+    char *raw = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+    collect_gumbo_text(node, &raw, &len, &cap);
+    if (!raw || len == 0) {
+        FREE(raw);
+        return STRDUP("");
+    }
+
+    char *src = raw;
+    char *dst = raw;
+    int in_space = 0;
+
+    /* Skip leading whitespace */
+    int sp = 0;
+    while ((sp = check_space(src)) > 0) {
+        src += sp;
+    }
+
+    while (*src) {
+        sp = check_space(src);
+        if (sp > 0) {
+            if (!in_space) {
+                *dst++ = ' ';
+                in_space = 1;
+            }
+            src += sp;
+            continue;
+        }
+        unsigned char c = (unsigned char)*src;
+        if (c == '/') {
+            *dst++ = '_';
+            in_space = 0;
+        } else if (c >= 32 && c != 127) {
+            *dst++ = (char)c;
+            in_space = 0;
+        }
+        src++;
+    }
+
+    /* Strip trailing whitespace */
+    while (dst > raw && isspace((unsigned char)*(dst - 1))) {
+        dst--;
+    }
+    *dst = '\0';
+
+    char *result = STRDUP(raw);
+    FREE(raw);
+    return result;
+}
+
+int extract_url_path_segments(const char *url, char ***segments_out,
+                              int *num_segments_out)
+{
+    if (!segments_out || !num_segments_out) {
+        return 0;
+    }
+    *segments_out = NULL;
+    *num_segments_out = 0;
+
+    if (!url || *url == '\0') {
+        return 0;
+    }
+
+    /* 1. Strip query parameters and fragment */
+    const char *qf = strpbrk(url, "?#");
+    size_t url_len = qf ? (size_t)(qf - url) : strlen(url);
+
+    /* 2. Skip scheme and host to isolate path */
+    const char *path = url;
+    const char *scheme_sep = strstr(url, "://");
+    if (scheme_sep && (size_t)(scheme_sep - url) < url_len) {
+        const char *after_host = strchr(scheme_sep + 3, '/');
+        if (after_host && (!qf || after_host < qf)) {
+            path = after_host;
+        } else {
+            return 0;
+        }
+    } else if (url_len >= 2 && url[0] == '/' && url[1] == '/') {
+        const char *after_host = strchr(url + 2, '/');
+        if (after_host && (!qf || after_host < qf)) {
+            path = after_host;
+        } else {
+            return 0;
+        }
+    }
+
+    size_t path_len = qf ? (size_t)(qf - path) : strlen(path);
+
+    /* 3. Strip trailing slashes */
+    while (path_len > 0 && path[path_len - 1] == '/') {
+        path_len--;
+    }
+    if (path_len == 0) {
+        return 0;
+    }
+
+    /* 4. Count non-empty segments */
+    int count = 0;
+    size_t i = 0;
+    while (i < path_len) {
+        while (i < path_len && path[i] == '/') {
+            i++;
+        }
+        if (i < path_len) {
+            count++;
+            while (i < path_len && path[i] != '/') {
+                i++;
+            }
+        }
+    }
+
+    if (count == 0) {
+        return 0;
+    }
+
+    char **segs = (char **)CALLOC((size_t)count, sizeof(char *));
+    int idx = 0;
+    i = 0;
+    while (i < path_len && idx < count) {
+        while (i < path_len && path[i] == '/') {
+            i++;
+        }
+        if (i < path_len) {
+            size_t start = i;
+            while (i < path_len && path[i] != '/') {
+                i++;
+            }
+            size_t seg_len = i - start;
+
+            int unescaped_len = 0;
+            char *unescaped = curl_easy_unescape(NULL, path + start,
+                                                 (int)seg_len, &unescaped_len);
+            char *seg_str = NULL;
+            if (unescaped) {
+                seg_str = STRNDUP(unescaped, (size_t)unescaped_len);
+                curl_free(unescaped);
+            } else {
+                seg_str = STRNDUP(path + start, seg_len);
+            }
+
+            for (char *c = seg_str; *c; c++) {
+                if (*c == '/') {
+                    *c = '_';
+                }
+            }
+            segs[idx++] = seg_str;
+        }
+    }
+
+    *segments_out = segs;
+    *num_segments_out = idx;
+    return idx;
+}
+
+void free_url_path_segments(char **segments, int num_segments)
+{
+    if (!segments) {
+        return;
+    }
+    for (int i = 0; i < num_segments; i++) {
+        FREE(segments[i]);
+    }
+    FREE(segments);
+}
+
+char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
+                                   char **segments, int num_segments)
+{
+    if (!set) {
+        return NULL;
+    }
+
+    char candidate[NAME_MAX + 1];
+
+    if (num_segments <= 0) {
+        if (!anchor || *anchor == '\0') {
+            return NULL;
+        }
+        snprintf(candidate, sizeof(candidate), "%s", anchor);
+        if (LinkHashSet_add(set, candidate)) {
+            return STRDUP(candidate);
+        }
+        for (int suffix = 1; suffix < 10000; suffix++) {
+            char suffix_str[32];
+            int s_len = snprintf(suffix_str, sizeof(suffix_str), "-%d", suffix);
+            char suffixed[NAME_MAX + 1];
+            size_t base_len = strlen(candidate);
+            if (base_len + (size_t)s_len >= sizeof(suffixed)) {
+                base_len = sizeof(suffixed) - (size_t)s_len - 1;
+            }
+            snprintf(suffixed, sizeof(suffixed), "%.*s%s", (int)base_len,
+                     candidate, suffix_str);
+            if (LinkHashSet_add(set, suffixed)) {
+                return STRDUP(suffixed);
+            }
+        }
+        return NULL;
+    }
+
+    /* Iterate through path depths i = 1, 2, ..., num_segments */
+    for (int i = 1; i <= num_segments; i++) {
+        char path_part[NAME_MAX + 1];
+        path_part[0] = '\0';
+        size_t cur_len = 0;
+
+        for (int j = num_segments - i; j < num_segments; j++) {
+            const char *seg = segments[j];
+            size_t seg_len = strlen(seg);
+            if (cur_len > 0) {
+                if (cur_len + 1 < sizeof(path_part)) {
+                    path_part[cur_len++] = '-';
+                    path_part[cur_len] = '\0';
+                }
+            }
+            if (cur_len + seg_len < sizeof(path_part)) {
+                memcpy(path_part + cur_len, seg, seg_len);
+                cur_len += seg_len;
+                path_part[cur_len] = '\0';
+            }
+        }
+
+        const char *last_seg = segments[num_segments - 1];
+        int omit_anchor = (!anchor || *anchor == '\0');
+        if (i == 1 && anchor && *anchor != '\0'
+            && strcasecmp(anchor, last_seg) == 0) {
+            omit_anchor = 1;
+        }
+
+        if (omit_anchor) {
+            snprintf(candidate, sizeof(candidate), "%s", path_part);
+        } else {
+            snprintf(candidate, sizeof(candidate), "%s-%s", anchor, path_part);
+        }
+
+        if (LinkHashSet_add(set, candidate)) {
+            return STRDUP(candidate);
+        }
+    }
+
+    /* Exhaustion fallback: append numeric suffix */
+    char last_candidate[NAME_MAX + 1];
+    snprintf(last_candidate, sizeof(last_candidate), "%s", candidate);
+    for (int suffix = 1; suffix < 10000; suffix++) {
+        char suffix_str[32];
+        int s_len = snprintf(suffix_str, sizeof(suffix_str), "-%d", suffix);
+        char suffixed[NAME_MAX + 1];
+        size_t base_len = strlen(last_candidate);
+        if (base_len + (size_t)s_len >= sizeof(suffixed)) {
+            base_len = sizeof(suffixed) - (size_t)s_len - 1;
+        }
+        snprintf(suffixed, sizeof(suffixed), "%.*s%s", (int)base_len,
+                 last_candidate, suffix_str);
+        if (LinkHashSet_add(set, suffixed)) {
+            return STRDUP(suffixed);
+        }
+    }
+
+    return NULL;
+}
+
+int is_html_content_type(const char *ct)
+{
+    if (!ct) {
+        return 0;
+    }
+    while (*ct && isspace((unsigned char)*ct)) {
+        ct++;
+    }
+    if (strncasecmp(ct, "text/html", 9) == 0) {
+        char next = ct[9];
+        return (next == '\0' || next == ';' || isspace((unsigned char)next));
+    }
+    return 0;
+}
+
+LinkType Link_classify_response(LinkType current_type, long http_resp,
+                                curl_off_t cl, const char *content_type,
+                                size_t *content_len_out)
+{
+    if (http_resp != HTTP_OK) {
+        return LINK_INVALID;
+    }
+
+    if (current_type == LINK_UNINITIALISED_DIR) {
+        return LINK_DIR;
+    }
+
+    if (current_type != LINK_UNINITIALISED_FILE) {
+        return current_type;
+    }
+
+    if (CONFIG.advanced_parsing_mode) {
+        if (is_html_content_type(content_type)) {
+            if (cl > 0 && (off_t)cl > CONFIG.max_html_size) {
+                if (content_len_out) {
+                    *content_len_out = (size_t)cl;
+                }
+                return LINK_FILE;
+            }
+            return LINK_DIR;
+        }
+        /* Non-HTML Content-Type (image, binary, ISO, etc.) */
+        if (cl < 0) {
+            return LINK_INVALID;
+        }
+        if (cl == 0 && CONFIG.zero_len_is_dir) {
+            return LINK_DIR;
+        }
+        if (content_len_out) {
+            *content_len_out = (size_t)cl;
+        }
+        return LINK_FILE;
+    }
+
+    /* Vanilla mode */
+    if (cl < 0) {
+        return LINK_INVALID;
+    } else if (cl == 0 && CONFIG.zero_len_is_dir) {
+        return LINK_DIR;
+    } else {
+        if (content_len_out) {
+            *content_len_out = (size_t)cl;
+        }
+        return LINK_FILE;
+    }
+}
+
+static void process_anchor_node(const char *url, const GumboNode *node,
+                                LinkTable *linktbl, LinkHashSet *set,
+                                LinkHashSet *target_url_set)
+{
+    GumboAttribute *href
+        = gumbo_get_attribute(&node->v.element.attributes, "href");
+    if (!href) {
+        return;
+    }
+    const char *raw_href = href->value;
+
+    if (CONFIG.ignore_anchors && raw_href[0] == '#') {
+        /* Skip intra-page HTML anchor / fragment links when requested */
+        return;
+    }
+
+    if (CONFIG.advanced_parsing_mode) {
+        char target_url[PATH_MAX + 1];
+        if (resolve_target_url(url, raw_href, target_url, sizeof(target_url))) {
+            int allow = 1;
+            if (CONFIG.same_origin_only) {
+                const char *page_url = NULL;
+                if (ROOT_LINK_TBL && ROOT_LINK_TBL->links
+                    && ROOT_LINK_TBL->links[0]) {
+                    page_url = ROOT_LINK_TBL->links[0]->f_url;
+                } else if (linktbl && linktbl->links && linktbl->links[0]) {
+                    page_url = linktbl->links[0]->f_url;
+                } else {
+                    page_url = url;
+                }
+                if (page_url && is_cross_origin(page_url, target_url)) {
+                    allow = 0;
+                }
+            }
+            if (allow) {
+                /* Early duplicate target link removal (first anchor text
+                 * wins) */
+                if (!target_url_set
+                    || LinkHashSet_add(target_url_set, target_url)) {
+                    char *anchor = extract_anchor_text(node);
+                    char **segments = NULL;
+                    int num_segments = 0;
+                    extract_url_path_segments(target_url, &segments,
+                                              &num_segments);
+
+                    char *linkname = generate_collision_free_name(
+                        set, anchor, segments, num_segments);
+                    FREE(anchor);
+                    free_url_path_segments(segments, num_segments);
+
+                    if (linkname && linkname[0] != '\0') {
+                        const char *qf = strpbrk(target_url, "?#");
+                        size_t tlen = qf ? (size_t)(qf - target_url)
+                                         : strlen(target_url);
+                        LinkType type
+                            = (tlen > 0 && target_url[tlen - 1] == '/')
+                                  ? LINK_UNINITIALISED_DIR
+                                  : LINK_UNINITIALISED_FILE;
+                        Link *link = Link_new(linkname, type);
+                        snprintf(link->f_url, sizeof(link->f_url), "%s",
+                                 target_url);
+                        LinkTable_add(linktbl, link);
+                        FREE(linkname);
+                    }
+                }
+            }
+        }
+    } else if (CONFIG.external_links && is_external_url(raw_href)
+               && is_cross_origin(url, raw_href)) {
+        /*
+         * -------- External (cross-origin) link handling --------
+         * Extract the filename from the external URL and create a
+         * Link with f_url already pointing to the external server.
+         * LinkTable_fill() will skip URL-construction for these.
+         */
+        char *filename = external_url_to_filename(raw_href);
+        if (filename && filename[0] != '\0' && strcmp(filename, ".") != 0
+            && strcmp(filename, "..") != 0) {
+            /* Determine type: directory if URL (ignoring query/fragment)
+             * ends with '/' */
+            const char *qf = strpbrk(raw_href, "?#");
+            size_t href_len = qf ? (size_t)(qf - raw_href) : strlen(raw_href);
+            LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
+                                ? LINK_UNINITIALISED_DIR
+                                : LINK_UNINITIALISED_FILE;
+
+            /* First-wins: skip if a link with this name already exists */
+            if (LinkHashSet_add(set, filename)) {
+                Link *link = Link_new(filename, type);
+                char target_url[PATH_MAX + 1];
+                if (resolve_target_url(url, raw_href, target_url,
+                                       sizeof(target_url))) {
+                    snprintf(link->f_url, sizeof(link->f_url), "%s",
+                             target_url);
+                } else {
+                    snprintf(link->f_url, sizeof(link->f_url), "%s", raw_href);
+                }
+                LinkTable_add(linktbl, link);
+            }
+        }
+        FREE(filename);
+    } else {
+        /*
+         * -------- Same-origin / relative link handling (unchanged)
+         * --------
+         */
+        char *relative_url = STRNDUP(raw_href, PATH_MAX);
+        make_link_relative(url, relative_url);
+
+        /* Truncate at the first slash to support links to subdirectories */
+        char *slash = strchr(relative_url, '/');
+        if (slash && slash != relative_url) {
+            /* Don't truncate full URIs like http://... */
+            if (*(slash - 1) != ':' && slash[1] != '/') {
+                slash[1] = '\0';
+            }
+        }
+
+        /* if it is valid, copy the link onto the heap */
+        LinkType type = linkname_to_LinkType(relative_url);
+
+        /* Check if the new link is a duplicate */
+        if ((type == LINK_UNINITIALISED_DIR)
+            || (type == LINK_UNINITIALISED_FILE)) {
+            if (LinkHashSet_add(set, relative_url)) {
+                LinkTable_add(linktbl, Link_new(relative_url, type));
+            }
+        }
+        FREE(relative_url);
+    }
+}
+
+/**
+ * Recursively walk the HTML DOM tree to extract links into the link table.
+ */
+static void HTML_to_LinkTable(const char *url, GumboNode *node,
+                              LinkTable *linktbl, LinkHashSet *set,
+                              LinkHashSet *target_url_set)
+{
+    if (!node || node->type != GUMBO_NODE_ELEMENT) {
+        return;
+    }
+
+    if (node->v.element.tag == GUMBO_TAG_A) {
+        process_anchor_node(url, node, linktbl, set, target_url_set);
+        /*
+         * HTML5 interactive content cannot contain nested <a> elements, and
+         * extract_anchor_text() already traversed any child text nodes.
+         */
+        return;
     }
 
     /* Note the recursive call */
     GumboVector *children = &node->v.element.children;
     for (size_t i = 0; i < children->length; ++i) {
-        HTML_to_LinkTable(url, (GumboNode *)children->data[i], linktbl, set);
+        HTML_to_LinkTable(url, (GumboNode *)children->data[i], linktbl, set,
+                          target_url_set);
     }
 }
 
@@ -1050,8 +1614,13 @@ void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
         return;
     }
     LinkHashSet *set = LinkHashSet_new(4096);
+    LinkHashSet *target_url_set
+        = CONFIG.advanced_parsing_mode ? LinkHashSet_new(4096) : NULL;
     if (output->root) {
-        HTML_to_LinkTable(url, output->root, linktbl, set);
+        HTML_to_LinkTable(url, output->root, linktbl, set, target_url_set);
+    }
+    if (target_url_set) {
+        LinkHashSet_free(target_url_set);
     }
     LinkHashSet_free(set);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
@@ -1074,17 +1643,14 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
             lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
 
-        if (this_link->type == LINK_UNINITIALISED_FILE) {
-            if (cl < 0) {
-                this_link->type = LINK_INVALID;
-            } else if (cl == 0 && CONFIG.zero_len_is_dir) {
-                this_link->type = LINK_DIR;
-            } else {
-                this_link->type = LINK_FILE;
-                this_link->content_length = cl;
-            }
-        } else if (this_link->type == LINK_UNINITIALISED_DIR) {
-            this_link->type = LINK_DIR;
+        char *content_type = NULL;
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+
+        size_t content_len = 0;
+        this_link->type = Link_classify_response(this_link->type, http_resp, cl,
+                                                 content_type, &content_len);
+        if (this_link->type == LINK_FILE) {
+            this_link->content_length = content_len;
         }
 
     } else {
@@ -1696,6 +2262,7 @@ LinkTable *path_to_LinkTable(const char *path)
 
         if (!new_table) {
             if (link) {
+                link->type = LINK_INVALID;
                 LinkTable_unref(link->parent_table);
             }
             return NULL;
@@ -1871,6 +2438,23 @@ Link *path_to_Link(const char *path)
     return link;
 }
 
+static size_t write_download_full_callback(void *recv_data, size_t size,
+                                           size_t nmemb, void *userp)
+{
+    TransferStruct *ts = (TransferStruct *)userp;
+    size_t recv_size = size * nmemb;
+    if (CONFIG.advanced_parsing_mode && CONFIG.max_html_size >= 0) {
+        if (ts->curr_size + recv_size > (size_t)CONFIG.max_html_size) {
+            lprintf(warning,
+                    "HTML directory page download exceeded max_html_size (%ld "
+                    "bytes), aborting transfer\n",
+                    (long)CONFIG.max_html_size);
+            return 0; /* Causes CURLE_WRITE_ERROR */
+        }
+    }
+    return write_memory_callback(recv_data, size, nmemb, userp);
+}
+
 TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
 {
     char *url = link->f_url;
@@ -1886,7 +2470,12 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     header_ptr->data = NULL;
     header_ptr->type = DATA;
 
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&ts);
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                                    write_download_full_callback);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&ts);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
