@@ -42,6 +42,7 @@ void setUp(void)
 void tearDown(void)
 {
     CONFIG.external_links = 0;
+    CONFIG.ignore_anchors = 0;
     if (ROOT_LINK_TBL != NULL) {
         LinkTable_free(ROOT_LINK_TBL);
         ROOT_LINK_TBL = NULL;
@@ -587,6 +588,120 @@ void test_LinkTable_parse_html_duplicates(void)
     LinkTable_free(table);
 }
 
+void test_make_link_relative_basic(void)
+{
+    char link1[PATH_MAX] = "/dir/file.txt";
+    make_link_relative("https://example.com/dir/", link1);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link1);
+
+    char link2[PATH_MAX] = "/dir/sub/";
+    make_link_relative("https://example.com/dir/", link2);
+    TEST_ASSERT_EQUAL_STRING("sub/", link2);
+
+    char link3[PATH_MAX] = "/file.txt";
+    make_link_relative("https://example.com/", link3);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link3);
+
+    char link4[PATH_MAX] = "/file.txt";
+    make_link_relative("https://example.com", link4);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link4);
+
+    char link5[PATH_MAX] = "./file.txt";
+    make_link_relative("https://example.com/dir/", link5);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link5);
+
+    char link6[PATH_MAX] = "file.txt";
+    make_link_relative("https://example.com/dir/", link6);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link6);
+
+    char link7[PATH_MAX] = "/other/file.txt";
+    make_link_relative("https://example.com/dir/", link7);
+    TEST_ASSERT_EQUAL_STRING("/other/file.txt", link7);
+
+    char link8[PATH_MAX] = "";
+    make_link_relative("https://example.com/dir/", link8);
+    TEST_ASSERT_EQUAL_STRING("", link8);
+}
+
+void test_make_link_relative_no_trailing_slash(void)
+{
+    char link1[PATH_MAX] = "/dir/file.txt";
+    make_link_relative("https://example.com/dir", link1);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link1);
+
+    char link2[PATH_MAX] = "/direction/file.txt";
+    make_link_relative("https://example.com/dir", link2);
+    TEST_ASSERT_EQUAL_STRING("/direction/file.txt", link2);
+
+    char link3[PATH_MAX] = "/dir";
+    make_link_relative("https://example.com/dir", link3);
+    TEST_ASSERT_EQUAL_STRING("/dir", link3);
+}
+
+void test_make_link_relative_encoded_spaces(void)
+{
+    char link1[PATH_MAX] = "/foo bar/file.txt";
+    make_link_relative("https://example.com/foo%20bar/", link1);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link1);
+
+    char link2[PATH_MAX] = "/foo%20bar/file.txt";
+    make_link_relative("https://example.com/foo bar/", link2);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link2);
+
+    char link3[PATH_MAX] = "/foo bar/file.txt";
+    make_link_relative("https://example.com/foo%20bar", link3);
+    TEST_ASSERT_EQUAL_STRING("file.txt", link3);
+
+    char link4[PATH_MAX]
+        = "/browse/1001/Sample Archive - Collection 1.0 - Test 1993.iso/001";
+    make_link_relative("https://example.com/browse/1001/"
+                       "Sample%20Archive%20-%20Collection%201.0%20-%"
+                       "20Test%201993.iso",
+                       link4);
+    TEST_ASSERT_EQUAL_STRING("001", link4);
+}
+
+void test_ignore_anchors_default(void)
+{
+    CONFIG.ignore_anchors = 0;
+    LinkTable *table = LinkTable_alloc("https://example.com/dir/");
+    TEST_ASSERT_NOT_NULL(table);
+
+    const char *html = "<html><body>\n"
+                       "  <a href=\"#directory\">Directory</a>\n"
+                       "  <a href=\"file.txt\">File</a>\n"
+                       "</body></html>\n";
+
+    LinkTable_parse_html(table, "https://example.com/dir/", html);
+
+    // Expect head link, #directory, and file.txt
+    TEST_ASSERT_EQUAL_INT(3, table->size);
+    TEST_ASSERT_EQUAL_STRING("#directory", table->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("file.txt", table->links[2]->linkname);
+
+    LinkTable_free(table);
+}
+
+void test_ignore_anchors_enabled(void)
+{
+    CONFIG.ignore_anchors = 1;
+    LinkTable *table = LinkTable_alloc("https://example.com/dir/");
+    TEST_ASSERT_NOT_NULL(table);
+
+    const char *html = "<html><body>\n"
+                       "  <a href=\"#directory\">Directory</a>\n"
+                       "  <a href=\"file.txt\">File</a>\n"
+                       "</body></html>\n";
+
+    LinkTable_parse_html(table, "https://example.com/dir/", html);
+
+    // Expect head link and file.txt only (#directory ignored)
+    TEST_ASSERT_EQUAL_INT(2, table->size);
+    TEST_ASSERT_EQUAL_STRING("file.txt", table->links[1]->linkname);
+
+    LinkTable_free(table);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -650,5 +765,13 @@ int main(void)
     RUN_TEST(test_link_hash_str);
     RUN_TEST(test_LinkHashSet);
     RUN_TEST(test_LinkTable_parse_html_duplicates);
+
+    /* make_link_relative and ignore_anchors */
+    RUN_TEST(test_make_link_relative_basic);
+    RUN_TEST(test_make_link_relative_no_trailing_slash);
+    RUN_TEST(test_make_link_relative_encoded_spaces);
+    RUN_TEST(test_ignore_anchors_default);
+    RUN_TEST(test_ignore_anchors_enabled);
+
     return UNITY_END();
 }

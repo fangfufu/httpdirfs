@@ -357,6 +357,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"external-links", no_argument, NULL, 'L'},        /* 31 */
            {"cache-min-size", required_argument, NULL, 'L'},  /* 32 */
            {"cache-max-size", required_argument, NULL, 'L'},  /* 33 */
+           {"ignore-anchors", no_argument, NULL, 'L'},        /* 34 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -505,6 +506,9 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 }
                 CONFIG.cache_max_size = (off_t)val;
             } break;
+            case 34:
+                CONFIG.ignore_anchors = 1;
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 exit(EXIT_FAILURE);
@@ -592,6 +596,8 @@ HTTPDirFS options:\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
         --external-links    Include external (cross-origin) links from\n\
                             directory listings (default: off)\n\
+        --ignore-anchors    Ignore intra-page HTML anchor/fragment links\n\
+                            starting with '#' (default: off)\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
                             directory.\n\
