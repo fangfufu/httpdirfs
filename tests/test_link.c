@@ -702,6 +702,154 @@ void test_ignore_anchors_enabled(void)
     LinkTable_free(table);
 }
 
+void test_diagnostics_add(void)
+{
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    TEST_ASSERT_NOT_NULL(tbl);
+
+    const char *html = "<html>test</html>";
+    const char *header = "HTTP/1.1 200 OK\r\nServer: test\r\n\r\n";
+    LinkTable_add_diagnostics(tbl, html, strlen(html), header, strlen(header));
+
+    /* tbl should now contain head link + .httpdirfs */
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    Link *diag = tbl->links[1];
+    TEST_ASSERT_EQUAL_STRING(".httpdirfs", diag->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_DIR, diag->type);
+    TEST_ASSERT_EQUAL_INT(1, diag->is_virtual);
+    TEST_ASSERT_NOT_NULL(diag->next_table);
+
+    /* Inside .httpdirfs: head link + CONTENT + HEADER */
+    LinkTable *dtbl = diag->next_table;
+    TEST_ASSERT_EQUAL_INT(3, dtbl->size);
+
+    Link *content = dtbl->links[1];
+    TEST_ASSERT_EQUAL_STRING("CONTENT", content->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_FILE, content->type);
+    TEST_ASSERT_EQUAL_INT(1, content->is_virtual);
+    TEST_ASSERT_EQUAL_INT((int)strlen(html), (int)content->content_length);
+    TEST_ASSERT_NOT_NULL(content->virtual_content);
+    TEST_ASSERT_EQUAL_STRING(html, content->virtual_content);
+
+    Link *hdr = dtbl->links[2];
+    TEST_ASSERT_EQUAL_STRING("HEADER", hdr->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_FILE, hdr->type);
+    TEST_ASSERT_EQUAL_INT(1, hdr->is_virtual);
+    TEST_ASSERT_EQUAL_INT((int)strlen(header), (int)hdr->content_length);
+    TEST_ASSERT_NOT_NULL(hdr->virtual_content);
+    TEST_ASSERT_EQUAL_STRING(header, hdr->virtual_content);
+
+    LinkTable_free(tbl);
+}
+
+void test_diagnostics_path_lookup_and_read(void)
+{
+    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/");
+    TEST_ASSERT_NOT_NULL(ROOT_LINK_TBL);
+
+    const char *html = "<html>body data</html>";
+    const char *header = "HTTP/2 200\r\n";
+    LinkTable_add_diagnostics(ROOT_LINK_TBL, html, strlen(html), header,
+                              strlen(header));
+
+    /* Lookup /.httpdirfs */
+    Link *diag_dir = path_to_Link("/.httpdirfs");
+    TEST_ASSERT_NOT_NULL(diag_dir);
+    TEST_ASSERT_EQUAL_STRING(".httpdirfs", diag_dir->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_DIR, diag_dir->type);
+    LinkTable_unref(diag_dir->parent_table);
+
+    /* Lookup /.httpdirfs/CONTENT */
+    Link *c_link = path_to_Link("/.httpdirfs/CONTENT");
+    TEST_ASSERT_NOT_NULL(c_link);
+    TEST_ASSERT_EQUAL_STRING("CONTENT", c_link->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_FILE, c_link->type);
+    TEST_ASSERT_EQUAL_INT((int)strlen(html), (int)c_link->content_length);
+    LinkTable_unref(c_link->parent_table);
+
+    /* Lookup /.httpdirfs/HEADER */
+    Link *h_link = path_to_Link("/.httpdirfs/HEADER");
+    TEST_ASSERT_NOT_NULL(h_link);
+    TEST_ASSERT_EQUAL_STRING("HEADER", h_link->linkname);
+    TEST_ASSERT_EQUAL_INT(LINK_FILE, h_link->type);
+    TEST_ASSERT_EQUAL_INT((int)strlen(header), (int)h_link->content_length);
+    LinkTable_unref(h_link->parent_table);
+
+    /* Read CONTENT from offset 0 */
+    char buf[64] = {0};
+    long n = path_download("/.httpdirfs/CONTENT", buf, sizeof(buf), 0);
+    TEST_ASSERT_EQUAL_INT((int)strlen(html), (int)n);
+    TEST_ASSERT_EQUAL_STRING(html, buf);
+
+    /* Read CONTENT partial slice (offset 6, 4 bytes -> "body") */
+    memset(buf, 0, sizeof(buf));
+    n = path_download("/.httpdirfs/CONTENT", buf, 4, 6);
+    TEST_ASSERT_EQUAL_INT(4, (int)n);
+    TEST_ASSERT_EQUAL_STRING_LEN("body", buf, 4);
+
+    /* Read HEADER */
+    memset(buf, 0, sizeof(buf));
+    n = path_download("/.httpdirfs/HEADER", buf, sizeof(buf), 0);
+    TEST_ASSERT_EQUAL_INT((int)strlen(header), (int)n);
+    TEST_ASSERT_EQUAL_STRING(header, buf);
+
+    /* Read past EOF */
+    n = path_download("/.httpdirfs/CONTENT", buf, sizeof(buf), 100);
+    TEST_ASSERT_EQUAL_INT(0, (int)n);
+
+    LinkTable_free(ROOT_LINK_TBL);
+    ROOT_LINK_TBL = NULL;
+}
+
+void test_diagnostics_subdirectory(void)
+{
+    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/");
+    TEST_ASSERT_NOT_NULL(ROOT_LINK_TBL);
+
+    Link *subdir = CALLOC(1, sizeof(Link));
+    strncpy(subdir->linkname, "sub", NAME_MAX);
+    subdir->type = LINK_DIR;
+    LinkTable *sub_tbl = LinkTable_alloc("http://localhost/sub/");
+    const char *html = "<html>sub content</html>";
+    const char *header = "HTTP/1.1 200 OK";
+    LinkTable_add_diagnostics(sub_tbl, html, strlen(html), header,
+                              strlen(header));
+    subdir->next_table = sub_tbl;
+    sub_tbl->parent_tbl = ROOT_LINK_TBL;
+    sub_tbl->parent_link = subdir;
+    LinkTable_add(ROOT_LINK_TBL, subdir);
+
+    Link *link = path_to_Link("/sub/.httpdirfs/CONTENT");
+    TEST_ASSERT_NOT_NULL(link);
+    TEST_ASSERT_EQUAL_INT((int)strlen(html), (int)link->content_length);
+    LinkTable_unref(link->parent_table);
+
+    char buf[64] = {0};
+    long n = path_download("/sub/.httpdirfs/CONTENT", buf, sizeof(buf), 0);
+    TEST_ASSERT_EQUAL_INT((int)strlen(html), (int)n);
+    TEST_ASSERT_EQUAL_STRING(html, buf);
+
+    LinkTable_free(ROOT_LINK_TBL);
+    ROOT_LINK_TBL = NULL;
+}
+
+void test_diagnostics_empty(void)
+{
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    TEST_ASSERT_NOT_NULL(tbl);
+
+    LinkTable_add_diagnostics(tbl, NULL, 0, NULL, 0);
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    LinkTable *dtbl = tbl->links[1]->next_table;
+    TEST_ASSERT_EQUAL_INT(3, dtbl->size);
+    TEST_ASSERT_EQUAL_INT(0, (int)dtbl->links[1]->content_length);
+    TEST_ASSERT_NULL(dtbl->links[1]->virtual_content);
+    TEST_ASSERT_EQUAL_INT(0, (int)dtbl->links[2]->content_length);
+    TEST_ASSERT_NULL(dtbl->links[2]->virtual_content);
+
+    LinkTable_free(tbl);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -772,6 +920,12 @@ int main(void)
     RUN_TEST(test_make_link_relative_encoded_spaces);
     RUN_TEST(test_ignore_anchors_default);
     RUN_TEST(test_ignore_anchors_enabled);
+
+    /* diagnostics (.httpdirfs) */
+    RUN_TEST(test_diagnostics_add);
+    RUN_TEST(test_diagnostics_path_lookup_and_read);
+    RUN_TEST(test_diagnostics_subdirectory);
+    RUN_TEST(test_diagnostics_empty);
 
     return UNITY_END();
 }

@@ -91,6 +91,10 @@ struct Link {
     Cache *cache_ptr;
     /** \brief Stores *sonic related data */
     Sonic sonic;
+    /** \brief In-memory virtual content for diagnostic files */
+    char *virtual_content;
+    /** \brief Whether this link is a virtual link (not backed by network) */
+    int is_virtual;
 };
 
 /**
@@ -157,7 +161,7 @@ LinkTable *LinkTable_disk_open(const char *dirn);
  * \brief Download a link's content to the memory
  * \warning You MUST free the memory field in TransferStruct after use!
  */
-TransferStruct Link_download_full(Link *head_link);
+TransferStruct Link_download_full(Link *head_link, TransferStruct *header_out);
 
 /**
  * \brief Allocate a LinkTable
@@ -194,6 +198,13 @@ void LinkTable_print(LinkTable *linktbl);
  * \brief add a Link to a LinkTable
  */
 void LinkTable_add(LinkTable *linktbl, Link *link);
+
+/**
+ * \brief Attach a .httpdirfs diagnostics directory to a LinkTable
+ */
+void LinkTable_add_diagnostics(LinkTable *linktbl, const char *content,
+                               size_t content_len, const char *header,
+                               size_t header_len);
 
 /**
  * \brief Parse HTML content and populate LinkTable with unique links.

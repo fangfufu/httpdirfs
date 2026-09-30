@@ -447,6 +447,38 @@ else
     fail "Deduplication failed for 'subdir with spaces' (count: ${subdir_count_dup})"
 fi
 
+# 4i. Test: In-directory hidden diagnostics (.httpdirfs)
+log_info "Test group: In-directory diagnostics (.httpdirfs)"
+
+if [[ -d "${MOUNT_DIR}/.httpdirfs" ]]; then
+    pass ".httpdirfs directory exists"
+else
+    fail ".httpdirfs directory missing"
+fi
+
+if [[ -f "${MOUNT_DIR}/.httpdirfs/CONTENT" ]] && [[ -s "${MOUNT_DIR}/.httpdirfs/CONTENT" ]]; then
+    pass ".httpdirfs/CONTENT exists and is non-empty"
+else
+    fail ".httpdirfs/CONTENT missing or empty"
+fi
+
+if [[ -f "${MOUNT_DIR}/.httpdirfs/HEADER" ]] && [[ -s "${MOUNT_DIR}/.httpdirfs/HEADER" ]]; then
+    pass ".httpdirfs/HEADER exists and is non-empty"
+else
+    fail ".httpdirfs/HEADER missing or empty"
+fi
+
+if grep -qi "HTTP/" "${MOUNT_DIR}/.httpdirfs/HEADER"; then
+    pass ".httpdirfs/HEADER contains HTTP status header"
+else
+    fail ".httpdirfs/HEADER does not contain HTTP status line"
+fi
+
+if [[ -d "${SUBDIR}/.httpdirfs" ]] && [[ -s "${SUBDIR}/.httpdirfs/CONTENT" ]]; then
+    pass "Subdirectory .httpdirfs exists with non-empty CONTENT"
+else
+    fail "Subdirectory .httpdirfs missing or empty"
+fi
 
 # ─── Step 5: Unmount non-cache mount ────────────────────────────────────────
 

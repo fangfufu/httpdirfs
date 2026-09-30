@@ -374,6 +374,7 @@ static LinkTable *single_LinkTable_new(const char *url)
     }
     LinkTable_add(linktbl, link);
     LinkTable_uninitialised_fill(linktbl);
+    LinkTable_add_diagnostics(linktbl, NULL, 0, NULL, 0);
     LinkTable_print(linktbl);
     return linktbl;
 }
@@ -428,6 +429,71 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->links[linktbl->size] = link;
     link->parent_table = linktbl;
     linktbl->size++;
+}
+
+void LinkTable_add_diagnostics(LinkTable *linktbl, const char *content,
+                               size_t content_len, const char *header,
+                               size_t header_len)
+{
+    if (!linktbl) {
+        return;
+    }
+
+    /* Check if .httpdirfs already exists */
+    for (int i = 1; i < linktbl->size; i++) {
+        if (!strcmp(linktbl->links[i]->linkname, ".httpdirfs")) {
+            return;
+        }
+    }
+
+    Link *diag_dir = Link_new(".httpdirfs", LINK_DIR);
+    diag_dir->is_virtual = 1;
+    diag_dir->time = linktbl->index_time;
+    if (linktbl->size > 0 && linktbl->links && linktbl->links[0]) {
+        snprintf(diag_dir->f_url, sizeof(diag_dir->f_url), "%s",
+                 linktbl->links[0]->f_url);
+    }
+
+    LinkTable *diag_tbl = CALLOC(1, sizeof(LinkTable));
+    diag_tbl->size = 0;
+    diag_tbl->index_time = linktbl->index_time;
+    diag_tbl->refcount = 1;
+    diag_tbl->parent_tbl = linktbl;
+    diag_tbl->parent_link = diag_dir;
+
+    Link *diag_head = Link_new(".httpdirfs", LINK_HEAD);
+    diag_head->is_virtual = 1;
+    diag_head->time = linktbl->index_time;
+    if (linktbl->size > 0 && linktbl->links && linktbl->links[0]) {
+        snprintf(diag_head->f_url, sizeof(diag_head->f_url), "%s",
+                 linktbl->links[0]->f_url);
+    }
+    LinkTable_add(diag_tbl, diag_head);
+
+    Link *content_link = Link_new("CONTENT", LINK_FILE);
+    content_link->is_virtual = 1;
+    content_link->time = linktbl->index_time;
+    content_link->content_length = content_len;
+    if (content && content_len > 0) {
+        content_link->virtual_content = CALLOC(1, content_len + 1);
+        memcpy(content_link->virtual_content, content, content_len);
+        content_link->virtual_content[content_len] = '\0';
+    }
+    LinkTable_add(diag_tbl, content_link);
+
+    Link *header_link = Link_new("HEADER", LINK_FILE);
+    header_link->is_virtual = 1;
+    header_link->time = linktbl->index_time;
+    header_link->content_length = header_len;
+    if (header && header_len > 0) {
+        header_link->virtual_content = CALLOC(1, header_len + 1);
+        memcpy(header_link->virtual_content, header, header_len);
+        header_link->virtual_content[header_len] = '\0';
+    }
+    LinkTable_add(diag_tbl, header_link);
+
+    diag_dir->next_table = diag_tbl;
+    LinkTable_add(linktbl, diag_dir);
 }
 
 static LinkType linkname_to_LinkType(const char *linkname)
@@ -1161,6 +1227,7 @@ void LinkTable_free(LinkTable *linktbl)
                 continue;
             }
             LinkTable_free(entry->next_table);
+            FREE(entry->virtual_content);
             FREE(entry);
         }
         FREE(linktbl->links);
@@ -1299,8 +1366,10 @@ LinkTable *LinkTable_new(const char *url)
         /*
          * start downloading the base URL
          */
-        TransferStruct ts = Link_download_full(linktbl->links[0]);
+        TransferStruct header_ts = {0};
+        TransferStruct ts = Link_download_full(linktbl->links[0], &header_ts);
         if (ts.curr_size == 0) {
+            FREE(header_ts.data);
             LinkTable_free(linktbl);
             return NULL;
         }
@@ -1309,10 +1378,13 @@ LinkTable *LinkTable_new(const char *url)
          * Otherwise parsed the received data
          */
         LinkTable_parse_html(linktbl, url, ts.data);
-        FREE(ts.data);
-
 
         LinkTable_fill(linktbl);
+
+        LinkTable_add_diagnostics(linktbl, ts.data, ts.curr_size,
+                                  header_ts.data, header_ts.curr_size);
+        FREE(ts.data);
+        FREE(header_ts.data);
 
         /*
          * Save the link table
@@ -1335,6 +1407,12 @@ static void LinkTable_disk_delete(const char *dirn)
         lprintf(error, "unlink(%s): %s\n", path, strerror(errno));
     }
     FREE(path);
+    char *cpath = path_append(metadirn, ".httpdirfs_content");
+    unlink(cpath);
+    FREE(cpath);
+    char *hpath = path_append(metadirn, ".httpdirfs_header");
+    unlink(hpath);
+    FREE(hpath);
     FREE(metadirn);
 }
 
@@ -1351,20 +1429,33 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
     char *metadirn = path_append(META_DIR, dirn);
     char *path = path_append(metadirn, ".LinkTable");
     FILE *fp = fopen(path, "w");
-    FREE(metadirn);
 
     if (!fp) {
         lprintf(error, "fopen(%s): %s\n", path, strerror(errno));
         FREE(path);
+        FREE(metadirn);
         return -1;
     }
 
-    if (fwrite(&linktbl->size, sizeof(int), 1, fp) != 1
+    Link *diag_dir = NULL;
+    int saved_size = 0;
+    for (int i = 0; i < linktbl->size; i++) {
+        if (!strcmp(linktbl->links[i]->linkname, ".httpdirfs")) {
+            diag_dir = linktbl->links[i];
+        } else {
+            saved_size++;
+        }
+    }
+
+    if (fwrite(&saved_size, sizeof(int), 1, fp) != 1
         || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
         lprintf(error, "Failed to save the header of %s!\n", path);
     }
     FREE(path);
     for (int i = 0; i < linktbl->size; i++) {
+        if (!strcmp(linktbl->links[i]->linkname, ".httpdirfs")) {
+            continue;
+        }
         ignore_value(
             fwrite(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp));
         ignore_value(
@@ -1387,6 +1478,42 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
         res = -1;
     }
 
+    if (diag_dir && diag_dir->next_table) {
+        LinkTable *dtbl = diag_dir->next_table;
+        const char *cdata = NULL;
+        size_t content_len = 0;
+        const char *hdata = NULL;
+        size_t header_len = 0;
+        for (int i = 1; i < dtbl->size; i++) {
+            if (!strcmp(dtbl->links[i]->linkname, "CONTENT")) {
+                cdata = dtbl->links[i]->virtual_content;
+                content_len = dtbl->links[i]->content_length;
+            } else if (!strcmp(dtbl->links[i]->linkname, "HEADER")) {
+                hdata = dtbl->links[i]->virtual_content;
+                header_len = dtbl->links[i]->content_length;
+            }
+        }
+        char *cpath = path_append(metadirn, ".httpdirfs_content");
+        char *hpath = path_append(metadirn, ".httpdirfs_header");
+        FILE *cfp = fopen(cpath, "wb");
+        if (cfp) {
+            if (cdata && content_len > 0) {
+                ignore_value(fwrite(cdata, 1, content_len, cfp));
+            }
+            fclose(cfp);
+        }
+        FILE *hfp = fopen(hpath, "wb");
+        if (hfp) {
+            if (hdata && header_len > 0) {
+                ignore_value(fwrite(hdata, 1, header_len, hfp));
+            }
+            fclose(hfp);
+        }
+        FREE(cpath);
+        FREE(hpath);
+    }
+
+    FREE(metadirn);
     return res;
 }
 
@@ -1395,10 +1522,10 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     char *metadirn = path_append(META_DIR, dirn);
     char *path = path_append(metadirn, ".LinkTable");
     FILE *fp = fopen(path, "r");
-    FREE(metadirn);
 
     if (!fp) {
         FREE(path);
+        FREE(metadirn);
         return NULL;
     }
 
@@ -1411,6 +1538,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
         FREE(path);
+        FREE(metadirn);
         return NULL;
     }
 
@@ -1422,6 +1550,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
         FREE(path);
+        FREE(metadirn);
         return NULL;
     }
     long file_size = ftell(fp);
@@ -1432,6 +1561,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
         FREE(path);
+        FREE(metadirn);
         return NULL;
     }
 
@@ -1444,6 +1574,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
         LinkTable_free(linktbl);
         LinkTable_disk_delete(dirn);
         FREE(path);
+        FREE(metadirn);
         return NULL;
     }
 
@@ -1468,6 +1599,7 @@ LinkTable *LinkTable_disk_open(const char *dirn)
             LinkTable_free(linktbl);
             LinkTable_disk_delete(dirn);
             FREE(path);
+            FREE(metadirn);
             return NULL;
         }
     }
@@ -1476,6 +1608,46 @@ LinkTable *LinkTable_disk_open(const char *dirn)
     }
 
     FREE(path);
+
+    char *cpath = path_append(metadirn, ".httpdirfs_content");
+    char *hpath = path_append(metadirn, ".httpdirfs_header");
+    size_t content_len = 0;
+    size_t header_len = 0;
+    char *cdata = NULL;
+    char *hdata = NULL;
+
+    FILE *cfp = fopen(cpath, "rb");
+    if (cfp) {
+        if (fseek(cfp, 0, SEEK_END) == 0) {
+            long c_sz = ftell(cfp);
+            if (c_sz >= 0 && fseek(cfp, 0, SEEK_SET) == 0) {
+                cdata = CALLOC(1, (size_t)c_sz + 1);
+                content_len = fread(cdata, 1, (size_t)c_sz, cfp);
+                cdata[content_len] = '\0';
+            }
+        }
+        fclose(cfp);
+    }
+
+    FILE *hfp = fopen(hpath, "rb");
+    if (hfp) {
+        if (fseek(hfp, 0, SEEK_END) == 0) {
+            long h_sz = ftell(hfp);
+            if (h_sz >= 0 && fseek(hfp, 0, SEEK_SET) == 0) {
+                hdata = CALLOC(1, (size_t)h_sz + 1);
+                header_len = fread(hdata, 1, (size_t)h_sz, hfp);
+                hdata[header_len] = '\0';
+            }
+        }
+        fclose(hfp);
+    }
+
+    LinkTable_add_diagnostics(linktbl, cdata, content_len, hdata, header_len);
+    FREE(cdata);
+    FREE(hdata);
+    FREE(cpath);
+    FREE(hpath);
+    FREE(metadirn);
     return linktbl;
 }
 
@@ -1699,7 +1871,7 @@ Link *path_to_Link(const char *path)
     return link;
 }
 
-TransferStruct Link_download_full(Link *link)
+TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
 {
     char *url = link->f_url;
     CURL *curl = Link_to_curl(link);
@@ -1708,11 +1880,21 @@ TransferStruct Link_download_full(Link *link)
     ts.type = DATA;
     ts.transferring = 1;
 
+    TransferStruct header_local = {0};
+    TransferStruct *header_ptr = header_out ? header_out : &header_local;
+    header_ptr->curr_size = 0;
+    header_ptr->data = NULL;
+    header_ptr->type = DATA;
+
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&ts);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
     ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)&ts);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header_ptr);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
@@ -1730,6 +1912,9 @@ TransferStruct Link_download_full(Link *link)
         ts.curr_size = 0;
         ts.transferring = 1;
 
+        FREE(header_ptr->data);
+        header_ptr->curr_size = 0;
+
         transfer_blocking(curl);
         ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (ret) {
@@ -1744,6 +1929,9 @@ TransferStruct Link_download_full(Link *link)
                     http_resp);
             ts.curr_size = 0;
             free(ts.data); /* not FREE(); can be NULL on error path! */
+            if (!header_out) {
+                free(header_ptr->data);
+            }
             curl_easy_cleanup(curl);
             return ts;
         }
@@ -1752,6 +1940,9 @@ TransferStruct Link_download_full(Link *link)
     ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    if (!header_out) {
+        FREE(header_local.data);
     }
     curl_easy_cleanup(curl);
     return ts;
@@ -1955,7 +2146,22 @@ long path_download(const char *path, char *output_buf, size_t req_size,
         return -ENOENT;
     }
 
-    long res = Link_download(link, output_buf, req_size, offset, NULL);
+    long res;
+    if (link->is_virtual) {
+        if (offset < 0 || (size_t)offset >= link->content_length
+            || !link->virtual_content || req_size == 0) {
+            res = 0;
+        } else {
+            size_t remaining = link->content_length - (size_t)offset;
+            if (req_size > remaining) {
+                req_size = remaining;
+            }
+            memcpy(output_buf, link->virtual_content + offset, req_size);
+            res = (long)req_size;
+        }
+    } else {
+        res = Link_download(link, output_buf, req_size, offset, NULL);
+    }
     LinkTable_unref(link->parent_table);
     return res;
 }

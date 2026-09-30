@@ -149,6 +149,11 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
         LinkTable_unref(link->parent_table);
         return -EROFS;
     }
+    if (link->is_virtual) {
+        fi->fh = BYPASS_FH;
+        LinkTable_unref(link->parent_table);
+        return 0;
+    }
     if (CACHE_SYSTEM_INIT) {
         if (link->content_length == 0) {
             fi->fh = 0; /* valid empty file: bypass cache creation */
@@ -195,7 +200,10 @@ static int fs_releasedir(const char *path, struct fuse_file_info *fi)
 {
     LinkTable *linktbl = (LinkTable *)fi->fh;
     if (linktbl) {
-        if (strcmp(path, "/") != 0) {
+        int is_diag
+            = (linktbl->parent_link
+               && !strcmp(linktbl->parent_link->linkname, ".httpdirfs"));
+        if (strcmp(path, "/") != 0 && !is_diag) {
             LinkTable_mark_orphaned(linktbl);
         }
         LinkTable_unref(linktbl);
