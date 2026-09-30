@@ -411,7 +411,7 @@ LinkTable *LinkSystem_init(const char *url)
      * ----------- Create the root link table --------------
      */
     if (CONFIG.mode == NORMAL) {
-        ROOT_LINK_TBL = LinkTable_new(url);
+        ROOT_LINK_TBL = LinkTable_new(url, NULL);
     } else if (CONFIG.mode == SINGLE) {
         ROOT_LINK_TBL = single_LinkTable_new(url);
     } else if (CONFIG.mode == SONIC) {
@@ -962,6 +962,95 @@ char *external_url_to_filename(const char *url)
     return result;
 }
 
+static void normalize_url_path(char *url)
+{
+    if (!url) {
+        return;
+    }
+    char *scheme_sep = strstr(url, "://");
+    if (!scheme_sep) {
+        return;
+    }
+    char *path_start = strchr(scheme_sep + 3, '/');
+    if (!path_start) {
+        return;
+    }
+
+    /* Fast check if any dot segments exist */
+    if (!strstr(path_start, "/.") && strcmp(path_start, "/.") != 0
+        && strcmp(path_start, "/..") != 0) {
+        return;
+    }
+
+    char *qf = strpbrk(path_start, "?#");
+    char saved_qf_char = '\0';
+    if (qf) {
+        saved_qf_char = *qf;
+        *qf = '\0';
+    }
+
+    size_t orig_len = strlen(path_start);
+    int trailing_slash = (orig_len > 0 && path_start[orig_len - 1] == '/');
+
+    const char *seg_start[256];
+    size_t seg_len[256];
+    int nsegs = 0;
+
+    const char *p = path_start;
+    while (*p) {
+        while (*p == '/') {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+        const char *next = strchr(p, '/');
+        size_t len = next ? (size_t)(next - p) : strlen(p);
+
+        if (len == 1 && p[0] == '.') {
+            if (!next) {
+                trailing_slash = 1;
+            }
+        } else if (len == 2 && p[0] == '.' && p[1] == '.') {
+            if (nsegs > 0) {
+                nsegs--;
+            }
+            if (!next) {
+                trailing_slash = 1;
+            }
+        } else {
+            if (nsegs < 256) {
+                seg_start[nsegs] = p;
+                seg_len[nsegs] = len;
+                nsegs++;
+            }
+        }
+
+        if (next) {
+            p = next;
+        } else {
+            break;
+        }
+    }
+
+    char *dest = path_start;
+    *dest++ = '/';
+    for (int i = 0; i < nsegs; i++) {
+        memmove(dest, seg_start[i], seg_len[i]);
+        dest += seg_len[i];
+        if (i < nsegs - 1 || trailing_slash) {
+            *dest++ = '/';
+        }
+    }
+    *dest = '\0';
+
+    if (qf) {
+        *qf = saved_qf_char;
+        size_t qf_len = strlen(qf);
+        memmove(dest, qf, qf_len + 1);
+    }
+}
+
 int resolve_target_url(const char *page_url, const char *raw_href,
                        char *out_url, size_t out_size)
 {
@@ -1081,6 +1170,7 @@ int resolve_target_url(const char *page_url, const char *raw_href,
         }
     }
     out_url[out_pos] = '\0';
+    normalize_url_path(out_url);
     return 1;
 }
 
@@ -1444,6 +1534,89 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
     }
 }
 
+static int url_matches_head_link(const char *target_url, const char *head_url)
+{
+    if (!target_url || !head_url) {
+        return 0;
+    }
+
+    char *unescaped_target = curl_easy_unescape(NULL, target_url, 0, NULL);
+    char *unescaped_head = curl_easy_unescape(NULL, head_url, 0, NULL);
+    const char *tgt = unescaped_target ? unescaped_target : target_url;
+    const char *head = unescaped_head ? unescaped_head : head_url;
+
+    const char *tgt_end = tgt + strlen(tgt);
+    const char *head_end = head + strlen(head);
+
+    /* If head_url has no query string, ignore query string on target_url */
+    if (!strchr(head, '?')) {
+        const char *q = strchr(tgt, '?');
+        if (q) {
+            tgt_end = q;
+        }
+    }
+
+    /* Strip trailing slashes, but keep root slash after scheme://host */
+    const char *tgt_slash = strstr(tgt, "://");
+    const char *tgt_min = tgt_slash ? tgt_slash + 3 : tgt;
+    const char *head_slash = strstr(head, "://");
+    const char *head_min = head_slash ? head_slash + 3 : head;
+
+    while (tgt_end > tgt_min && *(tgt_end - 1) == '/') {
+        tgt_end--;
+    }
+    while (head_end > head_min && *(head_end - 1) == '/') {
+        head_end--;
+    }
+
+    size_t tgt_len = (size_t)(tgt_end - tgt);
+    size_t head_len = (size_t)(head_end - head);
+
+    int match = (tgt_len == head_len && strncmp(tgt, head, tgt_len) == 0);
+
+    if (unescaped_target) {
+        curl_free(unescaped_target);
+    }
+    if (unescaped_head) {
+        curl_free(unescaped_head);
+    }
+    return match;
+}
+
+int is_ancestor_head_link(const LinkTable *linktbl, const char *target_url)
+{
+    if (!linktbl || !target_url || target_url[0] == '\0') {
+        return 0;
+    }
+
+    /* Check current folder's head link (prevent self-loops) */
+    if (linktbl->links && linktbl->size > 0 && linktbl->links[0]) {
+        if (url_matches_head_link(target_url, linktbl->links[0]->f_url)) {
+            return 1;
+        }
+    }
+
+    /* Check ancestor tables in parent_tbl chain */
+    for (const LinkTable *cur = linktbl->parent_tbl; cur != NULL;
+         cur = cur->parent_tbl) {
+        if (cur->links && cur->size > 0 && cur->links[0]) {
+            if (url_matches_head_link(target_url, cur->links[0]->f_url)) {
+                return 1;
+            }
+        }
+    }
+
+    /* Check ROOT_LINK_TBL explicitly as safety fallback */
+    if (ROOT_LINK_TBL && ROOT_LINK_TBL != linktbl && ROOT_LINK_TBL->links
+        && ROOT_LINK_TBL->size > 0 && ROOT_LINK_TBL->links[0]) {
+        if (url_matches_head_link(target_url, ROOT_LINK_TBL->links[0]->f_url)) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 static void process_anchor_node(const char *url, const GumboNode *node,
                                 LinkTable *linktbl, LinkHashSet *set,
                                 LinkHashSet *target_url_set)
@@ -1460,9 +1633,15 @@ static void process_anchor_node(const char *url, const GumboNode *node,
         return;
     }
 
+    char target_url[PATH_MAX + 1];
+    int target_url_resolved
+        = resolve_target_url(url, raw_href, target_url, sizeof(target_url));
+    if (target_url_resolved && is_ancestor_head_link(linktbl, target_url)) {
+        return;
+    }
+
     if (CONFIG.advanced_parsing_mode) {
-        char target_url[PATH_MAX + 1];
-        if (resolve_target_url(url, raw_href, target_url, sizeof(target_url))) {
+        if (target_url_resolved) {
             int allow = 1;
             if (CONFIG.same_origin_only) {
                 const char *page_url = NULL;
@@ -1533,9 +1712,7 @@ static void process_anchor_node(const char *url, const GumboNode *node,
             /* First-wins: skip if a link with this name already exists */
             if (LinkHashSet_add(set, filename)) {
                 Link *link = Link_new(filename, type);
-                char target_url[PATH_MAX + 1];
-                if (resolve_target_url(url, raw_href, target_url,
-                                       sizeof(target_url))) {
+                if (target_url_resolved) {
                     snprintf(link->f_url, sizeof(link->f_url), "%s",
                              target_url);
                 } else {
@@ -1890,7 +2067,7 @@ char *url_to_cache_path(const char *url)
     return unescaped_path;
 }
 
-LinkTable *LinkTable_new(const char *url)
+LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
 {
     char *unescaped_path = url_to_cache_path(url);
     LinkTable *linktbl = NULL;
@@ -1917,6 +2094,7 @@ LinkTable *LinkTable_new(const char *url)
                 LinkTable_free(disk_linktbl);
             } else {
                 linktbl = disk_linktbl;
+                linktbl->parent_tbl = parent_tbl;
             }
         }
     }
@@ -1927,6 +2105,7 @@ LinkTable *LinkTable_new(const char *url)
      */
     if (!linktbl) {
         linktbl = LinkTable_alloc(url);
+        linktbl->parent_tbl = parent_tbl;
         linktbl->index_time = time(NULL);
 
         /*
@@ -2246,7 +2425,7 @@ LinkTable *path_to_LinkTable(const char *path)
     if (!next_table) {
         LinkTable *new_table = NULL;
         if (CONFIG.mode == NORMAL) {
-            new_table = LinkTable_new(tmp_link->f_url);
+            new_table = LinkTable_new(tmp_link->f_url, tmp_link->parent_table);
         } else if (CONFIG.mode == SINGLE) {
             new_table = single_LinkTable_new(tmp_link->f_url);
         } else if (CONFIG.mode == SONIC) {
@@ -2362,7 +2541,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                     PTHREAD_MUTEX_UNLOCK(&link_lock);
                     LinkTable *new_table = NULL;
                     if (CONFIG.mode == NORMAL) {
-                        new_table = LinkTable_new(linktbl->links[i]->f_url);
+                        new_table
+                            = LinkTable_new(linktbl->links[i]->f_url, linktbl);
                     } else if (CONFIG.mode == SONIC) {
                         if (!CONFIG.sonic_id3) {
                             new_table = sonic_LinkTable_new_index(

@@ -121,7 +121,7 @@ void Link_set_file_stat(Link *this_link, CURL *curl);
 /**
  * \brief create a new LinkTable
  */
-LinkTable *LinkTable_new(const char *url);
+LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl);
 
 /**
  * \brief download a path
@@ -331,4 +331,11 @@ int is_html_content_type(const char *ct);
 LinkType Link_classify_response(LinkType current_type, long http_resp,
                                 curl_off_t cl, const char *content_type,
                                 size_t *content_len_out);
+
+/**
+ * \brief Check if target_url matches the head link of the current table
+ * or any ancestor LinkTable in its parent chain up to root.
+ * \return 1 if target_url matches an ancestor head link, 0 otherwise.
+ */
+int is_ancestor_head_link(const LinkTable *linktbl, const char *target_url);
 #endif

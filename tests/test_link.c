@@ -954,6 +954,24 @@ void test_resolve_target_url(void)
     TEST_ASSERT_EQUAL_STRING("https://example.com/browse/1001/"
                              "Sample%20Archive%20-%20Collection%201.0.iso/001",
                              out);
+
+    // 11. Dot segment normalization (RFC 3986 5.2.4)
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/A/B/C/",
+                                                "../../", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/A/", out);
+
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/A/B/C/",
+                                                "../", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/A/B/", out);
+
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/A/B/C/",
+                                                ".", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/A/B/C/", out);
+
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url("https://example.com/A/B/",
+                                                "sub/../file.txt", out,
+                                                sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/A/B/file.txt", out);
 }
 
 void test_extract_anchor_text(void)
@@ -1264,6 +1282,133 @@ void test_advanced_parsing_same_origin_only(void)
     CONFIG.same_origin_only = 0;
 }
 
+void test_is_ancestor_head_link_hierarchy(void)
+{
+    TEST_ASSERT_EQUAL_INT(
+        0, is_ancestor_head_link(NULL, "https://example.com/A/"));
+    LinkTable *tbl_a = LinkTable_alloc("https://example.com/A/");
+    TEST_ASSERT_EQUAL_INT(0, is_ancestor_head_link(tbl_a, NULL));
+    TEST_ASSERT_EQUAL_INT(0, is_ancestor_head_link(tbl_a, ""));
+
+    LinkTable *tbl_b = LinkTable_alloc("https://example.com/A/B/");
+    tbl_b->parent_tbl = tbl_a;
+
+    LinkTable *tbl_c = LinkTable_alloc("https://example.com/A/B/C/");
+    tbl_c->parent_tbl = tbl_b;
+
+    // Self matches
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A/B/C/"));
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A/B/C"));
+
+    // Parent B matches
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A/B/"));
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A/B"));
+
+    // Grandparent A matches
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A/"));
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A"));
+
+    // With query params (if parent has no query, candidate query is ignored)
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_c, "https://example.com/A/?sort=name"));
+
+    // Encoded space comparison
+    LinkTable *tbl_space
+        = LinkTable_alloc("https://example.com/A/Folder%20Name/");
+    tbl_space->parent_tbl = tbl_a;
+    TEST_ASSERT_EQUAL_INT(
+        1,
+        is_ancestor_head_link(tbl_space, "https://example.com/A/Folder Name/"));
+    TEST_ASSERT_EQUAL_INT(
+        1, is_ancestor_head_link(tbl_space,
+                                 "https://example.com/A/Folder%20Name"));
+
+    // Child does not match
+    TEST_ASSERT_EQUAL_INT(
+        0, is_ancestor_head_link(tbl_c, "https://example.com/A/B/C/D/"));
+    TEST_ASSERT_EQUAL_INT(
+        0, is_ancestor_head_link(tbl_c, "https://example.com/A/B/C/file.txt"));
+    // Unrelated does not match
+    TEST_ASSERT_EQUAL_INT(
+        0, is_ancestor_head_link(tbl_c, "https://example.com/other/"));
+
+    LinkTable_free(tbl_space);
+    LinkTable_free(tbl_c);
+    LinkTable_free(tbl_b);
+    LinkTable_free(tbl_a);
+}
+
+void test_discard_ancestor_links_in_parse_html(void)
+{
+    CONFIG.advanced_parsing_mode = 1;
+
+    LinkTable *tbl_a = LinkTable_alloc("https://example.com/A/");
+    LinkTable *tbl_b = LinkTable_alloc("https://example.com/A/B/");
+    tbl_b->parent_tbl = tbl_a;
+    LinkTable *tbl_c = LinkTable_alloc("https://example.com/A/B/C/");
+    tbl_c->parent_tbl = tbl_b;
+
+    const char *html = "<html><body>"
+                       "<a href='/A'>Home A</a>"
+                       "<a href='/A/B/'>Parent B</a>"
+                       "<a href='/A/B/C/'>Current C</a>"
+                       "<a href='../../'>DotDot to A</a>"
+                       "<a href='../'>Dot to B</a>"
+                       "<a href='.'>Dot to C</a>"
+                       "<a href='/A/B/C/child_dir/'>Valid Child</a>"
+                       "<a href='/A/B/C/file.iso'>file.iso</a>"
+                       "</body></html>";
+
+    LinkTable_parse_html(tbl_c, "https://example.com/A/B/C/", html);
+
+    // tbl_c should contain:
+    // index 0: head link "/"
+    // index 1: "Valid Child-child_dir"
+    // index 2: "file.iso"
+    // All links pointing to A, B, or C (both absolute and relative) must be
+    // discarded!
+    TEST_ASSERT_EQUAL_INT(3, tbl_c->size);
+    TEST_ASSERT_EQUAL_STRING("Valid Child-child_dir",
+                             tbl_c->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("file.iso", tbl_c->links[2]->linkname);
+
+    LinkTable_free(tbl_c);
+    LinkTable_free(tbl_b);
+    LinkTable_free(tbl_a);
+    CONFIG.advanced_parsing_mode = 0;
+}
+
+void test_discard_ancestor_links_normal_mode(void)
+{
+    CONFIG.advanced_parsing_mode = 0;
+
+    LinkTable *tbl_a = LinkTable_alloc("https://example.com/A/");
+    LinkTable *tbl_b = LinkTable_alloc("https://example.com/A/B/");
+    tbl_b->parent_tbl = tbl_a;
+
+    const char *html = "<html><body>"
+                       "<a href='/A/'>Parent A</a>"
+                       "<a href='../'>Parent A via dotdot</a>"
+                       "<a href='child/'>Child</a>"
+                       "</body></html>";
+
+    LinkTable_parse_html(tbl_b, "https://example.com/A/B/", html);
+
+    // Links to parent A must be discarded!
+    // tbl_b should only have head link and child
+    TEST_ASSERT_EQUAL_INT(2, tbl_b->size);
+    TEST_ASSERT_EQUAL_STRING("child", tbl_b->links[1]->linkname);
+
+    LinkTable_free(tbl_b);
+    LinkTable_free(tbl_a);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1350,6 +1495,9 @@ int main(void)
     RUN_TEST(test_Link_classify_response);
     RUN_TEST(test_advanced_parsing_HTML_to_LinkTable);
     RUN_TEST(test_advanced_parsing_same_origin_only);
+    RUN_TEST(test_is_ancestor_head_link_hierarchy);
+    RUN_TEST(test_discard_ancestor_links_in_parse_html);
+    RUN_TEST(test_discard_ancestor_links_normal_mode);
 
     return UNITY_END();
 }
