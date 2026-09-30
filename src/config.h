@@ -118,6 +118,8 @@ typedef struct {
     int invalid_refresh;
     /** \brief Include external (cross-origin) links from directory listings */
     int external_links;
+    /** \brief Ignore intra-page HTML anchor/fragment links starting with '#' */
+    int ignore_anchors;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
     int cache_enabled;

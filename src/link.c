@@ -59,7 +59,6 @@ int ROOT_LINK_OFFSET = 0;
  * effectively gives LinkTable generation priority over file transfer.
  */
 static pthread_mutex_t link_lock = PTHREAD_MUTEX_INITIALIZER;
-static void make_link_relative(const char *page_url, char *link_url);
 
 /**
  * \brief create a new Link
@@ -907,8 +906,10 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     if (node->v.element.tag == GUMBO_TAG_A && href) {
         const char *raw_href = href->value;
 
-        if (CONFIG.external_links && is_external_url(raw_href)
-            && is_cross_origin(url, raw_href)) {
+        if (CONFIG.ignore_anchors && raw_href[0] == '#') {
+            /* Skip intra-page HTML anchor / fragment links when requested */
+        } else if (CONFIG.external_links && is_external_url(raw_href)
+                   && is_cross_origin(url, raw_href)) {
             /*
              * -------- External (cross-origin) link handling --------
              * Extract the filename from the external URL and create a
@@ -1959,8 +1960,26 @@ long path_download(const char *path, char *output_buf, size_t req_size,
     return res;
 }
 
-static void make_link_relative(const char *page_url, char *link_url)
+static int hex_char_to_val(char c)
 {
+    if (c >= '0' && c <= '9') {
+        return c - '0';
+    }
+    if (c >= 'a' && c <= 'f') {
+        return c - 'a' + 10;
+    }
+    if (c >= 'A' && c <= 'F') {
+        return c - 'A' + 10;
+    }
+    return -1;
+}
+
+void make_link_relative(const char *page_url, char *link_url)
+{
+    if (!page_url || !link_url) {
+        return;
+    }
+
     /*
       Some servers make the links to subdirectories absolute (in URI terms:
       path-absolute), but our code expects them to be relative (in URI terms:
@@ -2013,22 +2032,56 @@ static void make_link_relative(const char *page_url, char *link_url)
             return;
         }
     }
-    /* The page URL is no longer the full page_url, it's just the part after
-       the host name. */
-    /* The link URL should start with the page URL. */
-    if (strstr(link_url, page_url) != link_url) {
+
+    /* Unescape the page path prefix so we can match against link_url
+       regardless of whether spaces/special characters are percent-encoded
+       or raw in either URL. */
+    char *unescaped_url = curl_easy_unescape(NULL, page_url, 0, NULL);
+    const char *url = unescaped_url ? unescaped_url : page_url;
+    size_t url_len = strlen(url);
+
+    const char *link_ptr = link_url;
+    int matched = 1;
+    for (size_t i = 0; i < url_len; i++) {
+        unsigned char expected = (unsigned char)url[i];
+        if (link_ptr[0] == '%' && isxdigit((unsigned char)link_ptr[1])
+            && isxdigit((unsigned char)link_ptr[2])) {
+            int hex_val = (hex_char_to_val(link_ptr[1]) << 4)
+                          | hex_char_to_val(link_ptr[2]);
+            if (hex_val == expected) {
+                link_ptr += 3;
+                continue;
+            }
+        }
+        if ((unsigned char)link_ptr[0] == expected) {
+            link_ptr += 1;
+            continue;
+        }
+        matched = 0;
+        break;
+    }
+
+    if (matched) {
+        if (url_len > 0 && url[url_len - 1] != '/') {
+            if (*link_ptr != '/') {
+                matched = 0;
+            } else {
+                link_ptr++;
+            }
+        }
+    }
+
+    if (unescaped_url) {
+        curl_free(unescaped_url);
+    }
+
+    if (!matched) {
         return;
     }
-    int skip_len = strlen(page_url);
-    if (page_url[skip_len - 1] != '/') {
-        if (page_url[skip_len] != '/') {
-            /* Um, I'm not sure what to do here, so give up. */
-            return;
-        }
-        skip_len++;
-    }
-    /* Move the part of the link URL after the parent page's pat to
+
+    /* Move the part of the link URL after the parent page's path to
        the beginning of the link URL string, discarding what came
        before it. */
+    size_t skip_len = (size_t)(link_ptr - link_url);
     memmove(link_url, link_url + skip_len, strlen(link_url) - skip_len + 1);
 }

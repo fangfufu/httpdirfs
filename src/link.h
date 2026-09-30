@@ -272,4 +272,11 @@ char *external_url_to_filename(const char *url);
  * \note The caller must free the returned string with FREE().
  */
 char *url_to_cache_path(const char *url);
+
+/**
+ * \brief Convert a link URL to be relative to the parent page URL.
+ * \param page_url The URL of the parent directory page.
+ * \param link_url The URL from the href attribute to convert in-place.
+ */
+void make_link_relative(const char *page_url, char *link_url);
 #endif

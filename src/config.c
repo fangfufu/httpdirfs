@@ -79,6 +79,10 @@ void Config_init(void)
 
     CONFIG.invalid_refresh = 0;
 
+    CONFIG.external_links = 0;
+
+    CONFIG.ignore_anchors = 0;
+
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 
