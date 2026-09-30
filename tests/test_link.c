@@ -1108,6 +1108,40 @@ void test_generate_collision_free_name(void)
                              name_dl3_suffixed);
     FREE(name_dl3_suffixed);
 
+    // Preceding dots in anchor stripped to avoid hidden files/folders
+    char *segs_dots[] = {"browse", "38600"};
+    char *name_dots1
+        = generate_collision_free_name(set, "...002", segs_dots, 2);
+    TEST_ASSERT_EQUAL_STRING("002-38600", name_dots1);
+    FREE(name_dots1);
+
+    char *name_dots2
+        = generate_collision_free_name(set, ".hidden", segs_dots, 2);
+    TEST_ASSERT_EQUAL_STRING("hidden-38600", name_dots2);
+    FREE(name_dots2);
+
+    char *name_dots3
+        = generate_collision_free_name(set, "...  Folder", segs_dots, 2);
+    TEST_ASSERT_EQUAL_STRING("Folder-38600", name_dots3);
+    FREE(name_dots3);
+
+    // Anchor consisting only of dots: omitted, fallback to path_part
+    char *name_dots4 = generate_collision_free_name(set, "...", segs_dots, 2);
+    TEST_ASSERT_EQUAL_STRING("38600", name_dots4);
+    FREE(name_dots4);
+
+    // Interleaved dots and spaces: both stripped simultaneously
+    char *name_dots5
+        = generate_collision_free_name(set, ". . . Mixed", segs_dots, 2);
+    TEST_ASSERT_EQUAL_STRING("Mixed-38600", name_dots5);
+    FREE(name_dots5);
+
+    char *segs_dots2[] = {"browse", "38601"};
+    char *name_dots6
+        = generate_collision_free_name(set, " . . .", segs_dots2, 2);
+    TEST_ASSERT_EQUAL_STRING("38601", name_dots6);
+    FREE(name_dots6);
+
     LinkHashSet_free(set);
 }
 

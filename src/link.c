@@ -1379,13 +1379,22 @@ char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
         return NULL;
     }
 
+    /* Strip preceding dots and whitespace simultaneously so that prepending
+     * the anchor will not leave leading dots that cause items to be hidden */
+    const char *clean_anchor = anchor;
+    if (clean_anchor) {
+        while (*clean_anchor == '.' || isspace((unsigned char)*clean_anchor)) {
+            clean_anchor++;
+        }
+    }
+
     char candidate[NAME_MAX + 1];
 
     if (num_segments <= 0) {
-        if (!anchor || *anchor == '\0') {
+        if (!clean_anchor || *clean_anchor == '\0') {
             return NULL;
         }
-        snprintf(candidate, sizeof(candidate), "%s", anchor);
+        snprintf(candidate, sizeof(candidate), "%s", clean_anchor);
         if (LinkHashSet_add(set, candidate)) {
             return STRDUP(candidate);
         }
@@ -1429,16 +1438,17 @@ char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
         }
 
         const char *last_seg = segments[num_segments - 1];
-        int omit_anchor = (!anchor || *anchor == '\0');
-        if (i == 1 && anchor && *anchor != '\0'
-            && strcasecmp(anchor, last_seg) == 0) {
+        int omit_anchor = (!clean_anchor || *clean_anchor == '\0');
+        if (i == 1 && clean_anchor && *clean_anchor != '\0'
+            && strcasecmp(clean_anchor, last_seg) == 0) {
             omit_anchor = 1;
         }
 
         if (omit_anchor) {
             snprintf(candidate, sizeof(candidate), "%s", path_part);
         } else {
-            snprintf(candidate, sizeof(candidate), "%s-%s", anchor, path_part);
+            snprintf(candidate, sizeof(candidate), "%s-%s", clean_anchor,
+                     path_part);
         }
 
         if (LinkHashSet_add(set, candidate)) {
