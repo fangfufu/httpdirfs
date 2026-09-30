@@ -21,7 +21,7 @@ set -euo pipefail
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HTTP_PORT="${HTTPDIRFS_TEST_PORT:-0}"
+HTTP_PORT="${HTTPDIRFS_TEST_PORT:-34521}"
 
 # Parse options
 MODE="all"
@@ -93,6 +93,11 @@ cleanup() {
         do_unmount "${CACHE_MOUNT_DIR}"
         sleep 1
     fi
+    if [[ -n "${ADV_MOUNT_DIR:-}" ]] \
+        && mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        do_unmount "${ADV_MOUNT_DIR}"
+        sleep 1
+    fi
 
     # Stop HTTP server
     if [[ -n "${HTTP_PID:-}" ]] && kill -0 "${HTTP_PID}" 2>/dev/null; then
@@ -143,11 +148,12 @@ WORK_DIR="$(mktemp -d /tmp/httpdirfs-integration-test.XXXXXX)"
 SERVE_DIR="${WORK_DIR}/serve"
 MOUNT_DIR="${WORK_DIR}/mnt"
 CACHE_MOUNT_DIR="${WORK_DIR}/cache_mnt"
+ADV_MOUNT_DIR="${WORK_DIR}/adv_mnt"
 CACHE_DIR="${WORK_DIR}/cache"
 MANIFEST="${SERVE_DIR}/manifest.json"
 MOUNT_TIMEOUT=15
 
-mkdir -p "${SERVE_DIR}" "${MOUNT_DIR}" "${CACHE_MOUNT_DIR}" "${CACHE_DIR}"
+mkdir -p "${SERVE_DIR}" "${MOUNT_DIR}" "${CACHE_MOUNT_DIR}" "${CACHE_DIR}" "${ADV_MOUNT_DIR}"
 
 log_info "Work directory: ${WORK_DIR}"
 log_info "httpdirfs binary: ${HTTPDIRFS_BIN}"
@@ -936,6 +942,278 @@ log_info "External HTTP server stopped."
         pass "cache size validation: min > max consistency check rejected (correct)"
     else
         fail "cache size validation: min > max inconsistency not rejected correctly: ${err_out}"
+    fi
+
+    # ── Test 8: Advanced Parsing Mode ───────────────────────────────────────────
+    log_info "Test group: Advanced Parsing Mode"
+
+    ADV_TEST_DIR="${SERVE_DIR}/adv_test_dir"
+    mkdir -p "${ADV_TEST_DIR}/nested"
+
+    # Extensionless file containing HTML for directory promotion
+    cat > "${ADV_TEST_DIR}/sub_page" <<'EOF'
+<!DOCTYPE html>
+<html>
+<body>
+<a href="nested_file.txt">Nested File</a>
+</body>
+</html>
+EOF
+
+    echo -n "nested file content" > "${ADV_TEST_DIR}/nested_file.txt"
+    echo -n "file1 content" > "${ADV_TEST_DIR}/file1.txt"
+    echo -n "file2 content" > "${ADV_TEST_DIR}/file2.txt"
+    echo -n "nested file2 content" > "${ADV_TEST_DIR}/nested/file2.txt"
+
+    # HTML larger than 1500 bytes for size limit testing
+    python3 -c "
+with open('${ADV_TEST_DIR}/large_page', 'w') as f:
+    f.write('<!DOCTYPE html><html><body>\n')
+    for i in range(100):
+        f.write(f'<a href=\"file1.txt\">Link item {i}</a>\n')
+    f.write('</body></html>\n')
+"
+
+    # Root index for adv_test_dir
+    cat > "${ADV_TEST_DIR}/index.html" <<EOF
+<!DOCTYPE html>
+<html>
+<body>
+<a href="sub_page">Disc Subdir</a>
+<a href="sub_page">Duplicate Link to Subdir</a>
+<a href="file1.txt">file1.txt</a>
+<a href="file2.txt">My File</a>
+<a href="nested/file2.txt">My File</a>
+<a href="large_page">Large HTML Dir</a>
+<a href="http://localhost:${ACTUAL_PORT}/adv_test_dir/file1.txt">Cross File</a>
+</body>
+</html>
+EOF
+
+    ADV_TEST_URL="${BASE_URL}adv_test_dir/"
+
+    # --- Test 8a: Mount with --advanced-parsing-mode ---
+    log_info "Subgroup: Advanced parsing mode enabled"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --advanced-parsing-mode \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    ADV_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (--advanced-parsing-mode) failed to mount"
+        kill "${ADV_PID}" 2>/dev/null || true
+    else
+        # Subdirectory promotion: sub_page has text/html content-type, should be a directory
+        if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "advanced_parsing: sub_page promoted to directory"
+        else
+            fail "advanced_parsing: sub_page was not promoted to directory"
+        fi
+
+        # Early deduplication: only one Disc Subdir-sub_page exists
+        sub_count=$(find "${ADV_MOUNT_DIR}" -maxdepth 1 -name "*sub_page" 2>/dev/null | wc -l)
+        if [[ "${sub_count}" -eq 1 ]]; then
+            pass "advanced_parsing: target URL deduplication (first anchor wins)"
+        else
+            fail "advanced_parsing: expected 1 sub_page link, found ${sub_count}"
+        fi
+
+        # Filename matching (case-insensitive): anchor "file1.txt" equals filename -> anchor omitted
+        if [[ -f "${ADV_MOUNT_DIR}/file1.txt" ]]; then
+            pass "advanced_parsing: anchor matching filename omitted (file1.txt present)"
+            content=$(cat "${ADV_MOUNT_DIR}/file1.txt" 2>/dev/null || true)
+            if [[ "${content}" == "file1 content" ]]; then
+                pass "advanced_parsing: file1.txt content OK"
+            else
+                fail "advanced_parsing: file1.txt content mismatch"
+            fi
+        else
+            fail "advanced_parsing: file1.txt missing"
+        fi
+
+        # Custom naming: "My File" + "file2.txt" -> "My File-file2.txt"
+        if [[ -f "${ADV_MOUNT_DIR}/My File-file2.txt" ]]; then
+            pass "advanced_parsing: custom naming (My File-file2.txt present)"
+        else
+            fail "advanced_parsing: My File-file2.txt missing"
+        fi
+
+        # Collision resolution via backward escalation: nested/file2.txt -> "My File-nested-file2.txt"
+        if [[ -f "${ADV_MOUNT_DIR}/My File-nested-file2.txt" ]]; then
+            pass "advanced_parsing: backward escalation collision resolution (My File-nested-file2.txt present)"
+            content=$(cat "${ADV_MOUNT_DIR}/My File-nested-file2.txt" 2>/dev/null || true)
+            if [[ "${content}" == "nested file2 content" ]]; then
+                pass "advanced_parsing: My File-nested-file2.txt content OK"
+            else
+                fail "advanced_parsing: My File-nested-file2.txt content mismatch"
+            fi
+        else
+            fail "advanced_parsing: My File-nested-file2.txt missing"
+        fi
+
+        # Traversing promoted directory and reading nested file
+        if [[ -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" ]]; then
+            pass "advanced_parsing: promoted directory traversal and nested file present"
+            content=$(cat "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" 2>/dev/null || true)
+            if [[ "${content}" == "nested file content" ]]; then
+                pass "advanced_parsing: nested file content OK"
+            else
+                fail "advanced_parsing: nested file content mismatch"
+            fi
+        else
+            fail "advanced_parsing: promoted directory contents missing"
+        fi
+
+        # Cross-origin link present by default (same_origin_only = 0)
+        if [[ -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
+            pass "advanced_parsing: cross-origin link allowed by default"
+            content=$(cat "${ADV_MOUNT_DIR}/Cross File-file1.txt" 2>/dev/null || true)
+            if [[ "${content}" == "file1 content" ]]; then
+                pass "advanced_parsing: cross-origin file content OK"
+            else
+                fail "advanced_parsing: cross-origin file content mismatch"
+            fi
+        else
+            fail "advanced_parsing: cross-origin link missing"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${ADV_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8b: --same-origin-only ---
+    log_info "Subgroup: Advanced parsing mode with --same-origin-only"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --advanced-parsing-mode \
+        --same-origin-only \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    SAME_ORIGIN_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (--advanced-parsing-mode --same-origin-only) failed to mount"
+        kill "${SAME_ORIGIN_PID}" 2>/dev/null || true
+    else
+        if [[ ! -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
+            pass "advanced_parsing: cross-origin link filtered out with --same-origin-only"
+        else
+            fail "advanced_parsing: cross-origin link was not filtered out"
+        fi
+
+        if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "advanced_parsing: same-origin links preserved with --same-origin-only"
+        else
+            fail "advanced_parsing: same-origin directory missing"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${SAME_ORIGIN_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8c: --max-html-size threshold ---
+    log_info "Subgroup: Advanced parsing mode with --max-html-size"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --advanced-parsing-mode \
+        --max-html-size 1024 \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    MAX_SIZE_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (--advanced-parsing-mode --max-html-size) failed to mount"
+        kill "${MAX_SIZE_PID}" 2>/dev/null || true
+    else
+        # large_page exceeds 1024 bytes, so it is not promoted to a directory and remains a regular file
+        if [[ ! -d "${ADV_MOUNT_DIR}/Large HTML Dir-large_page" && -f "${ADV_MOUNT_DIR}/Large HTML Dir-large_page" ]]; then
+            pass "advanced_parsing: HTML exceeding --max-html-size not promoted to directory"
+        else
+            fail "advanced_parsing: oversized HTML was unexpectedly promoted to directory"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${MAX_SIZE_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8d: Vanilla mode backward compatibility ---
+    log_info "Subgroup: Vanilla mode backward compatibility"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    VANILLA_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (vanilla mode) failed to mount"
+        kill "${VANILLA_PID}" 2>/dev/null || true
+    else
+        # In vanilla mode, sub_page is NOT promoted to a directory
+        if [[ ! -d "${ADV_MOUNT_DIR}/sub_page" && ! -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "advanced_parsing: sub_page not promoted to directory in vanilla mode (correct)"
+        else
+            fail "advanced_parsing: sub_page unexpectedly promoted in vanilla mode"
+        fi
+
+        # Anchor text is ignored in vanilla mode: named sub_page, not Disc Subdir-sub_page
+        if [[ -e "${ADV_MOUNT_DIR}/sub_page" && ! -e "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "advanced_parsing: anchor text ignored in vanilla mode (correct)"
+        else
+            fail "advanced_parsing: anchor text unexpectedly processed in vanilla mode"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${VANILLA_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8e: CLI flag validation for --max-html-size ---
+    log_info "Subgroup: CLI validation for --max-html-size"
+
+    err_out=$("${HTTPDIRFS_BIN}" --max-html-size 0 "${BASE_URL}" "${MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --max-html-size must be greater than 0"* ]]; then
+        pass "advanced_parsing: --max-html-size 0 rejected (correct)"
+    else
+        fail "advanced_parsing: --max-html-size 0 not rejected correctly: ${err_out}"
+    fi
+
+    err_out=$("${HTTPDIRFS_BIN}" --max-html-size -100 "${BASE_URL}" "${MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --max-html-size requires a non-negative size"* ]]; then
+        pass "advanced_parsing: negative --max-html-size rejected (correct)"
+    else
+        fail "advanced_parsing: negative --max-html-size not rejected correctly: ${err_out}"
+    fi
+
+    err_out=$("${HTTPDIRFS_BIN}" --max-html-size 10XYZ "${BASE_URL}" "${MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --max-html-size has invalid suffix"* ]]; then
+        pass "advanced_parsing: invalid suffix in --max-html-size rejected (correct)"
+    else
+        fail "advanced_parsing: invalid suffix in --max-html-size not rejected correctly: ${err_out}"
     fi
 fi
 

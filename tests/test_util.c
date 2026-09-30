@@ -153,6 +153,64 @@ void test_memory_tracking(void)
     TEST_ASSERT_NULL(s2);
 }
 
+void test_check_space(void)
+{
+    // ASCII space -> 1
+    TEST_ASSERT_EQUAL_INT(1, check_space(" "));
+    TEST_ASSERT_EQUAL_INT(1, check_space("\t"));
+    TEST_ASSERT_EQUAL_INT(1, check_space("\n"));
+    TEST_ASSERT_EQUAL_INT(1, check_space("\r"));
+    TEST_ASSERT_EQUAL_INT(1, check_space("\v"));
+    TEST_ASSERT_EQUAL_INT(1, check_space("\f"));
+
+    // UTF-8 non-breaking space (0xC2, 0xA0) -> 2
+    TEST_ASSERT_EQUAL_INT(2, check_space("\xc2\xa0"));
+
+    // Non-space character -> 0
+    TEST_ASSERT_EQUAL_INT(0, check_space("a"));
+    TEST_ASSERT_EQUAL_INT(0, check_space(""));
+
+    // Null pointer -> 0
+    TEST_ASSERT_EQUAL_INT(0, check_space(NULL));
+}
+
+void test_parse_size_with_suffix(void)
+{
+    // Valid raw bytes
+    TEST_ASSERT_EQUAL_INT64(0, (int64_t)parse_size_with_suffix("0", NULL));
+    TEST_ASSERT_EQUAL_INT64(100, (int64_t)parse_size_with_suffix("100", NULL));
+    TEST_ASSERT_EQUAL_INT64(2097152,
+                            (int64_t)parse_size_with_suffix("2097152", NULL));
+    TEST_ASSERT_EQUAL_INT64(500,
+                            (int64_t)parse_size_with_suffix("  500  ", NULL));
+
+    // Valid suffixes (case-insensitive)
+    TEST_ASSERT_EQUAL_INT64(1024, (int64_t)parse_size_with_suffix("1k", NULL));
+    TEST_ASSERT_EQUAL_INT64(524288,
+                            (int64_t)parse_size_with_suffix("512K", NULL));
+    TEST_ASSERT_EQUAL_INT64(1048576,
+                            (int64_t)parse_size_with_suffix("1m", NULL));
+    TEST_ASSERT_EQUAL_INT64(2097152,
+                            (int64_t)parse_size_with_suffix("2M", NULL));
+    TEST_ASSERT_EQUAL_INT64(1073741824LL,
+                            (int64_t)parse_size_with_suffix("1g", NULL));
+    TEST_ASSERT_EQUAL_INT64(2147483648LL,
+                            (int64_t)parse_size_with_suffix("2G", NULL));
+
+    // Invalid inputs
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix(NULL, NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("   ", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("-1", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("-2M", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("abc", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("2MB", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("2X", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix("1.5M", NULL));
+    TEST_ASSERT_EQUAL_INT64(-1, (int64_t)parse_size_with_suffix(
+                                    "99999999999999999999999999999G", NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -162,5 +220,7 @@ int main(void)
     RUN_TEST(test_generate_salt);
     RUN_TEST(test_realloc_size_zero);
     RUN_TEST(test_memory_tracking);
+    RUN_TEST(test_check_space);
+    RUN_TEST(test_parse_size_with_suffix);
     return UNITY_END();
 }

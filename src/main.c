@@ -358,6 +358,9 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"cache-min-size", required_argument, NULL, 'L'},  /* 32 */
            {"cache-max-size", required_argument, NULL, 'L'},  /* 33 */
            {"ignore-anchors", no_argument, NULL, 'L'},        /* 34 */
+           {"advanced-parsing-mode", no_argument, NULL, 'L'}, /* 35 */
+           {"max-html-size", required_argument, NULL, 'L'},   /* 36 */
+           {"same-origin-only", no_argument, NULL, 'L'},      /* 37 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -509,6 +512,24 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 34:
                 CONFIG.ignore_anchors = 1;
                 break;
+            case 35:
+                CONFIG.advanced_parsing_mode = 1;
+                break;
+            case 36: {
+                off_t size = parse_size_with_suffix(optarg, "--max-html-size");
+                if (size <= 0) {
+                    if (size == 0) {
+                        fprintf(
+                            stderr,
+                            "Error: --max-html-size must be greater than 0\n");
+                    }
+                    exit(EXIT_FAILURE);
+                }
+                CONFIG.max_html_size = size;
+            } break;
+            case 37:
+                CONFIG.same_origin_only = 1;
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 exit(EXIT_FAILURE);
@@ -598,10 +619,16 @@ HTTPDirFS options:\n\
                             directory listings (default: off)\n\
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links\n\
                             starting with '#' (default: off)\n\
+        --advanced-parsing-mode  Enable advanced parsing mode for non-standard\n\
+                            directory listings\n\
+        --max-html-size     Set maximum HTML size for directory listing\n\
+                            promotion (default: 2M)\n\
+        --same-origin-only  Restrict link traversal to the mounted web server\n\
+                            (default: off, cross-server allowed)\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
-                            directory.\n\
-\n\
+                            directory.\n\n");
+    fprintf(stderr, "\
     For mounting a Airsonic / Subsonic server:\n\
         --sonic-username    The username for your Airsonic / Subsonic server\n\
         --sonic-password    The password for your Airsonic / Subsonic server\n\

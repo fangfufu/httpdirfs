@@ -62,6 +62,11 @@
  */
 #define DEFAULT_DATA_BLKSZ (DEFAULT_DATA_BLKSZ_MB * 1024 * 1024)
 
+/**
+ * \brief Default maximum HTML size for directory listing promotion (2 MiB)
+ */
+#define DEFAULT_MAX_HTML_SIZE ((off_t)2 * 1024 * 1024)
+
 #define STR(x) #x
 #define XSTR(x) STR(x)
 
@@ -142,6 +147,15 @@ typedef struct {
     int sonic_id3;
     /** \brief Whether we use the legacy sonic authentication mode */
     int sonic_insecure;
+    /*--------- Advanced parsing related --------*/
+    /** \brief Enable advanced parsing mode for non-standard directory listings
+     */
+    int advanced_parsing_mode;
+    /** \brief Maximum HTML size for directory listing promotion */
+    off_t max_html_size;
+    /** \brief Restrict link traversal to same-origin only in advanced parsing
+     * mode */
+    int same_origin_only;
 } ConfigStruct;
 
 /**

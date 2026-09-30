@@ -32,6 +32,7 @@
 #include "util.h"
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 ConfigStruct CONFIG;
@@ -101,6 +102,12 @@ void Config_init(void)
     CONFIG.sonic_id3 = 0;
 
     CONFIG.sonic_insecure = 0;
+
+    /*--------- Advanced parsing related --------*/
+    CONFIG.advanced_parsing_mode = 0;
+    CONFIG.max_html_size = DEFAULT_MAX_HTML_SIZE;
+    CONFIG.same_origin_only = 0;
+
     atexit(mem_cleanup);
 }
 

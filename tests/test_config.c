@@ -30,6 +30,10 @@ void test_Config_init(void)
     TEST_ASSERT_EQUAL_INT64(-1, (int64_t)CONFIG.cache_max_size);
     TEST_ASSERT_EQUAL_INT(0, CONFIG.external_links);
     TEST_ASSERT_EQUAL_INT(0, CONFIG.ignore_anchors);
+    TEST_ASSERT_EQUAL_INT(0, CONFIG.advanced_parsing_mode);
+    TEST_ASSERT_EQUAL_INT64((int64_t)DEFAULT_MAX_HTML_SIZE,
+                            (int64_t)CONFIG.max_html_size);
+    TEST_ASSERT_EQUAL_INT(0, CONFIG.same_origin_only);
 }
 
 int main(void)
