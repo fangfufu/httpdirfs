@@ -104,11 +104,6 @@ struct Link {
 extern LinkTable *ROOT_LINK_TBL;
 
 /**
- * \brief the offset for calculating partial URL
- */
-extern int ROOT_LINK_OFFSET;
-
-/**
  * \brief initialise link sub-system.
  */
 LinkTable *LinkSystem_init(const char *raw_url);
@@ -277,6 +272,20 @@ int is_cross_origin(const char *page_url, const char *link_url);
  * \note The caller must free the returned string with FREE().
  */
 char *external_url_to_filename(const char *url);
+
+/**
+ * \brief Extract the server root (scheme://host[:port]) from a URL.
+ * \note The caller must free the returned string with FREE().
+ */
+char *get_server_root(const char *url);
+
+/**
+ * \brief Get pointer to the path component from the root of the server.
+ * \details For "http://example.com/a/b", returns "/a/b".
+ *          For "http://example.com/", returns "/".
+ *          For "http://example.com", returns "".
+ */
+const char *get_url_path_from_server_root(const char *url);
 
 /**
  * \brief Safely generate the cache path for a given URL, handling cross-origin

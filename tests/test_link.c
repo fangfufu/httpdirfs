@@ -440,7 +440,7 @@ void test_url_to_cache_path_local(void)
 {
     char *path = url_to_cache_path("http://localhost/my%20file.iso");
     TEST_ASSERT_NOT_NULL(path);
-    TEST_ASSERT_EQUAL_STRING("http://localhost/my file.iso", path);
+    TEST_ASSERT_EQUAL_STRING("/my file.iso", path);
     FREE(path);
 }
 
@@ -462,40 +462,42 @@ void test_url_to_cache_path_same_origin_different_path(void)
                           "Sample%20Archive%20-%20Collection%201.0%20-"
                           "%20Test.iso");
 
-    /* Out-of-root: viewer URL on same host */
+    /* Same server origin: viewer URL on same host */
     char *p1 = url_to_cache_path("https://example.com/view/1001/"
                                  "Sample%20Archive%20-%20Collection%201.0%20-"
                                  "%20Test.iso");
     TEST_ASSERT_NOT_NULL(p1);
-    TEST_ASSERT_EQUAL_STRING("https___example.com_view_1001_"
+    TEST_ASSERT_EQUAL_STRING("/view/1001/"
                              "Sample Archive - Collection 1.0 - Test.iso",
                              p1);
     FREE(p1);
 
-    /* Out-of-root: parent directory */
+    /* Same server origin: parent directory */
     char *p2 = url_to_cache_path("https://example.com/browse/1001");
     TEST_ASSERT_NOT_NULL(p2);
-    TEST_ASSERT_EQUAL_STRING("https___example.com_browse_1001", p2);
+    TEST_ASSERT_EQUAL_STRING("/browse/1001", p2);
     FREE(p2);
 
-    /* Out-of-root: host root */
+    /* Same server origin: host root */
     char *p3 = url_to_cache_path("https://example.com/");
     TEST_ASSERT_NOT_NULL(p3);
-    TEST_ASSERT_EQUAL_STRING("https___example.com_", p3);
+    TEST_ASSERT_EQUAL_STRING("/", p3);
     FREE(p3);
 
-    /* Out-of-root: sibling path */
+    /* Same server origin: sibling path */
     char *p4 = url_to_cache_path("https://example.com/other-folder");
     TEST_ASSERT_NOT_NULL(p4);
-    TEST_ASSERT_EQUAL_STRING("https___example.com_other-folder", p4);
+    TEST_ASSERT_EQUAL_STRING("/other-folder", p4);
     FREE(p4);
 
-    /* In-tree: true descendant subfolder */
+    /* Same server origin: true descendant subfolder */
     char *p5 = url_to_cache_path("https://example.com/browse/1001/"
                                  "Sample%20Archive%20-%20Collection%201.0%20-"
                                  "%20Test.iso/001");
     TEST_ASSERT_NOT_NULL(p5);
-    TEST_ASSERT_EQUAL_STRING("/001", p5);
+    TEST_ASSERT_EQUAL_STRING("/browse/1001/"
+                             "Sample Archive - Collection 1.0 - Test.iso/001",
+                             p5);
     FREE(p5);
 
     LinkTable_free(ROOT_LINK_TBL);
@@ -505,12 +507,49 @@ void test_url_to_cache_path_same_origin_different_path(void)
 void test_url_to_cache_path_same_origin_encoding_divergence(void)
 {
     ROOT_LINK_TBL = LinkTable_alloc("http://localhost/my%20folder/");
-    char *path = url_to_cache_path("http://localhost/my folder/file.txt");
-    TEST_ASSERT_NOT_NULL(path);
-    TEST_ASSERT_EQUAL_STRING("/file.txt", path);
-    FREE(path);
+    char *path1 = url_to_cache_path("http://localhost/my folder/file.txt");
+    TEST_ASSERT_NOT_NULL(path1);
+    TEST_ASSERT_EQUAL_STRING("/my folder/file.txt", path1);
+    FREE(path1);
+
+    char *path2 = url_to_cache_path("http://localhost/my%20folder/file.txt");
+    TEST_ASSERT_NOT_NULL(path2);
+    TEST_ASSERT_EQUAL_STRING("/my folder/file.txt", path2);
+    FREE(path2);
+
     LinkTable_free(ROOT_LINK_TBL);
     ROOT_LINK_TBL = NULL;
+}
+
+void test_get_server_root(void)
+{
+    TEST_ASSERT_NULL(get_server_root(NULL));
+
+    char *r1 = get_server_root("https://subdomain.example.com/browse/1001/"
+                               "archive.iso");
+    TEST_ASSERT_NOT_NULL(r1);
+    TEST_ASSERT_EQUAL_STRING("https://subdomain.example.com", r1);
+    FREE(r1);
+
+    char *r2 = get_server_root("http://localhost:34521/folder/file.bin");
+    TEST_ASSERT_NOT_NULL(r2);
+    TEST_ASSERT_EQUAL_STRING("http://localhost:34521", r2);
+    FREE(r2);
+
+    char *r3 = get_server_root("http://example.com:80/file.bin");
+    TEST_ASSERT_NOT_NULL(r3);
+    TEST_ASSERT_EQUAL_STRING("http://example.com", r3);
+    FREE(r3);
+
+    char *r4 = get_server_root("https://example.com:443/");
+    TEST_ASSERT_NOT_NULL(r4);
+    TEST_ASSERT_EQUAL_STRING("https://example.com", r4);
+    FREE(r4);
+
+    char *r5 = get_server_root("https://example.com");
+    TEST_ASSERT_NOT_NULL(r5);
+    TEST_ASSERT_EQUAL_STRING("https://example.com", r5);
+    FREE(r5);
 }
 
 void test_url_to_cache_path_long_url_hashed(void)
@@ -1574,6 +1613,7 @@ int main(void)
     RUN_TEST(test_url_to_cache_path_same_origin_different_path);
     RUN_TEST(test_url_to_cache_path_same_origin_encoding_divergence);
     RUN_TEST(test_url_to_cache_path_long_url_hashed);
+    RUN_TEST(test_get_server_root);
 
     /* Pre-existing tests */
     RUN_TEST(test_LinkTable_alloc);
