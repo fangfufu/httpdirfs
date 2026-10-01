@@ -31,7 +31,7 @@
 #include "config.h"
 #include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
 #include "util.h"
 
 #include <assert.h>

@@ -29,18 +29,14 @@
  * \brief Link structure and handling functions header
  */
 
-#include <curl/curl.h>
-#include <gumbo.h>
 #include <limits.h>
 #include <sys/types.h>
 
-#include "memcache.h"
 #include "sonic.h"
 
 typedef struct Cache Cache;
 typedef struct Link Link;
 typedef struct LinkTable LinkTable;
-
 
 /**
  * \brief the link type
@@ -98,10 +94,25 @@ struct Link {
     int is_virtual;
 };
 
+/* Include sub-modules for URL parsing, HTML parsing, and transfer routines */
+#include "link_parser.h"
+#include "transfer.h"
+#include "url.h"
+
 /**
  * \brief root link table
  */
 extern LinkTable *ROOT_LINK_TBL;
+
+/**
+ * \brief create a new Link
+ */
+Link *Link_new(const char *linkname, LinkType type);
+
+/**
+ * \brief classify a linkname into LinkType
+ */
+LinkType linkname_to_LinkType(const char *linkname);
 
 /**
  * \brief initialise link sub-system.
@@ -109,28 +120,9 @@ extern LinkTable *ROOT_LINK_TBL;
 LinkTable *LinkSystem_init(const char *raw_url);
 
 /**
- * \brief Set the stats of a link, after curl multi handle finished querying
- */
-void Link_set_file_stat(Link *this_link, CURL *curl);
-
-/**
  * \brief create a new LinkTable
  */
 LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl);
-
-/**
- * \brief download a path
- * \return the number of bytes downloaded
- */
-long path_download(const char *path, char *output_buf, size_t size,
-                   off_t offset);
-
-/**
- * \brief Download a Link
- * \return the number of bytes downloaded
- */
-long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
-                   Cache *cf);
 
 /**
  * \brief find the link associated with a path
@@ -152,12 +144,6 @@ int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
  * \param[in] dirn We expected the unescaped_path here!
  */
 LinkTable *LinkTable_disk_open(const char *dirn);
-
-/**
- * \brief Download a link's content to the memory
- * \warning You MUST free the memory field in TransferStruct after use!
- */
-TransferStruct Link_download_full(Link *head_link, TransferStruct *header_out);
 
 /**
  * \brief Allocate a LinkTable
@@ -203,148 +189,10 @@ void LinkTable_add_diagnostics(LinkTable *linktbl, const char *content,
                                size_t header_len);
 
 /**
- * \brief Parse HTML content and populate LinkTable with unique links.
- */
-void LinkTable_parse_html(LinkTable *linktbl, const char *url,
-                          const char *html);
-
-/*
- * Functions exposed for unit testing duplicated URL logic
- */
-typedef struct LinkHashSet LinkHashSet;
-
-/**
- * \brief Check if two link names are equal, normalizing any single trailing
- * slash.
- * \param str_a The first link name string to compare.
- * \param str_b The second link name string to compare.
- * \return 1 if they are equivalent, 0 otherwise.
- */
-int link_linknames_equal(const char *str_a, const char *str_b);
-
-/**
- * \brief Generate a hash value for a link name, ignoring any trailing slashes.
- * \param str The link name string to hash.
- * \return The generated unsigned int hash value.
- */
-unsigned int link_hash_str(const char *str);
-
-/**
- * \brief Create a new LinkHashSet with a specified initial capacity.
- * \param capacity The initial number of buckets to allocate.
- * \return Pointer to the newly allocated LinkHashSet.
- */
-LinkHashSet *LinkHashSet_new(int capacity);
-
-/**
- * \brief Add a link name to the LinkHashSet if it is not already present.
- * \param set The LinkHashSet to insert the link name into.
- * \param linkname The link name string to add.
- * \return 1 if successfully added (not a duplicate), 0 if it is a duplicate.
- */
-int LinkHashSet_add(LinkHashSet *set, const char *linkname);
-
-/**
- * \brief Free all memory allocated for a LinkHashSet.
- * \param set The LinkHashSet to deallocate.
- */
-void LinkHashSet_free(LinkHashSet *set);
-
-/**
- * \brief Check if a URL is an external (absolute) http/https URL.
- * \return 1 if the URL starts with http:// or https://, 0 otherwise
- */
-int is_external_url(const char *url);
-
-/**
- * \brief Check if link_url has a different origin than page_url.
- * \details Compares scheme + host + port. Malformed URLs are treated as
- * cross-origin.
- * \return 1 if cross-origin or either URL is malformed, 0 if same origin
- */
-int is_cross_origin(const char *page_url, const char *link_url);
-
-/**
- * \brief Extract the filename component from an external URL.
- * \details For "http://example.com/path/file.iso" returns "file.iso".
- *          For "http://example.com/path/dir/" returns "dir".
- *          Query strings are stripped. Returns "" for root-only URLs.
- * \note The caller must free the returned string with FREE().
- */
-char *external_url_to_filename(const char *url);
-
-/**
- * \brief Extract the server root (scheme://host[:port]) from a URL.
- * \note The caller must free the returned string with FREE().
- */
-char *get_server_root(const char *url);
-
-/**
- * \brief Get pointer to the path component from the root of the server.
- * \details For "http://example.com/a/b", returns "/a/b".
- *          For "http://example.com/", returns "/".
- *          For "http://example.com", returns "".
- */
-const char *get_url_path_from_server_root(const char *url);
-
-/**
- * \brief Safely generate the cache path for a given URL, handling cross-origin
- * external links.
- * \note The caller must free the returned string with FREE().
- */
-char *url_to_cache_path(const char *url);
-
-/**
- * \brief Convert a link URL to be relative to the parent page URL.
- * \param page_url The URL of the parent directory page.
- * \param link_url The URL from the href attribute to convert in-place.
- */
-void make_link_relative(const char *page_url, char *link_url);
-
-/**
- * \brief Resolve an href attribute to a full canonical URL.
- */
-int resolve_target_url(const char *page_url, const char *raw_href,
-                       char *out_url, size_t out_size);
-
-/**
- * \brief Extract plain anchor text from a GumboNode anchor element.
- */
-char *extract_anchor_text(const GumboNode *node);
-
-/**
- * \brief Tokenize URL path into slash-delimited segments.
- */
-int extract_url_path_segments(const char *url, char ***segments_out,
-                              int *num_segments_out);
-
-/**
- * \brief Free URL path segments array.
- */
-void free_url_path_segments(char **segments, int num_segments);
-
-/**
- * \brief Generate a collision-free link name using backward path escalation.
- */
-char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
-                                   char **segments, int num_segments);
-
-/**
- * \brief Check if Content-Type string indicates HTML.
- */
-int is_html_content_type(const char *ct);
-
-/**
- * \brief Pure classification logic for HTTP response in link stat resolution.
- */
-LinkType Link_classify_response(LinkType current_type, long http_resp,
-                                curl_off_t cl, const char *content_type,
-                                size_t *content_len_out);
-
-/**
  * \brief Check if target_url matches the head link of the current table
  * or any ancestor LinkTable in its parent chain up to root.
  * \return 1 if target_url matches an ancestor head link, 0 otherwise.
  */
 int is_ancestor_head_link(const LinkTable *linktbl, const char *target_url);
+
 #endif

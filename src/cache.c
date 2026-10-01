@@ -31,7 +31,8 @@
 #include "config.h"
 #include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
+#include "url.h"
 #include "util.h"
 #include <curl/curl.h>
 

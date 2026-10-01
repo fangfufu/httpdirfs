@@ -17,7 +17,9 @@ lib_srcs = [
     'src/sonic.c',
     'src/log.c',
     'src/config.c',
-    'src/memcache.c'
+    'src/transfer.c',
+    'src/url.c',
+    'src/link_parser.c'
 ]
 
 c_args = [
