@@ -135,8 +135,10 @@ static char *CacheSystem_calc_dir(const char *url)
     if (fclose(fp)) {
         lprintf(fatal, "fclose(%s): %s\n", fn, strerror(errno));
     }
+    char *server_root = get_server_root(url);
+    const char *target_url = server_root ? server_root : url;
     CURL *c = curl_easy_init();
-    char *escaped_url = curl_easy_escape(c, url, 0);
+    char *escaped_url = curl_easy_escape(c, target_url, 0);
     char *full_path = path_append(cache_dir_root, escaped_url);
     if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
@@ -145,6 +147,9 @@ static char *CacheSystem_calc_dir(const char *url)
     FREE(fn);
     FREE(cache_home);
     FREE(cache_dir_root);
+    if (server_root) {
+        FREE(server_root);
+    }
     curl_free(escaped_url);
     curl_easy_cleanup(c);
     return full_path;
@@ -425,6 +430,21 @@ static int Meta_write(Cache *cf)
     return 0;
 }
 
+static void ensure_parent_dir(const char *filepath)
+{
+    if (!filepath) {
+        return;
+    }
+    char tmp[PATH_MAX];
+    strncpy(tmp, filepath, sizeof(tmp) - 1);
+    tmp[sizeof(tmp) - 1] = '\0';
+    char *last_slash = strrchr(tmp, '/');
+    if (last_slash && last_slash != tmp) {
+        *last_slash = '\0';
+        (void)mkdir_p(tmp, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
+    }
+}
+
 /**
  * \brief create a data file
  * \details We use sparse creation here
@@ -437,6 +457,7 @@ static void Data_create(Cache *cf)
 
     mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
     char *datafn = path_append(DATA_DIR, cf->path);
+    ensure_parent_dir(datafn);
     fd = open(datafn, O_WRONLY | O_CREAT, mode);
     FREE(datafn);
     if (fd == -1) {
@@ -921,6 +942,7 @@ static int Meta_open(Cache *cf)
 static void Meta_create(Cache *cf)
 {
     char *metafn = path_append(META_DIR, cf->path);
+    ensure_parent_dir(metafn);
     cf->mfp = fopen(metafn, "w");
     if (!cf->mfp) {
         /*

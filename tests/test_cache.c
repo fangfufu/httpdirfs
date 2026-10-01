@@ -214,8 +214,6 @@ void test_Cache_invalid_zero_length_disk_files(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    int old_root_link_offset = ROOT_LINK_OFFSET;
-    ROOT_LINK_OFFSET = 20;
 
     CacheSystem_init(tmp_cache_dir, 0);
 
@@ -283,7 +281,6 @@ void test_Cache_invalid_zero_length_disk_files(void)
 
     // Cleanup
     ROOT_LINK_TBL = old_root_link_tbl;
-    ROOT_LINK_OFFSET = old_root_link_offset;
     LinkTable_free(table);
     CacheSystem_cleanup();
     CONFIG.cache_dir = old_cache_dir;
@@ -305,8 +302,6 @@ void test_Cache_alloc_num_bg_workers(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    int old_root_link_offset = ROOT_LINK_OFFSET;
-    ROOT_LINK_OFFSET = 20;
 
     CacheSystem_init(tmp_cache_dir, 0);
 
@@ -325,7 +320,6 @@ void test_Cache_alloc_num_bg_workers(void)
 
     // Cleanup
     ROOT_LINK_TBL = old_root_link_tbl;
-    ROOT_LINK_OFFSET = old_root_link_offset;
     LinkTable_free(table);
     CacheSystem_cleanup();
     CONFIG.cache_dir = old_cache_dir;
@@ -345,8 +339,6 @@ void test_Cache_free_active_downloads(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    int old_root_link_offset = ROOT_LINK_OFFSET;
-    ROOT_LINK_OFFSET = 20;
 
     CacheSystem_init(tmp_cache_dir, 0);
 
@@ -386,7 +378,6 @@ void test_Cache_free_active_downloads(void)
 
     // Cleanup
     ROOT_LINK_TBL = old_root_link_tbl;
-    ROOT_LINK_OFFSET = old_root_link_offset;
     LinkTable_free(table);
     CacheSystem_cleanup();
     CONFIG.cache_dir = old_cache_dir;
@@ -421,8 +412,6 @@ void test_Cache_free_active_downloads_with_waiters(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    int old_root_link_offset = ROOT_LINK_OFFSET;
-    ROOT_LINK_OFFSET = 20;
 
     CacheSystem_init(tmp_cache_dir, 0);
 
@@ -485,7 +474,6 @@ void test_Cache_free_active_downloads_with_waiters(void)
 
     // Cleanup
     ROOT_LINK_TBL = old_root_link_tbl;
-    ROOT_LINK_OFFSET = old_root_link_offset;
     LinkTable_free(table);
     CacheSystem_cleanup();
     CONFIG.cache_dir = old_cache_dir;
