@@ -2035,15 +2035,115 @@ char *url_to_cache_path(const char *url)
     if (!url) {
         return NULL;
     }
-    char *unescaped_path;
-    /*
-     * When --external-links is active a directory link from an external
-     * server may be navigated. Its URL won't share the root server's
-     * origin, so applying ROOT_LINK_OFFSET would produce garbage. Detect
-     * this case by checking whether url is cross-origin from root.
-     */
-    if (ROOT_LINK_TBL && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, url)) {
-        /* External URL: use the full URL as the cache key path. */
+    char *unescaped_path = NULL;
+
+    if (!ROOT_LINK_TBL || !ROOT_LINK_TBL->links || !ROOT_LINK_TBL->links[0]) {
+        size_t url_len = strlen(url);
+        const char *offset_url = (url_len >= (size_t)ROOT_LINK_OFFSET)
+                                     ? url + ROOT_LINK_OFFSET
+                                     : url;
+        char *temp = curl_easy_unescape(NULL, offset_url, 0, NULL);
+        unescaped_path = temp ? STRDUP(temp) : STRDUP(offset_url);
+        if (temp) {
+            curl_free(temp);
+        }
+        return unescaped_path;
+    }
+
+    const char *root_url = ROOT_LINK_TBL->links[0]->f_url;
+    size_t root_len = strlen(root_url);
+    size_t root_offset = (size_t)ROOT_LINK_OFFSET;
+    if (root_offset == 0) {
+        if (root_len > 0 && root_url[root_len - 1] == '/') {
+            root_offset = root_len - 1;
+        } else {
+            root_offset = root_len;
+        }
+    }
+
+    int is_subpath = 0;
+    int encoding_diverged = 0;
+    char *diverged_path = NULL;
+
+    if (!is_cross_origin(root_url, url)) {
+        if (root_len > 0 && root_url[root_len - 1] == '/') {
+            if (strncmp(url, root_url, root_len) == 0
+                || (strncmp(url, root_url, root_len - 1) == 0
+                    && url[root_len - 1] == '\0')) {
+                is_subpath = 1;
+            }
+        } else if (strncmp(url, root_url, root_len) == 0) {
+            char c = url[root_len];
+            if (c == '/' || c == '\0' || c == '?' || c == '#') {
+                is_subpath = 1;
+            }
+        }
+
+        if (!is_subpath) {
+            char *unescaped_root = curl_easy_unescape(NULL, root_url, 0, NULL);
+            char *unescaped_u = curl_easy_unescape(NULL, url, 0, NULL);
+            if (unescaped_root && unescaped_u) {
+                size_t uroot_len = strlen(unescaped_root);
+                size_t uroot_offset = uroot_len;
+                if (uroot_len > 0 && unescaped_root[uroot_len - 1] == '/') {
+                    uroot_offset = uroot_len - 1;
+                    if (strncmp(unescaped_u, unescaped_root, uroot_len) == 0) {
+                        is_subpath = 1;
+                        encoding_diverged = 1;
+                        diverged_path = STRDUP(unescaped_u + uroot_offset);
+                    } else if (strncmp(unescaped_u, unescaped_root,
+                                       uroot_len - 1)
+                                   == 0
+                               && unescaped_u[uroot_len - 1] == '\0') {
+                        is_subpath = 1;
+                        encoding_diverged = 1;
+                        diverged_path = STRDUP("");
+                    }
+                } else if (strncmp(unescaped_u, unescaped_root, uroot_len)
+                           == 0) {
+                    char c = unescaped_u[uroot_len];
+                    if (c == '/' || c == '\0' || c == '?' || c == '#') {
+                        is_subpath = 1;
+                        encoding_diverged = 1;
+                        diverged_path = STRDUP(unescaped_u + uroot_offset);
+                    }
+                }
+            }
+            if (unescaped_root) {
+                curl_free(unescaped_root);
+            }
+            if (unescaped_u) {
+                curl_free(unescaped_u);
+            }
+        }
+    }
+
+    if (is_subpath) {
+        if (encoding_diverged && diverged_path) {
+            unescaped_path = diverged_path;
+        } else {
+            size_t url_len = strlen(url);
+            const char *offset_url
+                = (url_len >= root_offset) ? url + root_offset : url;
+            char *temp = curl_easy_unescape(NULL, offset_url, 0, NULL);
+            unescaped_path = temp ? STRDUP(temp) : STRDUP(offset_url);
+            if (temp) {
+                curl_free(temp);
+            }
+        }
+        /* Sanitize in-tree unescaped_path to prevent path traversal via ".." */
+        char *p = unescaped_path;
+        while ((p = strstr(p, ".."))) {
+            p[0] = '_';
+            p[1] = '_';
+            p += 2;
+        }
+    } else {
+        /*
+         * Out-of-root URL (cross-origin or different path on same origin).
+         * Use the full URL as the cache key path, sanitized into a flat
+         * directory/filename without '/' or ':'.
+         */
         char *temp = curl_easy_unescape(NULL, url, 0, NULL);
         unescaped_path = temp ? STRDUP(temp) : STRDUP(url);
         if (temp) {
@@ -2063,15 +2163,14 @@ char *url_to_cache_path(const char *url)
                 *sp = '_';
             }
         }
-    } else {
-        size_t url_len = strlen(url);
-        const char *offset_url = (url_len >= (size_t)ROOT_LINK_OFFSET)
-                                     ? url + ROOT_LINK_OFFSET
-                                     : url;
-        char *temp = curl_easy_unescape(NULL, offset_url, 0, NULL);
-        unescaped_path = temp ? STRDUP(temp) : STRDUP(offset_url);
-        if (temp) {
-            curl_free(temp);
+        if (strlen(unescaped_path) > 200) {
+            char *hash = generate_md5sum(url);
+            if (hash) {
+                unescaped_path[160] = '_';
+                memcpy(unescaped_path + 161, hash, 32);
+                unescaped_path[193] = '\0';
+                FREE(hash);
+            }
         }
     }
     return unescaped_path;

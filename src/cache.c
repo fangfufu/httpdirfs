@@ -617,15 +617,14 @@ int CacheDir_create(const char *dirn)
     char *metadirn = path_append(META_DIR, dirn);
     char *datadirn = path_append(DATA_DIR, dirn);
     int res = 0;
+    mode_t mode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
 
-    if (mkdir(metadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0
-        && errno != EEXIST) {
+    if (mkdir_p(metadirn, mode) != 0) {
         lprintf(fatal, "mkdir(%s): %s\n", metadirn, strerror(errno));
         res |= 1;
     }
 
-    if (mkdir(datadirn, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH) != 0
-        && errno != EEXIST) {
+    if (mkdir_p(datadirn, mode) != 0) {
         lprintf(fatal, "mkdir(%s): %s\n", datadirn, strerror(errno));
         res |= 2;
     }

@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <unity.h>
 
 void setUp(void)
@@ -211,10 +212,50 @@ void test_parse_size_with_suffix(void)
                                     "99999999999999999999999999999G", NULL));
 }
 
+static void cleanup_test_mkdir_p(void)
+{
+    (void)rmdir("/tmp/httpdirfs_test_mkdir_p/sub1/sub2/sub3");
+    (void)rmdir("/tmp/httpdirfs_test_mkdir_p/sub1/sub2");
+    (void)rmdir("/tmp/httpdirfs_test_mkdir_p/sub1");
+    (void)rmdir("/tmp/httpdirfs_test_mkdir_p");
+}
+
+void test_mkdir_p(void)
+{
+    const char *nested = "/tmp/httpdirfs_test_mkdir_p/sub1/sub2/sub3";
+
+    cleanup_test_mkdir_p();
+
+    // NULL path
+    TEST_ASSERT_EQUAL_INT(-1, mkdir_p(NULL, 0755));
+
+    // Empty path
+    TEST_ASSERT_EQUAL_INT(-1, mkdir_p("", 0755));
+
+    // Create nested directory
+    TEST_ASSERT_EQUAL_INT(0, mkdir_p(nested, 0755));
+
+    // Check directory exists
+    struct stat st;
+    TEST_ASSERT_EQUAL_INT(0, stat(nested, &st));
+    TEST_ASSERT_TRUE(S_ISDIR(st.st_mode));
+
+    // Idempotent: creating already existing directory should return 0
+    TEST_ASSERT_EQUAL_INT(0, mkdir_p(nested, 0755));
+
+    // Trailing slash
+    char nested_slash[256];
+    snprintf(nested_slash, sizeof(nested_slash), "%s/", nested);
+    TEST_ASSERT_EQUAL_INT(0, mkdir_p(nested_slash, 0755));
+
+    cleanup_test_mkdir_p();
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_path_append);
+    RUN_TEST(test_mkdir_p);
     RUN_TEST(test_generate_md5sum);
     RUN_TEST(test_str_to_hex);
     RUN_TEST(test_generate_salt);
