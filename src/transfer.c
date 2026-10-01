@@ -1,0 +1,722 @@
+/*
+ * HTTPDirFS - HTTP Directory Filesystem
+ *
+ * Copyright (C) 2020-2026 Fufu Fang <fangfufu2003@gmail.com>
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ *
+ * In addition, as a special exception, the copyright holders give
+ * permission to link the code of portions of this program with the OpenSSL
+ * library.
+ */
+
+/**
+ * \file transfer.c
+ * \brief Data transfer, curl handles, and download routines implementation
+ */
+
+#include "transfer.h"
+
+#include "cache.h"
+#include "config.h"
+#include "link.h"
+#include "link_parser.h"
+#include "log.h"
+#include "network.h"
+#include "url.h"
+#include "util.h"
+
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
+                             void *userp)
+{
+    TransferStruct *ts = (TransferStruct *)userp;
+
+    if (size != 0 && nmemb > (SIZE_MAX - ts->curr_size - 1) / size) {
+        lprintf(fatal, "Response buffer size overflow!\n");
+    }
+    size_t recv_size = size * nmemb;
+
+    if (ts->cache_ptr) {
+        PTHREAD_MUTEX_LOCK(&ts->cache_ptr->dl_lock);
+    }
+
+    void *new_data = REALLOC(ts->data, ts->curr_size + recv_size + 1);
+    ts->data = new_data;
+
+    memmove(&ts->data[ts->curr_size], recv_data, recv_size);
+    ts->curr_size += recv_size;
+    ts->data[ts->curr_size] = '\0';
+
+    if (ts->cache_ptr) {
+        if (ts->ad_ptr) {
+            PTHREAD_COND_BROADCAST(&ts->ad_ptr->cond);
+        }
+        PTHREAD_MUTEX_UNLOCK(&ts->cache_ptr->dl_lock);
+    }
+
+    return recv_size;
+}
+
+static int is_same_origin(const char *link_url)
+{
+    if (!ROOT_LINK_TBL || !ROOT_LINK_TBL->links || !ROOT_LINK_TBL->links[0]) {
+        return 1;
+    }
+    if (!CONFIG.external_links && !CONFIG.advanced_parsing_mode) {
+        return 1;
+    }
+    return !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
+}
+
+CURL *Link_to_curl(Link *link)
+{
+    CURL *curl = curl_easy_init();
+    if (!curl) {
+        lprintf(fatal, "curl_easy_init() failed!\n");
+    }
+    /*
+     * set up some basic curl stuff
+     */
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    /*
+     * for following directories without the '/'
+     */
+    ret = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    if (curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_3)) {
+        ret = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION,
+                               CURL_HTTP_VERSION_2_0);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    if (CONFIG.cafile || CONFIG.capath) {
+        /*
+         * Having been given a certificate file or directory, disable any search
+         * paths built into libcurl, so that we exclusively use the explicitly
+         * given certificate(s).
+         */
+        ret = curl_easy_setopt(curl, CURLOPT_CAPATH, CONFIG.capath);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+
+        ret = curl_easy_setopt(curl, CURLOPT_CAINFO, CONFIG.cafile);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.insecure_tls) {
+        ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.log_type & libcurl_debug) {
+        ret = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.http_headers) {
+        if (is_same_origin(link->f_url)) {
+            ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER,
+                                   CONFIG.http_headers);
+            if (ret) {
+                lprintf(error, "%s\n", curl_easy_strerror(ret));
+            }
+        }
+    }
+
+    if (CONFIG.http_username) {
+        /*
+         * Only apply credentials to the mounted server. When
+         * --external-links is active, cross-origin links must NOT receive
+         * the user's credentials for the primary server.
+         */
+        if (is_same_origin(link->f_url)) {
+            ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
+                                   CONFIG.http_username);
+            if (ret) {
+                lprintf(error, "%s\n", curl_easy_strerror(ret));
+            }
+        }
+    }
+
+    if (CONFIG.http_password) {
+        if (is_same_origin(link->f_url)) {
+            ret = curl_easy_setopt(curl, CURLOPT_PASSWORD,
+                                   CONFIG.http_password);
+            if (ret) {
+                lprintf(error, "%s\n", curl_easy_strerror(ret));
+            }
+        }
+    }
+
+    if (CONFIG.proxy) {
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.proxy_username) {
+        ret = curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
+                               CONFIG.proxy_username);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.proxy_password) {
+        ret = curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
+                               CONFIG.proxy_password);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    if (CONFIG.proxy_cafile || CONFIG.proxy_capath) {
+        /* See CONFIG.cafile above */
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAPATH, CONFIG.proxy_capath);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+
+        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAINFO, CONFIG.proxy_cafile);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    }
+
+    return curl;
+}
+
+static void filestat_on_complete(TransferStruct *ts, CURL *curl,
+                                 CURLcode result, const char *url)
+{
+    if (!result) {
+        /*
+         * Transfer successful, set the file size
+         */
+        Link_set_file_stat(ts->link, curl);
+    } else {
+        lprintf(error, "%d - %s <%s>\n", result, curl_easy_strerror(result),
+                url ? url : "");
+        /*
+         * If the transfer failed, and we are querying the file size,
+         * we must mark the link as invalid so that the link table
+         * fill function can proceed.
+         */
+        ts->link->type = LINK_INVALID;
+    }
+    curl_easy_cleanup(curl);
+    FREE(ts);
+}
+
+void Link_req_file_stat(Link *this_link)
+{
+    CURL *curl = Link_to_curl(this_link);
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+
+    /*
+     * We need to put the variable on the heap, because otherwise the
+     * variable gets popped from the stack as the function returns.
+     *
+     * It gets freed in curl_process_msgs();
+     */
+    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
+
+    transfer->link = this_link;
+    transfer->type = FILESTAT;
+    transfer->transferring = 1;
+    transfer->on_complete = filestat_on_complete;
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+
+    transfer_nonblocking(curl);
+}
+
+LinkType Link_classify_response(LinkType current_type, long http_resp,
+                                curl_off_t cl, const char *content_type,
+                                size_t *content_len_out)
+{
+    if (http_resp != HTTP_OK) {
+        return LINK_INVALID;
+    }
+
+    if (current_type == LINK_UNINITIALISED_DIR) {
+        return LINK_DIR;
+    }
+
+    if (current_type != LINK_UNINITIALISED_FILE) {
+        return current_type;
+    }
+
+    if (CONFIG.advanced_parsing_mode) {
+        if (is_html_content_type(content_type)) {
+            if (cl > 0 && (off_t)cl > CONFIG.max_html_size) {
+                if (content_len_out) {
+                    *content_len_out = (size_t)cl;
+                }
+                return LINK_FILE;
+            }
+            return LINK_DIR;
+        }
+        /* Non-HTML Content-Type (image, binary, ISO, etc.) */
+        if (cl < 0) {
+            return LINK_INVALID;
+        }
+        if (cl == 0 && CONFIG.zero_len_is_dir) {
+            return LINK_DIR;
+        }
+        if (content_len_out) {
+            *content_len_out = (size_t)cl;
+        }
+        return LINK_FILE;
+    }
+
+    /* Vanilla mode */
+    if (cl < 0) {
+        return LINK_INVALID;
+    } else if (cl == 0 && CONFIG.zero_len_is_dir) {
+        return LINK_DIR;
+    } else {
+        if (content_len_out) {
+            *content_len_out = (size_t)cl;
+        }
+        return LINK_FILE;
+    }
+}
+
+void Link_set_file_stat(Link *this_link, CURL *curl)
+{
+    long http_resp;
+    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    if (http_resp == HTTP_OK) {
+        curl_off_t cl = 0;
+        ret = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+        ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+
+        char *content_type = NULL;
+        curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &content_type);
+
+        size_t content_len = 0;
+        this_link->type = Link_classify_response(this_link->type, http_resp, cl,
+                                                 content_type, &content_len);
+        if (this_link->type == LINK_FILE) {
+            this_link->content_length = content_len;
+        }
+
+    } else {
+        lprintf(warning, "%s: HTTP %ld\n", this_link->f_url, http_resp);
+        /*
+         * Emit a targeted warning if an external link needs authentication
+         * that we are not providing.
+         */
+        if (CONFIG.external_links && (http_resp == 401 || http_resp == 403)
+            && ROOT_LINK_TBL
+            && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url,
+                               this_link->f_url)) {
+            lprintf(warning,
+                    "External link %s requires authentication (HTTP %ld). "
+                    "Credentials are only applied to the mounted "
+                    "server.\n",
+                    this_link->f_url, http_resp);
+        }
+        if (HTTP_temp_failure((HTTPResponseCode)http_resp)
+            || CONFIG.invalid_refresh) {
+            lprintf(warning, ", retrying later.\n");
+        } else {
+            this_link->type = LINK_INVALID;
+        }
+    }
+}
+
+static size_t write_download_full_callback(void *recv_data, size_t size,
+                                           size_t nmemb, void *userp)
+{
+    TransferStruct *ts = (TransferStruct *)userp;
+    size_t recv_size = size * nmemb;
+    if (CONFIG.advanced_parsing_mode && CONFIG.max_html_size >= 0) {
+        if (ts->curr_size + recv_size > (size_t)CONFIG.max_html_size) {
+            lprintf(warning,
+                    "HTML directory page download exceeded max_html_size (%ld "
+                    "bytes), aborting transfer\n",
+                    (long)CONFIG.max_html_size);
+            return 0; /* Causes CURLE_WRITE_ERROR */
+        }
+    }
+    return write_memory_callback(recv_data, size, nmemb, userp);
+}
+
+TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
+{
+    char *url = link->f_url;
+    CURL *curl = Link_to_curl(link);
+
+    TransferStruct ts = {0};
+    ts.type = DATA;
+    ts.transferring = 1;
+
+    TransferStruct header_local = {0};
+    TransferStruct *header_ptr = header_out ? header_out : &header_local;
+    header_ptr->curr_size = 0;
+    header_ptr->data = NULL;
+    header_ptr->type = DATA;
+
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
+                                    write_download_full_callback);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&ts);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)&ts);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header_ptr);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+
+    /*
+     * If we get temporary HTTP failure, wait for 5 seconds before retry
+     */
+    long http_resp = 0;
+    do {
+        /*
+         * Reset the transfer struct for each attempt to avoid accumulating
+         * data from failed/partial attempts.
+         */
+        FREE(ts.data);
+        ts.curr_size = 0;
+        ts.transferring = 1;
+
+        FREE(header_ptr->data);
+        header_ptr->curr_size = 0;
+
+        transfer_blocking(curl);
+        ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+        if (HTTP_temp_failure((HTTPResponseCode)http_resp)) {
+            lprintf(warning, "URL: %s, HTTP %ld, retrying later.\n", url,
+                    http_resp);
+            sleep(CONFIG.http_wait_sec);
+        } else if (http_resp != HTTP_OK) {
+            lprintf(warning, "cannot retrieve URL: %s, HTTP %ld\n", url,
+                    http_resp);
+            ts.curr_size = 0;
+            free(ts.data); /* not FREE(); can be NULL on error path! */
+            if (!header_out) {
+                free(header_ptr->data);
+            }
+            curl_easy_cleanup(curl);
+            return ts;
+        }
+    } while (HTTP_temp_failure((HTTPResponseCode)http_resp));
+
+    ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    if (!header_out) {
+        FREE(header_local.data);
+    }
+    curl_easy_cleanup(curl);
+    return ts;
+}
+
+static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
+                                      TransferStruct *header,
+                                      TransferStruct *ts)
+{
+    if (!link) {
+        lprintf(fatal, "Invalid supplied\n");
+    }
+
+    size_t start = offset;
+    size_t end = start + req_size - 1;
+
+    char range_str[64];
+    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
+    CURL *curl = Link_to_curl(link);
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)ts);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)ts);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+
+    return curl;
+}
+
+static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
+{
+    /*
+     * Check for range seek support
+     */
+    if (!CONFIG.no_range_check) {
+        if (!strcasestr((header->data), "Accept-Ranges: bytes")
+            && !strcasestr((header->data), "Content-Range: bytes")) {
+            fprintf(stderr, "This web server does not support HTTP range \
+requests. If you do not believe that is the case, and if you plan to file a \
+bug report, please include the following HTTP header information:\n%s\n",
+                    header->data);
+            exit(EXIT_FAILURE);
+        }
+    }
+
+    FREE(header->data);
+
+    long http_resp;
+    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    curl_off_t recv = -1;
+    if ((http_resp == HTTP_OK) || (http_resp == HTTP_PARTIAL_CONTENT)
+        || (http_resp == HTTP_RANGE_NOT_SATISFIABLE)) {
+        ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+    } else {
+        char *url;
+        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
+        lprintf(warning, "Could not download %s, HTTP %ld\n", url, http_resp);
+        if (HTTP_temp_failure((HTTPResponseCode)http_resp)) {
+            recv = -EAGAIN;
+        } else {
+            recv = -ENOENT;
+        }
+    }
+
+    curl_easy_cleanup(curl);
+
+    return recv;
+}
+
+static void Link_download_finish_transfer(Cache *cf, off_t offset,
+                                          TransferStruct *ts)
+{
+    if (!cf) {
+        ts->transferring = 0;
+        return;
+    }
+
+    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+    ts->transferring = 0;
+    ActiveDownload *ad = ActiveDownload_find(cf, offset);
+    if (ad && ad->ts == ts) {
+        ad->ts = NULL;
+    }
+    if (ts->ad_ptr) {
+        ActiveDownload_unref(ts->ad_ptr);
+        ts->ad_ptr = NULL;
+    }
+    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+}
+
+long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
+                   Cache *cf)
+{
+    if (req_size == 0 || link->content_length == 0 || offset < 0
+        || (size_t)offset >= link->content_length) {
+        return 0;
+    }
+
+    TransferStruct ts = {0};
+    TransferStruct header = {0};
+    curl_off_t recv_sz;
+
+    size_t remaining = link->content_length - (size_t)offset;
+    if (req_size > remaining) {
+        lprintf(info, "requested size larger than remaining size, req_size: \
+%zu, remaining: %zu\n",
+                req_size, remaining);
+        req_size = remaining;
+    }
+
+    do {
+        ts.curr_size = 0;
+        ts.data = NULL;
+        ts.type = DATA;
+        ts.transferring = 1;
+        ts.cache_ptr = cf;
+        ts.ad_ptr = NULL;
+
+        if (cf) {
+            PTHREAD_MUTEX_LOCK(&cf->dl_lock);
+            ActiveDownload *ad = ActiveDownload_find(cf, offset);
+            if (ad) {
+                ad->ts = &ts;
+                ts.ad_ptr = ad;
+                ad->refcount++;
+                PTHREAD_COND_BROADCAST(&ad->cond);
+            }
+            PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
+        }
+
+        header.curr_size = 0;
+        header.data = NULL;
+        header.cache_ptr = NULL;
+
+        CURL *curl
+            = Link_download_curl_setup(link, req_size, offset, &header, &ts);
+
+        transfer_blocking(curl);
+
+        recv_sz = Link_download_cleanup(curl, &header);
+
+        if (recv_sz < 0) {
+            Link_download_finish_transfer(cf, offset, &ts);
+            FREE(ts.data);
+            if (recv_sz == -EAGAIN) {
+                lprintf(warning, "HTTP temporary failure, retrying...\n");
+                sleep(CONFIG.http_wait_sec);
+                continue;
+            }
+            return recv_sz;
+        }
+
+        if (recv_sz != (long int)req_size) {
+            lprintf(error,
+                    "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
+                    req_size, recv_sz);
+            Link_download_finish_transfer(cf, offset, &ts);
+            FREE(ts.data);
+            sleep(CONFIG.http_wait_sec);
+            continue;
+        }
+
+        /* success */
+        break;
+    } while (1);
+
+    Link_download_finish_transfer(cf, offset, &ts);
+
+    memmove(output_buf, ts.data, recv_sz);
+    FREE(ts.data);
+
+    return recv_sz;
+}
+
+long path_download(const char *path, char *output_buf, size_t req_size,
+                   off_t offset)
+{
+    if (!path) {
+        lprintf(fatal, "NULL path supplied\n");
+    }
+
+    Link *link;
+    link = path_to_Link(path);
+    if (!link) {
+        return -ENOENT;
+    }
+
+    long res;
+    if (link->is_virtual) {
+        if (offset < 0 || (size_t)offset >= link->content_length
+            || !link->virtual_content || req_size == 0) {
+            res = 0;
+        } else {
+            size_t remaining = link->content_length - (size_t)offset;
+            if (req_size > remaining) {
+                req_size = remaining;
+            }
+            memcpy(output_buf, link->virtual_content + offset, req_size);
+            res = (long)req_size;
+        }
+    } else {
+        res = Link_download(link, output_buf, req_size, offset, NULL);
+    }
+    LinkTable_unref(link->parent_table);
+    return res;
+}

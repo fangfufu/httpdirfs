@@ -29,9 +29,8 @@
 #include "network.h"
 
 #include "config.h"
-#include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
 #include "util.h"
 
 #include <errno.h>
@@ -154,33 +153,13 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
             lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
 
-        if (!curl_msg->data.result) {
-            /*
-             * Transfer successful, set the file size
-             */
-            if (ts->type == FILESTAT) {
-                Link_set_file_stat(ts->link, curl);
-            }
-        } else {
+        if (ts->on_complete) {
+            ts->on_complete(ts, curl, curl_msg->data.result, url);
+        } else if (curl_msg->data.result) {
             lprintf(error, "%d - %s <%s>\n", curl_msg->data.result,
-                    curl_easy_strerror(curl_msg->data.result), url);
-            /*
-             * If the transfer failed, and we are querying the file size,
-             * we must mark the link as invalid so that the link table
-             * fill function can proceed.
-             */
-            if (ts->type == FILESTAT) {
-                ts->link->type = LINK_INVALID;
-            }
+                    curl_easy_strerror(curl_msg->data.result), url ? url : "");
         }
         curl_multi_remove_handle(curl_multi, curl);
-        /*
-         * clean up the handle, if we are querying the file size
-         */
-        if (ts->type == FILESTAT) {
-            curl_easy_cleanup(curl);
-            FREE(ts);
-        }
     } else {
         lprintf(warning, "curl_msg->msg: %d\n", curl_msg->msg);
     }
