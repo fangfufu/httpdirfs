@@ -109,6 +109,53 @@ char *path_append(const char *path, const char *filename)
     return str;
 }
 
+int mkdir_p(const char *path, mode_t mode)
+{
+    if (!path) {
+        return -1;
+    }
+    char tmp[PATH_MAX];
+    char *p = NULL;
+    size_t len = strnlen(path, PATH_MAX);
+
+    if (len == 0 || len >= PATH_MAX) {
+        return -1;
+    }
+    memcpy(tmp, path, len + 1);
+
+    /* Strip trailing slashes */
+    while (len > 0 && tmp[len - 1] == '/') {
+        tmp[--len] = '\0';
+    }
+    if (len == 0) {
+        return 0;
+    }
+
+    for (p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (p > tmp && *(p - 1) != '\0') {
+                if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
+                    return -1;
+                }
+                struct stat st;
+                if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                    return -1;
+                }
+            }
+            *p = '/';
+        }
+    }
+    if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
+        return -1;
+    }
+    struct stat st;
+    if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+        return -1;
+    }
+    return 0;
+}
+
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
                                 const pthread_mutexattr_t *attr,
                                 const char *file, const char *func, int line)

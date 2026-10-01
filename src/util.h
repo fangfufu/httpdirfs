@@ -34,6 +34,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 
 #ifdef __APPLE__
@@ -53,6 +54,14 @@ typedef sem_t sys_sem_t;
  * \note You need to free the char * after use.
  */
 char *path_append(const char *path, const char *filename);
+
+/**
+ * \brief Recursively create directories like mkdir -p
+ * \param path The directory path to create
+ * \param mode Permissions for created directories
+ * \return 0 on success, -1 on failure
+ */
+int mkdir_p(const char *path, mode_t mode);
 
 /**
  * \brief wrapper for pthread_mutex_init(), with error handling
