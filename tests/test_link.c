@@ -41,7 +41,8 @@ void setUp(void)
 
 void tearDown(void)
 {
-    CONFIG.external_links = 0;
+    CONFIG.allow_external_origin = 0;
+    CONFIG.html_is_directory = 0;
     CONFIG.ignore_anchors = 0;
     if (ROOT_LINK_TBL != NULL) {
         LinkTable_free(ROOT_LINK_TBL);
@@ -202,100 +203,12 @@ void test_is_cross_origin_non_default_port_not_equal(void)
 
 
 /* ========================================================================= */
-/* external_url_to_filename() tests                                          */
-/* ========================================================================= */
-
-void test_external_url_to_filename_simple(void)
-{
-    char *name = external_url_to_filename("http://example.com/file.iso");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("file.iso", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_nested_path(void)
-{
-    char *name = external_url_to_filename("http://example.com/a/b/file.iso");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("file.iso", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_dir(void)
-{
-    char *name = external_url_to_filename("http://example.com/subdir/");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("subdir", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_encoded(void)
-{
-    char *name = external_url_to_filename("http://example.com/my%20file.iso");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("my file.iso", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_query(void)
-{
-    char *name = external_url_to_filename("http://example.com/file.iso?v=1");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("file.iso", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_root(void)
-{
-    /* A root-only URL has no filename — should return empty string. */
-    char *name = external_url_to_filename("http://example.com/");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_null(void)
-{
-    char *name = external_url_to_filename(NULL);
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_fragment(void)
-{
-    char *name
-        = external_url_to_filename("http://example.com/file.iso#section");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("file.iso", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_query_and_fragment(void)
-{
-    char *name
-        = external_url_to_filename("http://example.com/file.iso?v=1#section");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("file.iso", name);
-    FREE(name);
-}
-
-void test_external_url_to_filename_encoded_slashes(void)
-{
-    char *name = external_url_to_filename(
-        "http://example.com/some%2Fnested%2Ffile.iso");
-    TEST_ASSERT_NOT_NULL(name);
-    TEST_ASSERT_EQUAL_STRING("some_nested_file.iso", name);
-    FREE(name);
-}
-
-/* ========================================================================= */
 /* HTML_to_LinkTable() integration tests via LinkTable_parse_html()          */
 /* ========================================================================= */
 
 void test_HTML_external_link_file(void)
 {
-    CONFIG.external_links = 1;
+    CONFIG.allow_external_origin = 1;
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
     LinkTable_parse_html(tbl, "http://localhost/",
                          "<a href=\"http://external.com/file.iso\">"
@@ -308,12 +221,12 @@ void test_HTML_external_link_file(void)
                              tbl->links[1]->f_url);
     TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_FILE, tbl->links[1]->type);
     LinkTable_free(tbl);
-    CONFIG.external_links = 0;
+    CONFIG.allow_external_origin = 0;
 }
 
 void test_HTML_external_link_dir(void)
 {
-    CONFIG.external_links = 1;
+    CONFIG.allow_external_origin = 1;
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
     LinkTable_parse_html(tbl, "http://localhost/",
                          "<a href=\"http://external.com/subdir/\">"
@@ -334,12 +247,12 @@ void test_HTML_external_link_dir(void)
     TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_DIR, tbl->links[3]->type);
 
     LinkTable_free(tbl);
-    CONFIG.external_links = 0;
+    CONFIG.allow_external_origin = 0;
 }
 
 void test_HTML_external_link_disabled(void)
 {
-    CONFIG.external_links = 0; /* flag is OFF */
+    CONFIG.allow_external_origin = 0; /* flag is OFF by default */
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
     LinkTable_parse_html(tbl, "http://localhost/",
                          "<a href=\"http://external.com/file.iso\">"
@@ -352,57 +265,52 @@ void test_HTML_external_link_disabled(void)
 
 void test_HTML_external_link_same_origin(void)
 {
-    /* A full absolute URL pointing to the SAME origin is NOT cross-origin, so
-     * it goes through the normal relative-link path.  make_link_relative()
-     * only handles path-absolute links (starting with '/'); it leaves full
-     * URIs unchanged.  linkname_to_LinkType() then rejects them as LINK_INVALID
-     * (multiple embedded slashes).  The net result is: no link is added.
-     * This is the pre-existing behaviour and is unchanged by this feature. */
-    CONFIG.external_links = 1;
+    /* Full absolute URL pointing to SAME origin is accepted */
+    CONFIG.allow_external_origin = 0;
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
     LinkTable_parse_html(tbl, "http://localhost/",
                          "<a href=\"http://localhost/file.iso\">"
                          "file.iso</a>");
 
-    /* Same-origin full URI is invalid on the normal path — only head link */
-    TEST_ASSERT_EQUAL_INT(1, tbl->size);
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("file.iso", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("http://localhost/file.iso", tbl->links[1]->f_url);
     LinkTable_free(tbl);
-    CONFIG.external_links = 0;
 }
 
-void test_HTML_external_link_dedup_first_wins(void)
+void test_HTML_duplicate_target_url_first_wins(void)
 {
-    CONFIG.external_links = 1;
+    CONFIG.allow_external_origin = 1;
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
-    /* Two different external servers share the same filename */
     LinkTable_parse_html(tbl, "http://localhost/",
-                         "<a href=\"http://server-a.com/file.iso\">file.iso"
-                         "</a><a href=\"http://server-b.com/file.iso\">"
-                         "file.iso</a>");
+                         "<a href=\"http://server-a.com/file.iso\">First Anchor"
+                         "</a><a href=\"http://server-a.com/file.iso\">"
+                         "Second Anchor</a>");
 
-    /* Only one link: the first one wins */
+    /* Only one link: duplicate target URL is dropped, first anchor text wins */
     TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("First Anchor-file.iso", tbl->links[1]->linkname);
     TEST_ASSERT_EQUAL_STRING("http://server-a.com/file.iso",
                              tbl->links[1]->f_url);
     LinkTable_free(tbl);
-    CONFIG.external_links = 0;
+    CONFIG.allow_external_origin = 0;
 }
 
 void test_HTML_external_link_dot_and_dotdot(void)
 {
-    CONFIG.external_links = 1;
+    CONFIG.allow_external_origin = 1;
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
     LinkTable_parse_html(
         tbl, "http://localhost/",
-        "<a href=\"http://external.com/.\">dot</a>"
-        "<a href=\"http://external.com/..\">dotdot</a>"
+        "<a href=\"http://external.com/.\">.</a>"
+        "<a href=\"http://external.com/..\">..</a>"
         "<a href=\"http://external.com/file.iso\">file.iso</a>");
 
     /* Expect 2 entries: HEAD link + file.iso (ignoring . and ..) */
     TEST_ASSERT_EQUAL_INT(2, tbl->size);
     TEST_ASSERT_EQUAL_STRING("file.iso", tbl->links[1]->linkname);
     LinkTable_free(tbl);
-    CONFIG.external_links = 0;
+    CONFIG.allow_external_origin = 0;
 }
 
 /* ========================================================================= */
@@ -755,78 +663,6 @@ void test_LinkTable_parse_html_duplicates(void)
     LinkTable_free(table);
 }
 
-void test_make_link_relative_basic(void)
-{
-    char link1[PATH_MAX] = "/dir/file.txt";
-    make_link_relative("https://example.com/dir/", link1);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link1);
-
-    char link2[PATH_MAX] = "/dir/sub/";
-    make_link_relative("https://example.com/dir/", link2);
-    TEST_ASSERT_EQUAL_STRING("sub/", link2);
-
-    char link3[PATH_MAX] = "/file.txt";
-    make_link_relative("https://example.com/", link3);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link3);
-
-    char link4[PATH_MAX] = "/file.txt";
-    make_link_relative("https://example.com", link4);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link4);
-
-    char link5[PATH_MAX] = "./file.txt";
-    make_link_relative("https://example.com/dir/", link5);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link5);
-
-    char link6[PATH_MAX] = "file.txt";
-    make_link_relative("https://example.com/dir/", link6);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link6);
-
-    char link7[PATH_MAX] = "/other/file.txt";
-    make_link_relative("https://example.com/dir/", link7);
-    TEST_ASSERT_EQUAL_STRING("/other/file.txt", link7);
-
-    char link8[PATH_MAX] = "";
-    make_link_relative("https://example.com/dir/", link8);
-    TEST_ASSERT_EQUAL_STRING("", link8);
-}
-
-void test_make_link_relative_no_trailing_slash(void)
-{
-    char link1[PATH_MAX] = "/dir/file.txt";
-    make_link_relative("https://example.com/dir", link1);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link1);
-
-    char link2[PATH_MAX] = "/direction/file.txt";
-    make_link_relative("https://example.com/dir", link2);
-    TEST_ASSERT_EQUAL_STRING("/direction/file.txt", link2);
-
-    char link3[PATH_MAX] = "/dir";
-    make_link_relative("https://example.com/dir", link3);
-    TEST_ASSERT_EQUAL_STRING("/dir", link3);
-}
-
-void test_make_link_relative_encoded_spaces(void)
-{
-    char link1[PATH_MAX] = "/foo bar/file.txt";
-    make_link_relative("https://example.com/foo%20bar/", link1);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link1);
-
-    char link2[PATH_MAX] = "/foo%20bar/file.txt";
-    make_link_relative("https://example.com/foo bar/", link2);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link2);
-
-    char link3[PATH_MAX] = "/foo bar/file.txt";
-    make_link_relative("https://example.com/foo%20bar", link3);
-    TEST_ASSERT_EQUAL_STRING("file.txt", link3);
-
-    char link4[PATH_MAX]
-        = "/browse/1001/Sample Archive - Collection 1.0 - Test 1993.iso/001";
-    make_link_relative("https://example.com/browse/1001/"
-                       "Sample%20Archive%20-%20Collection%201.0%20-%"
-                       "20Test%201993.iso",
-                       link4);
-    TEST_ASSERT_EQUAL_STRING("001", link4);
-}
 
 void test_ignore_anchors_default(void)
 {
@@ -836,15 +672,15 @@ void test_ignore_anchors_default(void)
 
     const char *html = "<html><body>\n"
                        "  <a href=\"#directory\">Directory</a>\n"
-                       "  <a href=\"file.txt\">File</a>\n"
+                       "  <a href=\"file.txt\">file.txt</a>\n"
                        "</body></html>\n";
 
     LinkTable_parse_html(table, "https://example.com/dir/", html);
 
-    // Expect head link, #directory, and file.txt
-    TEST_ASSERT_EQUAL_INT(3, table->size);
-    TEST_ASSERT_EQUAL_STRING("#directory", table->links[1]->linkname);
-    TEST_ASSERT_EQUAL_STRING("file.txt", table->links[2]->linkname);
+    // Intra-page fragment (#directory) is ignored; only head link and file.txt
+    // exist
+    TEST_ASSERT_EQUAL_INT(2, table->size);
+    TEST_ASSERT_EQUAL_STRING("file.txt", table->links[1]->linkname);
 
     LinkTable_free(table);
 }
@@ -857,7 +693,7 @@ void test_ignore_anchors_enabled(void)
 
     const char *html = "<html><body>\n"
                        "  <a href=\"#directory\">Directory</a>\n"
-                       "  <a href=\"file.txt\">File</a>\n"
+                       "  <a href=\"file.txt\">file.txt</a>\n"
                        "</body></html>\n";
 
     LinkTable_parse_html(table, "https://example.com/dir/", html);
@@ -1202,6 +1038,20 @@ void test_extract_anchor_text(void)
     FREE(text);
     gumbo_destroy_output(&kGumboDefaultOptions, out);
 
+    // Multiple consecutive literal spaces preserved
+    out = gumbo_parse("<a href='/test'>multiple   spaces   here.bin</a>");
+    text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_STRING("multiple   spaces   here.bin", text);
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
+
+    // Multiline formatting whitespace collapsed
+    out = gumbo_parse("<a href='/test'>\n  Download\n  File\n</a>");
+    text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_STRING("Download File", text);
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
+
     // NULL node
     text = extract_anchor_text(NULL);
     TEST_ASSERT_EQUAL_STRING("", text);
@@ -1267,6 +1117,14 @@ void test_generate_collision_free_name(void)
     char *name2 = generate_collision_free_name(set, "disc.iso", segs2, 3);
     TEST_ASSERT_EQUAL_STRING("Disc.iso", name2);
     FREE(name2);
+
+    // Candidate 1: anchor matches last component with different space count ->
+    // omit anchor
+    char *segs_sp[] = {"multiple   spaces   here.bin"};
+    char *name_sp = generate_collision_free_name(
+        set, "multiple spaces here.bin", segs_sp, 1);
+    TEST_ASSERT_EQUAL_STRING("multiple   spaces   here.bin", name_sp);
+    FREE(name_sp);
 
     // Candidate 1: anchor is empty
     char *segs3[] = {"images", "logo.png"};
@@ -1359,8 +1217,8 @@ void test_Link_classify_response(void)
 {
     size_t out_len = 0;
 
-    // 1. Vanilla mode (advanced_parsing_mode = 0)
-    CONFIG.advanced_parsing_mode = 0;
+    // 1. Default mode (html_is_directory = 0)
+    CONFIG.html_is_directory = 0;
     CONFIG.zero_len_is_dir = 0;
     TEST_ASSERT_EQUAL_INT(LINK_FILE,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
@@ -1373,14 +1231,14 @@ void test_Link_classify_response(void)
                           Link_classify_response(LINK_UNINITIALISED_FILE, 404,
                                                  1000, "text/html", &out_len));
 
-    // Vanilla zero-len
+    // Zero-len is dir
     CONFIG.zero_len_is_dir = 1;
     TEST_ASSERT_EQUAL_INT(LINK_DIR,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
                                                  0, "text/html", &out_len));
 
-    // 2. Advanced parsing mode (advanced_parsing_mode = 1)
-    CONFIG.advanced_parsing_mode = 1;
+    // 2. HTML as directory mode (html_is_directory = 1)
+    CONFIG.html_is_directory = 1;
     CONFIG.max_html_size = 2097152; // 2 MiB
 
     // HTML <= max_html_size -> LINK_DIR
@@ -1419,14 +1277,13 @@ void test_Link_classify_response(void)
                                                  "text/html", &out_len));
 
     // Reset config
-    CONFIG.advanced_parsing_mode = 0;
+    CONFIG.html_is_directory = 0;
     CONFIG.zero_len_is_dir = 0;
 }
 
-void test_advanced_parsing_HTML_to_LinkTable(void)
+void test_unified_parsing_HTML_to_LinkTable(void)
 {
-    CONFIG.advanced_parsing_mode = 1;
-    CONFIG.same_origin_only = 0;
+    CONFIG.allow_external_origin = 1;
 
     LinkTable *tbl = LinkTable_alloc("https://example.com/browse/38600");
     TEST_ASSERT_NOT_NULL(tbl);
@@ -1470,20 +1327,19 @@ void test_advanced_parsing_HTML_to_LinkTable(void)
     TEST_ASSERT_EQUAL_STRING("https://example.com/file/38602/disc.iso",
                              tbl->links[4]->f_url);
 
-    // Link 5: External ISO link permitted under default same_origin_only = 0
+    // Link 5: External ISO link permitted under allow_external_origin = 1
     TEST_ASSERT_EQUAL_STRING("External ISO-external.iso",
                              tbl->links[5]->linkname);
     TEST_ASSERT_EQUAL_STRING("https://other.server.com/external.iso",
                              tbl->links[5]->f_url);
 
     LinkTable_free(tbl);
-    CONFIG.advanced_parsing_mode = 0;
+    CONFIG.allow_external_origin = 0;
 }
 
-void test_advanced_parsing_same_origin_only(void)
+void test_parsing_allow_external_origin_disabled(void)
 {
-    CONFIG.advanced_parsing_mode = 1;
-    CONFIG.same_origin_only = 1;
+    CONFIG.allow_external_origin = 0;
 
     LinkTable *root_tbl = LinkTable_alloc("https://example.com/");
     ROOT_LINK_TBL = root_tbl;
@@ -1499,7 +1355,7 @@ void test_advanced_parsing_same_origin_only(void)
 
     LinkTable_parse_html(tbl, "https://example.com/browse/38600", html);
 
-    // External link must be omitted because same_origin_only = 1!
+    // External link must be omitted because allow_external_origin = 0!
     // Total links: 1 root + 1 same-origin link
     TEST_ASSERT_EQUAL_INT(2, tbl->size);
     TEST_ASSERT_EQUAL_STRING("Subdir-sub", tbl->links[1]->linkname);
@@ -1507,8 +1363,6 @@ void test_advanced_parsing_same_origin_only(void)
     LinkTable_free(tbl);
     LinkTable_free(root_tbl);
     ROOT_LINK_TBL = NULL;
-    CONFIG.advanced_parsing_mode = 0;
-    CONFIG.same_origin_only = 0;
 }
 
 void test_is_ancestor_head_link_hierarchy(void)
@@ -1575,8 +1429,6 @@ void test_is_ancestor_head_link_hierarchy(void)
 
 void test_discard_ancestor_links_in_parse_html(void)
 {
-    CONFIG.advanced_parsing_mode = 1;
-
     LinkTable *tbl_a = LinkTable_alloc("https://example.com/A/");
     LinkTable *tbl_b = LinkTable_alloc("https://example.com/A/B/");
     tbl_b->parent_tbl = tbl_a;
@@ -1610,13 +1462,10 @@ void test_discard_ancestor_links_in_parse_html(void)
     LinkTable_free(tbl_c);
     LinkTable_free(tbl_b);
     LinkTable_free(tbl_a);
-    CONFIG.advanced_parsing_mode = 0;
 }
 
-void test_discard_ancestor_links_normal_mode(void)
+void test_discard_ancestor_links_relative_parent(void)
 {
-    CONFIG.advanced_parsing_mode = 0;
-
     LinkTable *tbl_a = LinkTable_alloc("https://example.com/A/");
     LinkTable *tbl_b = LinkTable_alloc("https://example.com/A/B/");
     tbl_b->parent_tbl = tbl_a;
@@ -1667,27 +1516,15 @@ int main(void)
     RUN_TEST(test_is_cross_origin_default_port_normalization_https);
     RUN_TEST(test_is_cross_origin_non_default_port_not_equal);
 
-
-    /* external_url_to_filename */
-    RUN_TEST(test_external_url_to_filename_simple);
-    RUN_TEST(test_external_url_to_filename_nested_path);
-    RUN_TEST(test_external_url_to_filename_dir);
-    RUN_TEST(test_external_url_to_filename_encoded);
-    RUN_TEST(test_external_url_to_filename_query);
-    RUN_TEST(test_external_url_to_filename_root);
-    RUN_TEST(test_external_url_to_filename_null);
-    RUN_TEST(test_external_url_to_filename_fragment);
-    RUN_TEST(test_external_url_to_filename_query_and_fragment);
-    RUN_TEST(test_external_url_to_filename_encoded_slashes);
-
     /* HTML_to_LinkTable integration via LinkTable_parse_html */
     RUN_TEST(test_HTML_external_link_file);
     RUN_TEST(test_HTML_external_link_dir);
     RUN_TEST(test_HTML_external_link_disabled);
     RUN_TEST(test_HTML_external_link_same_origin);
-    RUN_TEST(test_HTML_external_link_dedup_first_wins);
+    RUN_TEST(test_HTML_duplicate_target_url_first_wins);
     RUN_TEST(test_HTML_external_link_dot_and_dotdot);
     RUN_TEST(test_Link_preserves_preset_f_url);
+
     /* url_to_cache_path */
     RUN_TEST(test_url_to_cache_path_null);
     RUN_TEST(test_url_to_cache_path_local);
@@ -1707,10 +1544,7 @@ int main(void)
     RUN_TEST(test_LinkHashSet);
     RUN_TEST(test_LinkTable_parse_html_duplicates);
 
-    /* make_link_relative and ignore_anchors */
-    RUN_TEST(test_make_link_relative_basic);
-    RUN_TEST(test_make_link_relative_no_trailing_slash);
-    RUN_TEST(test_make_link_relative_encoded_spaces);
+    /* ignore_anchors */
     RUN_TEST(test_ignore_anchors_default);
     RUN_TEST(test_ignore_anchors_enabled);
 
@@ -1721,18 +1555,18 @@ int main(void)
     RUN_TEST(test_diagnostics_empty);
     RUN_TEST(test_LinkTable_expired_subdirectory);
 
-    /* Phase 2: Advanced Parsing Mode */
+    /* Unified link parsing and directory detection */
     RUN_TEST(test_resolve_target_url);
     RUN_TEST(test_extract_anchor_text);
     RUN_TEST(test_extract_url_path_segments);
     RUN_TEST(test_generate_collision_free_name);
     RUN_TEST(test_is_html_content_type);
     RUN_TEST(test_Link_classify_response);
-    RUN_TEST(test_advanced_parsing_HTML_to_LinkTable);
-    RUN_TEST(test_advanced_parsing_same_origin_only);
+    RUN_TEST(test_unified_parsing_HTML_to_LinkTable);
+    RUN_TEST(test_parsing_allow_external_origin_disabled);
     RUN_TEST(test_is_ancestor_head_link_hierarchy);
     RUN_TEST(test_discard_ancestor_links_in_parse_html);
-    RUN_TEST(test_discard_ancestor_links_normal_mode);
+    RUN_TEST(test_discard_ancestor_links_relative_parent);
 
     return UNITY_END();
 }

@@ -595,12 +595,12 @@ HTML
 
 EXT_TEST_URL="${BASE_URL}ext_test_dir/"
 
-# ── Test 1: file listing with --external-links ─────────────────────────────
-log_info "Test group: External-links file listing"
+# ── Test 1: file listing with --allow-external-origin ──────────────────────
+log_info "Test group: External-origin file listing"
 
 "${HTTPDIRFS_BIN}" \
     -f \
-    --external-links \
+    --allow-external-origin \
     "${EXT_TEST_URL}" \
     "${EXT_MOUNT_DIR}" &
 EXT_HTTPDIRFS_PID=$!
@@ -610,7 +610,7 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     sleep 1
 done
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    fail "httpdirfs (--external-links) failed to mount."
+    fail "httpdirfs (--allow-external-origin) failed to mount."
     kill "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
 else
     # local file is present
@@ -703,8 +703,8 @@ else
     wait "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
 fi
 
-# ── Test 3: backward compatibility (no --external-links) ───────────────────
-log_info "Test group: External-links backward compatibility"
+# ── Test 3: external origins disabled by default (no --allow-external-origin)
+log_info "Test group: External origins disabled by default"
 
 "${HTTPDIRFS_BIN}" \
     -f \
@@ -717,27 +717,27 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     sleep 1
 done
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    fail "httpdirfs (no --external-links) failed to mount."
+    fail "httpdirfs (no --allow-external-origin) failed to mount."
     kill "${COMPAT_PID}" 2>/dev/null || true
 else
     if [[ ! -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
-        pass "external_link_backward_compat: external_file.txt not present (correct)"
+        pass "external_origin_default_disabled: external_file.txt not present (correct)"
     else
-        fail "external_link_backward_compat: external_file.txt unexpectedly present"
+        fail "external_origin_default_disabled: external_file.txt unexpectedly present"
     fi
 
     if [[ -e "${EXT_MOUNT_DIR}/local_ext_test.txt" ]]; then
-        pass "external_link_backward_compat: local_ext_test.txt still present"
+        pass "external_origin_default_disabled: local_ext_test.txt still present"
     else
-        fail "external_link_backward_compat: local_ext_test.txt missing"
+        fail "external_origin_default_disabled: local_ext_test.txt missing"
     fi
 
     do_unmount "${EXT_MOUNT_DIR}"
     wait "${COMPAT_PID}" 2>/dev/null || true
 fi
 
-# ── Test 6: cache mode with --external-links ───────────────────────────────
-log_info "Test group: External-links cache mode"
+# ── Test 6: cache mode with --allow-external-origin ────────────────────────
+log_info "Test group: External-origin cache mode"
 
 # Remove and recreate the cache directory for a completely clean state
 rm -rf "${CACHE_DIR:?}"
@@ -745,7 +745,7 @@ mkdir -p "${CACHE_DIR}"
 
 "${HTTPDIRFS_BIN}" \
     -f \
-    --external-links \
+    --allow-external-origin \
     --cache \
     --cache-location "${CACHE_DIR}" \
     "${EXT_TEST_URL}" \
@@ -758,7 +758,7 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
 done
 
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    fail "httpdirfs (--external-links --cache) failed to mount."
+    fail "httpdirfs (--allow-external-origin --cache) failed to mount."
     kill "${EXT_CACHE_PID}" 2>/dev/null || true
 else
     # 6a. Check file presence
@@ -1027,12 +1027,13 @@ EOF
 
     ADV_TEST_URL="${BASE_URL}adv_test_dir/"
 
-    # --- Test 8a: Mount with --advanced-parsing-mode ---
-    log_info "Subgroup: Advanced parsing mode enabled"
+    # --- Test 8a: Mount with --html-is-directory and --allow-external-origin ---
+    log_info "Subgroup: --html-is-directory with --allow-external-origin"
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --advanced-parsing-mode \
+        --html-is-directory \
+        --allow-external-origin \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
     ADV_PID=$!
@@ -1043,94 +1044,93 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--advanced-parsing-mode) failed to mount"
+        fail "httpdirfs (--html-is-directory --allow-external-origin) failed to mount"
         kill "${ADV_PID}" 2>/dev/null || true
     else
         # Subdirectory promotion: sub_page has text/html content-type, should be a directory
         if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "advanced_parsing: sub_page promoted to directory"
+            pass "html_is_directory: sub_page promoted to directory"
         else
-            fail "advanced_parsing: sub_page was not promoted to directory"
+            fail "html_is_directory: sub_page was not promoted to directory"
         fi
 
         # Early deduplication: only one Disc Subdir-sub_page exists
         sub_count=$(find "${ADV_MOUNT_DIR}" -maxdepth 1 -name "*sub_page" 2>/dev/null | wc -l)
         if [[ "${sub_count}" -eq 1 ]]; then
-            pass "advanced_parsing: target URL deduplication (first anchor wins)"
+            pass "link_parser: target URL deduplication (first anchor wins)"
         else
-            fail "advanced_parsing: expected 1 sub_page link, found ${sub_count}"
+            fail "link_parser: expected 1 sub_page link, found ${sub_count}"
         fi
 
         # Filename matching (case-insensitive): anchor "file1.txt" equals filename -> anchor omitted
         if [[ -f "${ADV_MOUNT_DIR}/file1.txt" ]]; then
-            pass "advanced_parsing: anchor matching filename omitted (file1.txt present)"
+            pass "link_parser: anchor matching filename omitted (file1.txt present)"
             content=$(cat "${ADV_MOUNT_DIR}/file1.txt" 2>/dev/null || true)
             if [[ "${content}" == "file1 content" ]]; then
-                pass "advanced_parsing: file1.txt content OK"
+                pass "link_parser: file1.txt content OK"
             else
-                fail "advanced_parsing: file1.txt content mismatch"
+                fail "link_parser: file1.txt content mismatch"
             fi
         else
-            fail "advanced_parsing: file1.txt missing"
+            fail "link_parser: file1.txt missing"
         fi
 
         # Custom naming: "My File" + "file2.txt" -> "My File-file2.txt"
         if [[ -f "${ADV_MOUNT_DIR}/My File-file2.txt" ]]; then
-            pass "advanced_parsing: custom naming (My File-file2.txt present)"
+            pass "link_parser: custom naming (My File-file2.txt present)"
         else
-            fail "advanced_parsing: My File-file2.txt missing"
+            fail "link_parser: My File-file2.txt missing"
         fi
 
         # Collision resolution via backward escalation: nested/file2.txt -> "My File-nested-file2.txt"
         if [[ -f "${ADV_MOUNT_DIR}/My File-nested-file2.txt" ]]; then
-            pass "advanced_parsing: backward escalation collision resolution (My File-nested-file2.txt present)"
+            pass "link_parser: backward escalation collision resolution (My File-nested-file2.txt present)"
             content=$(cat "${ADV_MOUNT_DIR}/My File-nested-file2.txt" 2>/dev/null || true)
             if [[ "${content}" == "nested file2 content" ]]; then
-                pass "advanced_parsing: My File-nested-file2.txt content OK"
+                pass "link_parser: My File-nested-file2.txt content OK"
             else
-                fail "advanced_parsing: My File-nested-file2.txt content mismatch"
+                fail "link_parser: My File-nested-file2.txt content mismatch"
             fi
         else
-            fail "advanced_parsing: My File-nested-file2.txt missing"
+            fail "link_parser: My File-nested-file2.txt missing"
         fi
 
         # Traversing promoted directory and reading nested file
         if [[ -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" ]]; then
-            pass "advanced_parsing: promoted directory traversal and nested file present"
+            pass "html_is_directory: promoted directory traversal and nested file present"
             content=$(cat "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" 2>/dev/null || true)
             if [[ "${content}" == "nested file content" ]]; then
-                pass "advanced_parsing: nested file content OK"
+                pass "html_is_directory: nested file content OK"
             else
-                fail "advanced_parsing: nested file content mismatch"
+                fail "html_is_directory: nested file content mismatch"
             fi
         else
-            fail "advanced_parsing: promoted directory contents missing"
+            fail "html_is_directory: promoted directory contents missing"
         fi
 
-        # Cross-origin link present by default (same_origin_only = 0)
+        # Cross-origin link present with --allow-external-origin
         if [[ -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
-            pass "advanced_parsing: cross-origin link allowed by default"
+            pass "allow_external_origin: cross-origin link allowed with --allow-external-origin"
             content=$(cat "${ADV_MOUNT_DIR}/Cross File-file1.txt" 2>/dev/null || true)
             if [[ "${content}" == "file1 content" ]]; then
-                pass "advanced_parsing: cross-origin file content OK"
+                pass "allow_external_origin: cross-origin file content OK"
             else
-                fail "advanced_parsing: cross-origin file content mismatch"
+                fail "allow_external_origin: cross-origin file content mismatch"
             fi
         else
-            fail "advanced_parsing: cross-origin link missing"
+            fail "allow_external_origin: cross-origin link missing"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"
         wait "${ADV_PID}" 2>/dev/null || true
     fi
 
-    # --- Test 8b: --same-origin-only ---
-    log_info "Subgroup: Advanced parsing mode with --same-origin-only"
+    # --- Test 8b: External origin disabled by default ---
+    log_info "Subgroup: External origin disabled by default"
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --advanced-parsing-mode \
-        --same-origin-only \
+        --html-is-directory \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
     SAME_ORIGIN_PID=$!
@@ -1141,19 +1141,19 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--advanced-parsing-mode --same-origin-only) failed to mount"
+        fail "httpdirfs (--html-is-directory) failed to mount"
         kill "${SAME_ORIGIN_PID}" 2>/dev/null || true
     else
         if [[ ! -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
-            pass "advanced_parsing: cross-origin link filtered out with --same-origin-only"
+            pass "allow_external_origin: cross-origin link filtered out by default"
         else
-            fail "advanced_parsing: cross-origin link was not filtered out"
+            fail "allow_external_origin: cross-origin link was not filtered out"
         fi
 
         if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "advanced_parsing: same-origin links preserved with --same-origin-only"
+            pass "html_is_directory: same-origin directory preserved"
         else
-            fail "advanced_parsing: same-origin directory missing"
+            fail "html_is_directory: same-origin directory missing"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"
@@ -1161,11 +1161,11 @@ EOF
     fi
 
     # --- Test 8c: --max-html-size threshold ---
-    log_info "Subgroup: Advanced parsing mode with --max-html-size"
+    log_info "Subgroup: HTML directory size limit with --max-html-size"
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --advanced-parsing-mode \
+        --html-is-directory \
         --max-html-size 1024 \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1177,22 +1177,22 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--advanced-parsing-mode --max-html-size) failed to mount"
+        fail "httpdirfs (--html-is-directory --max-html-size) failed to mount"
         kill "${MAX_SIZE_PID}" 2>/dev/null || true
     else
         # large_page exceeds 1024 bytes, so it is not promoted to a directory and remains a regular file
         if [[ ! -d "${ADV_MOUNT_DIR}/Large HTML Dir-large_page" && -f "${ADV_MOUNT_DIR}/Large HTML Dir-large_page" ]]; then
-            pass "advanced_parsing: HTML exceeding --max-html-size not promoted to directory"
+            pass "max_html_size: HTML exceeding --max-html-size not promoted to directory"
         else
-            fail "advanced_parsing: oversized HTML was unexpectedly promoted to directory"
+            fail "max_html_size: oversized HTML was unexpectedly promoted to directory"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"
         wait "${MAX_SIZE_PID}" 2>/dev/null || true
     fi
 
-    # --- Test 8d: Vanilla mode backward compatibility ---
-    log_info "Subgroup: Vanilla mode backward compatibility"
+    # --- Test 8d: Default mode without --html-is-directory ---
+    log_info "Subgroup: Default mode without --html-is-directory"
 
     "${HTTPDIRFS_BIN}" \
         -f \
@@ -1206,21 +1206,21 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (vanilla mode) failed to mount"
+        fail "httpdirfs (default mode) failed to mount"
         kill "${VANILLA_PID}" 2>/dev/null || true
     else
-        # In vanilla mode, sub_page is NOT promoted to a directory
-        if [[ ! -d "${ADV_MOUNT_DIR}/sub_page" && ! -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "advanced_parsing: sub_page not promoted to directory in vanilla mode (correct)"
+        # Without --html-is-directory, sub_page is NOT promoted to a directory; it remains a regular file
+        if [[ ! -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" && -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "html_is_directory: sub_page not promoted to directory in default mode (correct)"
         else
-            fail "advanced_parsing: sub_page unexpectedly promoted in vanilla mode"
+            fail "html_is_directory: sub_page unexpectedly promoted or missing in default mode"
         fi
 
-        # Anchor text is ignored in vanilla mode: named sub_page, not Disc Subdir-sub_page
-        if [[ -e "${ADV_MOUNT_DIR}/sub_page" && ! -e "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "advanced_parsing: anchor text ignored in vanilla mode (correct)"
+        # Anchor text and naming are universally applied
+        if [[ -f "${ADV_MOUNT_DIR}/My File-file2.txt" ]]; then
+            pass "link_parser: naming applied in default mode"
         else
-            fail "advanced_parsing: anchor text unexpectedly processed in vanilla mode"
+            fail "link_parser: naming unexpectedly missing in default mode"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"

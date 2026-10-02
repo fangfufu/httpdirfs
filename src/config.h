@@ -121,8 +121,9 @@ typedef struct {
     int refresh_timeout;
     /** \brief Try refreshing invalid links when reading a directory */
     int invalid_refresh;
-    /** \brief Include external (cross-origin) links from directory listings */
-    int external_links;
+    /** \brief Allow following links pointing to external (cross-origin) servers
+     */
+    int allow_external_origin;
     /** \brief Ignore intra-page HTML anchor/fragment links starting with '#' */
     int ignore_anchors;
     /*--------------- Cache related ---------------*/
@@ -147,15 +148,11 @@ typedef struct {
     int sonic_id3;
     /** \brief Whether we use the legacy sonic authentication mode */
     int sonic_insecure;
-    /*--------- Advanced parsing related --------*/
-    /** \brief Enable advanced parsing mode for non-standard directory listings
-     */
-    int advanced_parsing_mode;
+    /*--------- Directory promotion & traversal related --------*/
+    /** \brief Promote resources with Content-Type text/html to directories */
+    int html_is_directory;
     /** \brief Maximum HTML size for directory listing promotion */
     off_t max_html_size;
-    /** \brief Restrict link traversal to same-origin only in advanced parsing
-     * mode */
-    int same_origin_only;
 } ConfigStruct;
 
 /**

@@ -93,36 +93,6 @@ Link *Link_new(const char *linkname, LinkType type)
     return link;
 }
 
-LinkType linkname_to_LinkType(const char *linkname)
-{
-    if (linkname[0] == '\0' || linkname[0] == '/') {
-        return LINK_INVALID;
-    }
-
-    /* Now allow all printable characters */
-    for (int i = 0; linkname[i] != '\0'; i++) {
-        char c = linkname[i];
-        if (!isprint(c)) {
-            return LINK_INVALID;
-        }
-    }
-
-    /* The linkname must not contain '/' in the middle. */
-    const char *slash = strchr(linkname, '/');
-    if (slash) {
-        int linkname_len = strnlen(linkname, NAME_MAX) - 1;
-        if (slash - linkname != linkname_len) {
-            return LINK_INVALID;
-        }
-    }
-
-    /* '/' must be at the end to be a valid directory name */
-    if (linkname[strnlen(linkname, NAME_MAX) - 1] == '/') {
-        return LINK_UNINITIALISED_DIR;
-    }
-
-    return LINK_UNINITIALISED_FILE;
-}
 
 /**
  * \brief Fill in the uninitialised entries in a link table

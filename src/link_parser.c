@@ -221,6 +221,13 @@ char *extract_anchor_text(const GumboNode *node)
         return STRDUP("");
     }
 
+    /* Strip trailing whitespace and slashes */
+    while (len > 0
+           && (isspace((unsigned char)raw[len - 1]) || raw[len - 1] == '/')) {
+        len--;
+        raw[len] = '\0';
+    }
+
     char *src = raw;
     char *dst = raw;
     int in_space = 0;
@@ -232,13 +239,24 @@ char *extract_anchor_text(const GumboNode *node)
     }
 
     while (*src) {
-        sp = check_space(src);
-        if (sp > 0) {
+        /* Collapse newlines and tabs (formatting whitespace) into a single
+         * space */
+        if (*src == '\r' || *src == '\n' || *src == '\t') {
             if (!in_space) {
                 *dst++ = ' ';
                 in_space = 1;
             }
+            src++;
+            while (*src && check_space(src) > 0) {
+                src += check_space(src);
+            }
+            continue;
+        }
+        sp = check_space(src);
+        if (sp > 0) {
+            *dst++ = ' ';
             src += sp;
+            in_space = 0;
             continue;
         }
         unsigned char c = (unsigned char)*src;
@@ -261,6 +279,38 @@ char *extract_anchor_text(const GumboNode *node)
     char *result = STRDUP(raw);
     FREE(raw);
     return result;
+}
+
+static int anchor_matches_segment(const char *anchor, const char *seg)
+{
+    if (!anchor || !seg) {
+        return 0;
+    }
+    const unsigned char *a = (const unsigned char *)anchor;
+    const unsigned char *s = (const unsigned char *)seg;
+    while (*a && *s) {
+        if (isspace(*a) && isspace(*s)) {
+            while (isspace(*a)) {
+                a++;
+            }
+            while (isspace(*s)) {
+                s++;
+            }
+            continue;
+        }
+        if (tolower(*a) != tolower(*s)) {
+            return 0;
+        }
+        a++;
+        s++;
+    }
+    while (isspace(*a)) {
+        a++;
+    }
+    while (isspace(*s)) {
+        s++;
+    }
+    return (*a == '\0' && *s == '\0');
 }
 
 char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
@@ -331,7 +381,7 @@ char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
         const char *last_seg = segments[num_segments - 1];
         int omit_anchor = (!clean_anchor || *clean_anchor == '\0');
         if (i == 1 && clean_anchor && *clean_anchor != '\0'
-            && strcasecmp(clean_anchor, last_seg) == 0) {
+            && anchor_matches_segment(clean_anchor, last_seg)) {
             omit_anchor = 1;
         }
 
@@ -402,120 +452,47 @@ static void process_anchor_node(const char *url, const GumboNode *node,
     char target_url[PATH_MAX + 1];
     int target_url_resolved
         = resolve_target_url(url, raw_href, target_url, sizeof(target_url));
-    if (target_url_resolved && is_ancestor_head_link(linktbl, target_url)) {
+    if (!target_url_resolved || is_ancestor_head_link(linktbl, target_url)) {
         return;
     }
 
-    if (CONFIG.advanced_parsing_mode) {
-        if (target_url_resolved) {
-            int allow = 1;
-            if (CONFIG.same_origin_only) {
-                const char *page_url = NULL;
-                if (ROOT_LINK_TBL && ROOT_LINK_TBL->links
-                    && ROOT_LINK_TBL->links[0]) {
-                    page_url = ROOT_LINK_TBL->links[0]->f_url;
-                } else if (linktbl && linktbl->links && linktbl->links[0]) {
-                    page_url = linktbl->links[0]->f_url;
-                } else {
-                    page_url = url;
-                }
-                if (page_url && is_cross_origin(page_url, target_url)) {
-                    allow = 0;
-                }
-            }
-            if (allow) {
-                /* Early duplicate target link removal (first anchor text
-                 * wins) */
-                if (!target_url_set
-                    || LinkHashSet_add(target_url_set, target_url)) {
-                    char *anchor = extract_anchor_text(node);
-                    char **segments = NULL;
-                    int num_segments = 0;
-                    extract_url_path_segments(target_url, &segments,
-                                              &num_segments);
-
-                    char *linkname = generate_collision_free_name(
-                        set, anchor, segments, num_segments);
-                    FREE(anchor);
-                    free_url_path_segments(segments, num_segments);
-
-                    if (linkname && linkname[0] != '\0') {
-                        const char *qf = strpbrk(target_url, "?#");
-                        size_t tlen = qf ? (size_t)(qf - target_url)
-                                         : strlen(target_url);
-                        LinkType type
-                            = (tlen > 0 && target_url[tlen - 1] == '/')
-                                  ? LINK_UNINITIALISED_DIR
-                                  : LINK_UNINITIALISED_FILE;
-                        Link *link = Link_new(linkname, type);
-                        snprintf(link->f_url, sizeof(link->f_url), "%s",
-                                 target_url);
-                        LinkTable_add(linktbl, link);
-                        FREE(linkname);
-                    }
-                }
-            }
+    if (!CONFIG.allow_external_origin) {
+        const char *page_url = NULL;
+        if (ROOT_LINK_TBL && ROOT_LINK_TBL->links && ROOT_LINK_TBL->links[0]) {
+            page_url = ROOT_LINK_TBL->links[0]->f_url;
+        } else if (linktbl && linktbl->links && linktbl->links[0]) {
+            page_url = linktbl->links[0]->f_url;
+        } else {
+            page_url = url;
         }
-    } else if (CONFIG.external_links && is_external_url(raw_href)
-               && is_cross_origin(url, raw_href)) {
-        /*
-         * -------- External (cross-origin) link handling --------
-         * Extract the filename from the external URL and create a
-         * Link with f_url already pointing to the external server.
-         * LinkTable_fill() will skip URL-construction for these.
-         */
-        char *filename = external_url_to_filename(raw_href);
-        if (filename && filename[0] != '\0' && strcmp(filename, ".") != 0
-            && strcmp(filename, "..") != 0) {
-            /* Determine type: directory if URL (ignoring query/fragment)
-             * ends with '/' */
-            const char *qf = strpbrk(raw_href, "?#");
-            size_t href_len = qf ? (size_t)(qf - raw_href) : strlen(raw_href);
-            LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
+        if (page_url && is_cross_origin(page_url, target_url)) {
+            return;
+        }
+    }
+
+    /* Early duplicate target link removal (first anchor text wins) */
+    if (!target_url_set || LinkHashSet_add(target_url_set, target_url)) {
+        char *anchor = extract_anchor_text(node);
+        char **segments = NULL;
+        int num_segments = 0;
+        extract_url_path_segments(target_url, &segments, &num_segments);
+
+        char *linkname
+            = generate_collision_free_name(set, anchor, segments, num_segments);
+        FREE(anchor);
+        free_url_path_segments(segments, num_segments);
+
+        if (linkname && linkname[0] != '\0') {
+            const char *qf = strpbrk(target_url, "?#");
+            size_t tlen = qf ? (size_t)(qf - target_url) : strlen(target_url);
+            LinkType type = (tlen > 0 && target_url[tlen - 1] == '/')
                                 ? LINK_UNINITIALISED_DIR
                                 : LINK_UNINITIALISED_FILE;
-
-            /* First-wins: skip if a link with this name already exists */
-            if (LinkHashSet_add(set, filename)) {
-                Link *link = Link_new(filename, type);
-                if (target_url_resolved) {
-                    snprintf(link->f_url, sizeof(link->f_url), "%s",
-                             target_url);
-                } else {
-                    snprintf(link->f_url, sizeof(link->f_url), "%s", raw_href);
-                }
-                LinkTable_add(linktbl, link);
-            }
+            Link *link = Link_new(linkname, type);
+            snprintf(link->f_url, sizeof(link->f_url), "%s", target_url);
+            LinkTable_add(linktbl, link);
+            FREE(linkname);
         }
-        FREE(filename);
-    } else {
-        /*
-         * -------- Same-origin / relative link handling (unchanged)
-         * --------
-         */
-        char *relative_url = STRNDUP(raw_href, PATH_MAX);
-        make_link_relative(url, relative_url);
-
-        /* Truncate at the first slash to support links to subdirectories */
-        char *slash = strchr(relative_url, '/');
-        if (slash && slash != relative_url) {
-            /* Don't truncate full URIs like http://... */
-            if (*(slash - 1) != ':' && slash[1] != '/') {
-                slash[1] = '\0';
-            }
-        }
-
-        /* if it is valid, copy the link onto the heap */
-        LinkType type = linkname_to_LinkType(relative_url);
-
-        /* Check if the new link is a duplicate */
-        if ((type == LINK_UNINITIALISED_DIR)
-            || (type == LINK_UNINITIALISED_FILE)) {
-            if (LinkHashSet_add(set, relative_url)) {
-                LinkTable_add(linktbl, Link_new(relative_url, type));
-            }
-        }
-        FREE(relative_url);
     }
 }
 
@@ -545,15 +522,11 @@ void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
 {
     GumboOutput *output = gumbo_parse(html);
     LinkHashSet *set = LinkHashSet_new(linktbl->size * 2);
-    LinkHashSet *target_url_set = CONFIG.advanced_parsing_mode
-                                      ? LinkHashSet_new(linktbl->size * 2)
-                                      : NULL;
+    LinkHashSet *target_url_set = LinkHashSet_new(linktbl->size * 2);
 
     HTML_to_LinkTable(url, output->root, linktbl, set, target_url_set);
 
-    if (target_url_set) {
-        LinkHashSet_free(target_url_set);
-    }
+    LinkHashSet_free(target_url_set);
     LinkHashSet_free(set);
     gumbo_destroy_output(&kGumboDefaultOptions, output);
 }

@@ -354,14 +354,13 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"invalid-refresh", no_argument, NULL, 'L'},        /* 28 */
            {"capath", required_argument, NULL, 'L'},           /* 29 */
            {"proxy-capath", required_argument, NULL, 'L'},     /* 30 */
-           {"external-links", no_argument, NULL, 'L'},         /* 31 */
-           {"cache-min-size", required_argument, NULL, 'L'},   /* 32 */
-           {"cache-max-size", required_argument, NULL, 'L'},   /* 33 */
-           {"ignore-anchors", no_argument, NULL, 'L'},         /* 34 */
-           {"advanced-parsing-mode", no_argument, NULL, 'L'},  /* 35 */
-           {"max-html-size", required_argument, NULL, 'L'},    /* 36 */
-           {"same-origin-only", no_argument, NULL, 'L'},       /* 37 */
-           {"cache-clear-host", required_argument, NULL, 'L'}, /* 38 */
+           {"cache-min-size", required_argument, NULL, 'L'},   /* 31 */
+           {"cache-max-size", required_argument, NULL, 'L'},   /* 32 */
+           {"ignore-anchors", no_argument, NULL, 'L'},         /* 33 */
+           {"html-is-directory", no_argument, NULL, 'L'},      /* 34 */
+           {"max-html-size", required_argument, NULL, 'L'},    /* 35 */
+           {"allow-external-origin", no_argument, NULL, 'L'},  /* 36 */
+           {"cache-clear-host", required_argument, NULL, 'L'}, /* 37 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -481,10 +480,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 30:
                 CONFIG.proxy_capath = STRDUP(optarg);
                 break;
-            case 31:
-                CONFIG.external_links = 1;
-                break;
-            case 32: {
+            case 31: {
                 char *endptr;
                 errno = 0;
                 long long val = strtoll(optarg, &endptr, 10);
@@ -497,7 +493,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 }
                 CONFIG.cache_min_size = (off_t)val;
             } break;
-            case 33: {
+            case 32: {
                 char *endptr;
                 errno = 0;
                 long long val = strtoll(optarg, &endptr, 10);
@@ -510,13 +506,13 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 }
                 CONFIG.cache_max_size = (off_t)val;
             } break;
-            case 34:
+            case 33:
                 CONFIG.ignore_anchors = 1;
                 break;
-            case 35:
-                CONFIG.advanced_parsing_mode = 1;
+            case 34:
+                CONFIG.html_is_directory = 1;
                 break;
-            case 36: {
+            case 35: {
                 off_t size = parse_size_with_suffix(optarg, "--max-html-size");
                 if (size <= 0) {
                     if (size == 0) {
@@ -528,10 +524,10 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 }
                 CONFIG.max_html_size = size;
             } break;
-            case 37:
-                CONFIG.same_origin_only = 1;
+            case 36:
+                CONFIG.allow_external_origin = 1;
                 break;
-            case 38:
+            case 37:
                 CacheSystem_clear_host(optarg);
                 break;
             default:
@@ -624,17 +620,15 @@ HTTPDirFS options:\n\
         --zero-len-is-dir   If a file has a zero length, treat it as a directory\n\
         --insecure-tls      Disable libcurl TLS certificate verification by\n\
                             setting CURLOPT_SSL_VERIFYHOST to 0\n\
-        --external-links    Include external (cross-origin) links from\n\
-                            directory listings (default: off)\n\
+        --allow-external-origin\n\
+                            Allow traversing links pointing to external\n\
+                            servers (default: off)\n\
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links\n\
                             starting with '#' (default: off)\n\
-        --advanced-parsing-mode\n\
-                            Enable advanced parsing mode for non-standard\n\
-                            directory listings (default: off)\n\
+        --html-is-directory Promote resources with Content-Type text/html to\n\
+                            directories (default: off)\n\
         --max-html-size     Set maximum HTML size for directory listing\n\
                             promotion (default: 2M)\n\
-        --same-origin-only  Restrict link traversal to the mounted web server\n\
-                            in advanced parsing mode (default: off)\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
                             directory.\n\n");
