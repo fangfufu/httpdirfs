@@ -100,12 +100,12 @@ HTTPDirFS options:
         --insecure-tls      Disable libcurl TLS certificate verification by
                             setting CURLOPT_SSL_VERIFYHOST to 0
         --allow-external-origin
-                            Allow cross-origin links to be parsed and accessed
-                            (default: off)
+                            Allow traversing links pointing to external
+                            servers (default: off)
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links
                             starting with '#' (default: off)
-        --html-is-directory Promote linked HTML pages (Content-Type: text/html)
-                            to virtual directories (default: off)
+        --html-is-directory Promote resources with Content-Type text/html to
+                            directories (default: off)
         --max-html-size     Set maximum HTML size for directory listing
                             promotion (default: 2M)
         --single-file-mode  Single file mode - rather than mounting a whole
@@ -271,6 +271,10 @@ ______________________________________________________________________
   should be stored.
 - **Default:** `${XDG_CACHE_HOME}/httpdirfs` (usually resolves to
   `~/.cache/httpdirfs`).
+- **Note:** The custom directory is used **verbatim** as the cache root of the
+  mounted server. Unlike the default location, no per-origin subdirectory is
+  appended to it, so all cached data for that server is stored directly inside
+  it.
 
 #### `--cache-clear`
 
@@ -463,6 +467,22 @@ identifies directories.
 
 For the comprehensive architectural specification, see
 \[docs/specs/directory_detection_and_naming.md\](file:///home/fangfufu/projects/httpdirfs/docs/specs/directory_detection_and_naming.md).
+
+______________________________________________________________________
+
+### Diagnostics (`.httpdirfs` directory)
+
+Every directory listing in the mounted filesystem exposes a hidden virtual
+`.httpdirfs` directory. It contains:
+
+- **`CONTENT`**: The raw HTML payload of the directory listing page as served by
+  the web server.
+- **`HEADER`**: The raw HTTP response headers of the directory listing request.
+
+These virtual files are useful for debugging how a web server presents a
+directory, for example when HTTPDirFS appears to misparse a listing. The
+`.httpdirfs` directory is virtual only: it does not exist on the remote server
+and is never stored in the cache.
 
 ______________________________________________________________________
 
