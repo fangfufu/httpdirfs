@@ -138,6 +138,25 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
     char s[STATUS_LEN];
 
     /*
+     * Cache-first HEAD/stat resolution: resolve stats from disk container
+     * without sending network requests if already cached.
+     */
+    if (CACHE_SYSTEM_INIT) {
+        for (int i = 0; i < linktbl->size; i++) {
+            Link *this_link = linktbl->links[i];
+            if (this_link->type == LINK_UNINITIALISED_FILE
+                || this_link->type == LINK_UNINITIALISED_DIR) {
+                CacheStat cs;
+                if (CacheContainer_read_head(this_link->f_url, &cs) == 1) {
+                    this_link->time = cs.remote_mtime;
+                    this_link->content_length = (size_t)cs.content_length;
+                    this_link->type = cs.link_type;
+                }
+            }
+        }
+    }
+
+    /*
      * Start all uninitialized requests once
      */
     int total_uninitialized = 0;
@@ -530,34 +549,42 @@ LinkTable *LinkTable_alloc(const char *url)
 
 LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
 {
-    char *unescaped_path = url_to_cache_path(url);
     LinkTable *linktbl = NULL;
 
     /*
-     * Attempt to load the LinkTable from the disk.
+     * Attempt to load the LinkTable from the disk. The unified single-file
+     * cache stores the raw HTTP response (response headers + HTML payload)
+     * of the directory listing; the LinkTable is regenerated in memory
+     * on-the-fly with LinkTable_parse_html(), in well under a millisecond.
      */
     if (CACHE_SYSTEM_INIT) {
-        CacheDir_create(unescaped_path);
-        LinkTable *disk_linktbl;
-
-        disk_linktbl = LinkTable_disk_open(unescaped_path);
-        if (disk_linktbl) {
-            /*
-             * Check if the LinkTable needs to be refreshed based on timeout.
-             */
-            time_t time_now = time(NULL);
-            if (time_now - disk_linktbl->index_time > CONFIG.refresh_timeout) {
-                lprintf(info, "time_now: %ld, index_time: %ld\n",
-                        (long)time_now, (long)disk_linktbl->index_time);
-                lprintf(info, "diff: %ld, limit: %d\n",
-                        (long)(time_now - disk_linktbl->index_time),
-                        CONFIG.refresh_timeout);
-                LinkTable_free(disk_linktbl);
-            } else {
-                linktbl = disk_linktbl;
-                linktbl->parent_tbl = parent_tbl;
-            }
+        char *payload = NULL;
+        size_t payload_len = 0;
+        char *http_header = NULL;
+        size_t http_header_len = 0;
+        int loaded = CacheContainer_read(url, &payload, &payload_len,
+                                         &http_header, &http_header_len);
+        if (loaded == 1) {
+            lprintf(info, "loaded cached directory listing for %s in < 1 ms\n",
+                    url);
+            linktbl = LinkTable_alloc(url);
+            linktbl->parent_tbl = parent_tbl;
+            linktbl->index_time = time(NULL);
+            LinkTable_parse_html(linktbl, url, payload);
+            LinkTable_fill(linktbl);
+            LinkTable_add_diagnostics(linktbl, payload, payload_len,
+                                      http_header, http_header_len);
+            FREE(payload);
+            FREE(http_header);
+        } else if (loaded == -1) {
+            lprintf(error,
+                    "Failed to read the cached directory listing "
+                    "for %s!\n",
+                    url);
         }
+        /*
+         * loaded == 0: not cached or expired, download a fresh copy below.
+         */
     }
 
     /*
@@ -589,271 +616,23 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
 
         LinkTable_add_diagnostics(linktbl, ts.data, ts.curr_size,
                                   header_ts.data, header_ts.curr_size);
-        FREE(ts.data);
-        FREE(header_ts.data);
 
         /*
-         * Save the link table
+         * Save the raw HTTP response (headers + HTML payload) to the
+         * unified single-file container cache.
          */
-        if (CACHE_SYSTEM_INIT && LinkTable_disk_save(linktbl, unescaped_path)) {
-            lprintf(error, "Failed to save the LinkTable!\n");
+        if (CACHE_SYSTEM_INIT
+            && CacheContainer_write(url, ts.data, ts.curr_size, header_ts.data,
+                                    header_ts.curr_size)) {
+            lprintf(error, "Failed to save the directory listing container "
+                           "file!\n");
         }
+
+        FREE(ts.data);
+        FREE(header_ts.data);
     }
 
-    FREE(unescaped_path);
     LinkTable_print(linktbl);
-    return linktbl;
-}
-
-static void LinkTable_disk_delete(const char *dirn)
-{
-    char *metadirn = path_append(META_DIR, dirn);
-    char *path = path_append(metadirn, ".LinkTable");
-    if (unlink(path)) {
-        lprintf(error, "unlink(%s): %s\n", path, strerror(errno));
-    }
-    FREE(path);
-    char *cpath = path_append(metadirn, ".httpdirfs_content");
-    unlink(cpath);
-    FREE(cpath);
-    char *hpath = path_append(metadirn, ".httpdirfs_header");
-    unlink(hpath);
-    FREE(hpath);
-    FREE(metadirn);
-}
-
-/* This is necessary to get the compiler on some platforms to stop
-   complaining about the fact that we're not using the return value of
-   fread, when we know we aren't and that's fine. */
-static inline void ignore_value(int i)
-{
-    (void)i;
-}
-
-int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
-{
-    char *metadirn = path_append(META_DIR, dirn);
-    char *path = path_append(metadirn, ".LinkTable");
-    FILE *fp = fopen(path, "w");
-
-    if (!fp) {
-        lprintf(error, "fopen(%s): %s\n", path, strerror(errno));
-        FREE(path);
-        FREE(metadirn);
-        return -1;
-    }
-
-    Link *diag_dir = NULL;
-    int saved_size = 0;
-    for (int i = 0; i < linktbl->size; i++) {
-        if (!strcmp(linktbl->links[i]->linkname, ".httpdirfs")) {
-            diag_dir = linktbl->links[i];
-        } else {
-            saved_size++;
-        }
-    }
-
-    if (fwrite(&saved_size, sizeof(int), 1, fp) != 1
-        || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
-        lprintf(error, "Failed to save the header of %s!\n", path);
-    }
-    FREE(path);
-    for (int i = 0; i < linktbl->size; i++) {
-        if (!strcmp(linktbl->links[i]->linkname, ".httpdirfs")) {
-            continue;
-        }
-        ignore_value(
-            fwrite(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp));
-        ignore_value(
-            fwrite(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp));
-        ignore_value(fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
-        ignore_value(
-            fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp));
-        ignore_value(fwrite(&linktbl->links[i]->time, sizeof(long), 1, fp));
-    }
-
-    int res = 0;
-
-    if (ferror(fp)) {
-        lprintf(error, "encountered ferror!\n");
-        res = -1;
-    }
-
-    if (fclose(fp)) {
-        lprintf(error, "cannot close the file pointer, %s\n", strerror(errno));
-        res = -1;
-    }
-
-    if (diag_dir && diag_dir->next_table) {
-        LinkTable *dtbl = diag_dir->next_table;
-        const char *cdata = NULL;
-        size_t content_len = 0;
-        const char *hdata = NULL;
-        size_t header_len = 0;
-        for (int i = 1; i < dtbl->size; i++) {
-            if (!strcmp(dtbl->links[i]->linkname, "CONTENT")) {
-                cdata = dtbl->links[i]->virtual_content;
-                content_len = dtbl->links[i]->content_length;
-            } else if (!strcmp(dtbl->links[i]->linkname, "HEADER")) {
-                hdata = dtbl->links[i]->virtual_content;
-                header_len = dtbl->links[i]->content_length;
-            }
-        }
-        char *cpath = path_append(metadirn, ".httpdirfs_content");
-        char *hpath = path_append(metadirn, ".httpdirfs_header");
-        FILE *cfp = fopen(cpath, "wb");
-        if (cfp) {
-            if (cdata && content_len > 0) {
-                ignore_value(fwrite(cdata, 1, content_len, cfp));
-            }
-            fclose(cfp);
-        }
-        FILE *hfp = fopen(hpath, "wb");
-        if (hfp) {
-            if (hdata && header_len > 0) {
-                ignore_value(fwrite(hdata, 1, header_len, hfp));
-            }
-            fclose(hfp);
-        }
-        FREE(cpath);
-        FREE(hpath);
-    }
-
-    FREE(metadirn);
-    return res;
-}
-
-LinkTable *LinkTable_disk_open(const char *dirn)
-{
-    char *metadirn = path_append(META_DIR, dirn);
-    char *path = path_append(metadirn, ".LinkTable");
-    FILE *fp = fopen(path, "r");
-
-    if (!fp) {
-        FREE(path);
-        FREE(metadirn);
-        return NULL;
-    }
-
-    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
-    int sz = 0;
-    if (fread(&sz, sizeof(int), 1, fp) != 1
-        || fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
-        lprintf(error, "Failed to read the header of %s!\n", path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        FREE(metadirn);
-        return NULL;
-    }
-
-    long entry_size = (long)(NAME_MAX + PATH_MAX + sizeof(LinkType)
-                             + sizeof(size_t) + sizeof(long));
-    if (fseek(fp, 0, SEEK_END) != 0) {
-        lprintf(error, "Failed to seek %s!\n", path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        FREE(metadirn);
-        return NULL;
-    }
-    long file_size = ftell(fp);
-    if (file_size < 0
-        || fseek(fp, (long)(sizeof(int) + sizeof(time_t)), SEEK_SET) != 0) {
-        lprintf(error, "Failed to inspect %s!\n", path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        FREE(metadirn);
-        return NULL;
-    }
-
-    long max_entries
-        = (file_size - (long)(sizeof(int) + sizeof(time_t))) / entry_size;
-
-    if (sz < 1 || max_entries < sz) {
-        lprintf(error, "Invalid link table size: %d in %s!\n", sz, path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        FREE(metadirn);
-        return NULL;
-    }
-
-    linktbl->size = sz;
-    linktbl->links
-        = (Link **)CALLOC( // NOLINT(clang-analyzer-optin.taint.TaintedAlloc)
-            sz, sizeof(Link *));
-
-    for (int i = 0; i < sz; i++) {
-        linktbl->links[i] = CALLOC(1, sizeof(Link));
-        linktbl->links[i]->parent_table = linktbl;
-        if (fread(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp)
-                != NAME_MAX
-            || fread(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp)
-                   != PATH_MAX
-            || fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp) != 1
-            || fread(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp)
-                   != 1
-            || fread(&linktbl->links[i]->time, sizeof(long), 1, fp) != 1) {
-            lprintf(error, "Corrupted LinkTable at index %d!\n", i);
-            fclose(fp);
-            LinkTable_free(linktbl);
-            LinkTable_disk_delete(dirn);
-            FREE(path);
-            FREE(metadirn);
-            return NULL;
-        }
-    }
-    if (fclose(fp)) {
-        lprintf(error, "cannot close the file pointer, %s\n", strerror(errno));
-    }
-
-    FREE(path);
-
-    char *cpath = path_append(metadirn, ".httpdirfs_content");
-    char *hpath = path_append(metadirn, ".httpdirfs_header");
-    size_t content_len = 0;
-    size_t header_len = 0;
-    char *cdata = NULL;
-    char *hdata = NULL;
-
-    FILE *cfp = fopen(cpath, "rb");
-    if (cfp) {
-        if (fseek(cfp, 0, SEEK_END) == 0) {
-            long c_sz = ftell(cfp);
-            if (c_sz >= 0 && fseek(cfp, 0, SEEK_SET) == 0) {
-                cdata = CALLOC(1, (size_t)c_sz + 1);
-                content_len = fread(cdata, 1, (size_t)c_sz, cfp);
-                cdata[content_len] = '\0';
-            }
-        }
-        fclose(cfp);
-    }
-
-    FILE *hfp = fopen(hpath, "rb");
-    if (hfp) {
-        if (fseek(hfp, 0, SEEK_END) == 0) {
-            long h_sz = ftell(hfp);
-            if (h_sz >= 0 && fseek(hfp, 0, SEEK_SET) == 0) {
-                hdata = CALLOC(1, (size_t)h_sz + 1);
-                header_len = fread(hdata, 1, (size_t)h_sz, hfp);
-                hdata[header_len] = '\0';
-            }
-        }
-        fclose(hfp);
-    }
-
-    LinkTable_add_diagnostics(linktbl, cdata, content_len, hdata, header_len);
-    FREE(cdata);
-    FREE(hdata);
-    FREE(cpath);
-    FREE(hpath);
-    FREE(metadirn);
     return linktbl;
 }
 

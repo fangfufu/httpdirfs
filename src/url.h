@@ -69,8 +69,30 @@ char *get_server_root(const char *url);
 const char *get_url_path_from_server_root(const char *url);
 
 /**
- * \brief Safely generate the cache path for a given URL, handling cross-origin
- * external links.
+ * \brief Derive the hash-sharded cache path for an arbitrary source string.
+ * \details Returns "<first 2 hex chars of md5>/<full 32-char md5>" where the
+ * md5 is computed over the source string. The 1-level hash sharding
+ * eliminates file-versus-directory path collisions and is immune to the
+ * Linux NAME_MAX / PATH_MAX limits.
+ * \note The caller must free the returned string with FREE().
+ */
+char *string_to_cache_path(const char *source);
+
+/**
+ * \brief Canonicalize a URL for deterministic cache hashing and matching.
+ * \details Strips fragments, normalizes scheme/host to lowercase, removes
+ * default ports (80/443), normalizes path segments (resolving '.' and '..'),
+ * and normalizes percent-encoding.
+ * \param[in] url The raw URL string.
+ * \return Heap-allocated canonical URL string, or NULL on error.
+ * \note The caller must free the returned string with FREE().
+ */
+char *canonicalize_url(const char *url);
+
+/**
+ * \brief Derive the hash-sharded cache path for a canonical URL.
+ * \details Passes the URL through canonicalize_url() before generating the
+ * MD5 hash so semantically identical URLs yield the exact same cache path.
  * \note The caller must free the returned string with FREE().
  */
 char *url_to_cache_path(const char *url);

@@ -436,89 +436,88 @@ void test_url_to_cache_path_null(void)
     TEST_ASSERT_NULL(url_to_cache_path(NULL));
 }
 
+static void check_hash_path_format(const char *url, const char *path)
+{
+    TEST_ASSERT_NOT_NULL(path);
+    /*
+     * Expected format: "<first 2 hex of md5>/<full 32-char md5>"
+     */
+    TEST_ASSERT_EQUAL_INT(35, (int)strlen(path));
+    TEST_ASSERT_EQUAL_CHAR('/', path[2]);
+    char *hash = generate_md5sum(url);
+    TEST_ASSERT_NOT_NULL(hash);
+    TEST_ASSERT_EQUAL_INT(0, strncmp(path, hash, 2));
+    TEST_ASSERT_EQUAL_INT(0, strncmp(path + 3, hash, 32));
+    FREE(hash);
+}
+
 void test_url_to_cache_path_local(void)
 {
     char *path = url_to_cache_path("http://localhost/my%20file.iso");
-    TEST_ASSERT_NOT_NULL(path);
-    TEST_ASSERT_EQUAL_STRING("/my file.iso", path);
+    check_hash_path_format("http://localhost/my%20file.iso", path);
+    /*
+     * Deterministic: the same URL always derives the same cache path.
+     */
+    char *path_again = url_to_cache_path("http://localhost/my%20file.iso");
+    TEST_ASSERT_EQUAL_STRING(path, path_again);
     FREE(path);
+    FREE(path_again);
 }
 
 void test_url_to_cache_path_external_sanitization(void)
 {
-    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/");
+    /*
+     * Cross-origin URLs are keyed by the raw URL hash, exactly like
+     * same-origin ones.
+     */
     char *path = url_to_cache_path("http://external.com/my%20file.iso?param=1");
-    TEST_ASSERT_NOT_NULL(path);
-    TEST_ASSERT_EQUAL_STRING("http___external.com_my file.iso?param=1", path);
+    check_hash_path_format("http://external.com/my%20file.iso?param=1", path);
     FREE(path);
-    LinkTable_free(ROOT_LINK_TBL);
-    ROOT_LINK_TBL = NULL;
 }
 
 void test_url_to_cache_path_same_origin_different_path(void)
 {
-    ROOT_LINK_TBL
-        = LinkTable_alloc("https://example.com/browse/1001/"
-                          "Sample%20Archive%20-%20Collection%201.0%20-"
-                          "%20Test.iso");
+    const char *urls[4]
+        = {"https://example.com/view/1001/file.iso",
+           "https://example.com/browse/1001", "https://example.com/",
+           "https://example.com/other-folder"};
+    char *paths[4] = {0};
 
-    /* Same server origin: viewer URL on same host */
-    char *p1 = url_to_cache_path("https://example.com/view/1001/"
-                                 "Sample%20Archive%20-%20Collection%201.0%20-"
-                                 "%20Test.iso");
-    TEST_ASSERT_NOT_NULL(p1);
-    TEST_ASSERT_EQUAL_STRING("/view/1001/"
-                             "Sample Archive - Collection 1.0 - Test.iso",
-                             p1);
-    FREE(p1);
+    for (int i = 0; i < 4; i++) {
+        paths[i] = url_to_cache_path(urls[i]);
+        check_hash_path_format(urls[i], paths[i]);
+    }
 
-    /* Same server origin: parent directory */
-    char *p2 = url_to_cache_path("https://example.com/browse/1001");
-    TEST_ASSERT_NOT_NULL(p2);
-    TEST_ASSERT_EQUAL_STRING("/browse/1001", p2);
-    FREE(p2);
+    /*
+     * Different URLs must derive different cache paths (no
+     * file-versus-directory collisions, no truncation).
+     */
+    for (int i = 0; i < 4; i++) {
+        for (int j = i + 1; j < 4; j++) {
+            TEST_ASSERT_NOT_EQUAL(0, strcmp(paths[i], paths[j]));
+        }
+    }
 
-    /* Same server origin: host root */
-    char *p3 = url_to_cache_path("https://example.com/");
-    TEST_ASSERT_NOT_NULL(p3);
-    TEST_ASSERT_EQUAL_STRING("/", p3);
-    FREE(p3);
-
-    /* Same server origin: sibling path */
-    char *p4 = url_to_cache_path("https://example.com/other-folder");
-    TEST_ASSERT_NOT_NULL(p4);
-    TEST_ASSERT_EQUAL_STRING("/other-folder", p4);
-    FREE(p4);
-
-    /* Same server origin: true descendant subfolder */
-    char *p5 = url_to_cache_path("https://example.com/browse/1001/"
-                                 "Sample%20Archive%20-%20Collection%201.0%20-"
-                                 "%20Test.iso/001");
-    TEST_ASSERT_NOT_NULL(p5);
-    TEST_ASSERT_EQUAL_STRING("/browse/1001/"
-                             "Sample Archive - Collection 1.0 - Test.iso/001",
-                             p5);
-    FREE(p5);
-
-    LinkTable_free(ROOT_LINK_TBL);
-    ROOT_LINK_TBL = NULL;
+    for (int i = 0; i < 4; i++) {
+        FREE(paths[i]);
+    }
 }
 
 void test_url_to_cache_path_same_origin_encoding_divergence(void)
 {
-    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/my%20folder/");
+    /*
+     * The cache key is the MD5 of the canonical URL string, so different
+     * encodings of the same resource derive different (valid) paths.
+     */
     char *path1 = url_to_cache_path("http://localhost/my folder/file.txt");
-    TEST_ASSERT_NOT_NULL(path1);
-    TEST_ASSERT_EQUAL_STRING("/my folder/file.txt", path1);
-    FREE(path1);
+    check_hash_path_format("http://localhost/my folder/file.txt", path1);
 
     char *path2 = url_to_cache_path("http://localhost/my%20folder/file.txt");
-    TEST_ASSERT_NOT_NULL(path2);
-    TEST_ASSERT_EQUAL_STRING("/my folder/file.txt", path2);
-    FREE(path2);
+    check_hash_path_format("http://localhost/my%20folder/file.txt", path2);
 
-    LinkTable_free(ROOT_LINK_TBL);
-    ROOT_LINK_TBL = NULL;
+    TEST_ASSERT_NOT_EQUAL(0, strcmp(path1, path2));
+    FREE(path1);
+    FREE(path2);
 }
 
 void test_get_server_root(void)
@@ -554,18 +553,72 @@ void test_get_server_root(void)
 
 void test_url_to_cache_path_long_url_hashed(void)
 {
-    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/");
     char long_url[300];
     memset(long_url, 'a', sizeof(long_url));
     memcpy(long_url, "http://external.com/", 20);
     long_url[299] = '\0';
 
+    /*
+     * Long URLs are immune to the NAME_MAX / PATH_MAX limits: the cache
+     * path is always the fixed-size "ab/<hash>" string.
+     */
     char *path = url_to_cache_path(long_url);
-    TEST_ASSERT_NOT_NULL(path);
-    TEST_ASSERT_TRUE(strlen(path) < 255);
+    check_hash_path_format(long_url, path);
     FREE(path);
-    LinkTable_free(ROOT_LINK_TBL);
-    ROOT_LINK_TBL = NULL;
+}
+
+void test_canonicalize_url(void)
+{
+    TEST_ASSERT_NULL(canonicalize_url(NULL));
+
+    char *c1 = canonicalize_url("HTTP://EXAMPLE.COM/foo");
+    TEST_ASSERT_NOT_NULL(c1);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/foo", c1);
+    FREE(c1);
+
+    char *c2 = canonicalize_url("http://example.com:80/foo");
+    TEST_ASSERT_NOT_NULL(c2);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/foo", c2);
+    FREE(c2);
+
+    char *c3 = canonicalize_url("https://example.com:443/foo");
+    TEST_ASSERT_NOT_NULL(c3);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/foo", c3);
+    FREE(c3);
+
+    char *c4 = canonicalize_url("http://example.com:8080/foo");
+    TEST_ASSERT_NOT_NULL(c4);
+    TEST_ASSERT_EQUAL_STRING("http://example.com:8080/foo", c4);
+    FREE(c4);
+
+    char *c5 = canonicalize_url("http://example.com/foo#section1");
+    TEST_ASSERT_NOT_NULL(c5);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/foo", c5);
+    FREE(c5);
+
+    char *c6 = canonicalize_url("http://example.com/a/b/../c");
+    TEST_ASSERT_NOT_NULL(c6);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/a/c", c6);
+    FREE(c6);
+
+    char *c7 = canonicalize_url("http://example.com/dir//sub/file");
+    TEST_ASSERT_NOT_NULL(c7);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/dir/sub/file", c7);
+    FREE(c7);
+
+    char *c8 = canonicalize_url("http://example.com/dir/");
+    TEST_ASSERT_NOT_NULL(c8);
+    TEST_ASSERT_EQUAL_STRING("http://example.com/dir/", c8);
+    FREE(c8);
+
+    /* Verify that uncanonicalized variations produce identical cache paths */
+    char *p1 = url_to_cache_path("HTTP://Example.COM:80/dir/../file#section");
+    char *p2 = url_to_cache_path("http://example.com/file");
+    TEST_ASSERT_NOT_NULL(p1);
+    TEST_ASSERT_NOT_NULL(p2);
+    TEST_ASSERT_EQUAL_STRING(p1, p2);
+    FREE(p1);
+    FREE(p2);
 }
 
 /* ========================================================================= */
@@ -1613,6 +1666,7 @@ int main(void)
     RUN_TEST(test_url_to_cache_path_same_origin_different_path);
     RUN_TEST(test_url_to_cache_path_same_origin_encoding_divergence);
     RUN_TEST(test_url_to_cache_path_long_url_hashed);
+    RUN_TEST(test_canonicalize_url);
     RUN_TEST(test_get_server_root);
 
     /* Pre-existing tests */

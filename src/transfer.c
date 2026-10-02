@@ -253,6 +253,39 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
          * Transfer successful, set the file size
          */
         Link_set_file_stat(ts->link, curl);
+        if (CACHE_SYSTEM_INIT) {
+            char *eff_url = NULL;
+            long http_resp = 0;
+            curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &eff_url);
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
+            char *ct = NULL;
+            curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct);
+
+            int bypass = 0;
+            if (ts->link->type == LINK_FILE) {
+                off_t file_size = (off_t)ts->link->content_length;
+                if ((CONFIG.cache_min_size >= 0
+                     && file_size < CONFIG.cache_min_size)
+                    || (CONFIG.cache_max_size >= 0
+                        && file_size > CONFIG.cache_max_size)) {
+                    bypass = 1;
+                }
+            }
+
+            if (!bypass) {
+                const char *target_url
+                    = (eff_url && eff_url[0]) ? eff_url : ts->link->f_url;
+                CacheContainer_write_head(
+                    target_url, http_resp, (curl_off_t)ts->link->content_length,
+                    ts->link->time, ct ? ct : "", NULL, 0, ts->link->type);
+
+                if (eff_url && eff_url[0]
+                    && strcmp(eff_url, ts->link->f_url) != 0) {
+                    CacheContainer_write_redirect(ts->link->f_url, eff_url,
+                                                  http_resp);
+                }
+            }
+        }
     } else {
         lprintf(error, "%d - %s <%s>\n", result, curl_easy_strerror(result),
                 url ? url : "");
@@ -495,6 +528,12 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    char *eff_url = NULL;
+    curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &eff_url);
+    if (CACHE_SYSTEM_INIT && eff_url && eff_url[0]
+        && strcmp(eff_url, url) != 0) {
+        CacheContainer_write_redirect(url, eff_url, http_resp);
     }
     if (!header_out) {
         FREE(header_local.data);

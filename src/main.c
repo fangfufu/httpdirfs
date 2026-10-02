@@ -323,44 +323,45 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
     const struct option long_opts[]
 
         = {/* Note that 'L' is returned for long options */
-           {"help", no_argument, NULL, 'h'},                  /* 0 */
-           {"version", no_argument, NULL, 'V'},               /* 1 */
-           {"debug", no_argument, NULL, 'd'},                 /* 2 */
-           {"username", required_argument, NULL, 'u'},        /* 3 */
-           {"password", required_argument, NULL, 'p'},        /* 4 */
-           {"proxy", required_argument, NULL, 'P'},           /* 5 */
-           {"proxy-username", required_argument, NULL, 'L'},  /* 6 */
-           {"proxy-password", required_argument, NULL, 'L'},  /* 7 */
-           {"cache", no_argument, NULL, 'L'},                 /* 8 */
-           {"dl-seg-size", required_argument, NULL, 'L'},     /* 9 */
-           {"max-conns", required_argument, NULL, 'L'},       /* 10 */
-           {"user-agent", required_argument, NULL, 'L'},      /* 11 */
-           {"retry-wait", required_argument, NULL, 'L'},      /* 12 */
-           {"cache-location", required_argument, NULL, 'L'},  /* 13 */
-           {"sonic-username", required_argument, NULL, 'L'},  /* 14 */
-           {"sonic-password", required_argument, NULL, 'L'},  /* 15 */
-           {"sonic-id3", no_argument, NULL, 'L'},             /* 16 */
-           {"no-range-check", no_argument, NULL, 'L'},        /* 17 */
-           {"sonic-insecure", no_argument, NULL, 'L'},        /* 18 */
-           {"insecure-tls", no_argument, NULL, 'L'},          /* 19 */
-           {"config", required_argument, NULL, 'L'},          /* 20 */
-           {"single-file-mode", no_argument, NULL, 'L'},      /* 21 */
-           {"cacert", required_argument, NULL, 'L'},          /* 22 */
-           {"proxy-cacert", required_argument, NULL, 'L'},    /* 23 */
-           {"refresh-timeout", required_argument, NULL, 'L'}, /* 24 */
-           {"http-header", required_argument, NULL, 'L'},     /* 25 */
-           {"cache-clear", no_argument, NULL, 'L'},           /* 26 */
-           {"zero-len-is-dir", no_argument, NULL, 'L'},       /* 27 */
-           {"invalid-refresh", no_argument, NULL, 'L'},       /* 28 */
-           {"capath", required_argument, NULL, 'L'},          /* 29 */
-           {"proxy-capath", required_argument, NULL, 'L'},    /* 30 */
-           {"external-links", no_argument, NULL, 'L'},        /* 31 */
-           {"cache-min-size", required_argument, NULL, 'L'},  /* 32 */
-           {"cache-max-size", required_argument, NULL, 'L'},  /* 33 */
-           {"ignore-anchors", no_argument, NULL, 'L'},        /* 34 */
-           {"advanced-parsing-mode", no_argument, NULL, 'L'}, /* 35 */
-           {"max-html-size", required_argument, NULL, 'L'},   /* 36 */
-           {"same-origin-only", no_argument, NULL, 'L'},      /* 37 */
+           {"help", no_argument, NULL, 'h'},                   /* 0 */
+           {"version", no_argument, NULL, 'V'},                /* 1 */
+           {"debug", no_argument, NULL, 'd'},                  /* 2 */
+           {"username", required_argument, NULL, 'u'},         /* 3 */
+           {"password", required_argument, NULL, 'p'},         /* 4 */
+           {"proxy", required_argument, NULL, 'P'},            /* 5 */
+           {"proxy-username", required_argument, NULL, 'L'},   /* 6 */
+           {"proxy-password", required_argument, NULL, 'L'},   /* 7 */
+           {"cache", no_argument, NULL, 'L'},                  /* 8 */
+           {"dl-seg-size", required_argument, NULL, 'L'},      /* 9 */
+           {"max-conns", required_argument, NULL, 'L'},        /* 10 */
+           {"user-agent", required_argument, NULL, 'L'},       /* 11 */
+           {"retry-wait", required_argument, NULL, 'L'},       /* 12 */
+           {"cache-location", required_argument, NULL, 'L'},   /* 13 */
+           {"sonic-username", required_argument, NULL, 'L'},   /* 14 */
+           {"sonic-password", required_argument, NULL, 'L'},   /* 15 */
+           {"sonic-id3", no_argument, NULL, 'L'},              /* 16 */
+           {"no-range-check", no_argument, NULL, 'L'},         /* 17 */
+           {"sonic-insecure", no_argument, NULL, 'L'},         /* 18 */
+           {"insecure-tls", no_argument, NULL, 'L'},           /* 19 */
+           {"config", required_argument, NULL, 'L'},           /* 20 */
+           {"single-file-mode", no_argument, NULL, 'L'},       /* 21 */
+           {"cacert", required_argument, NULL, 'L'},           /* 22 */
+           {"proxy-cacert", required_argument, NULL, 'L'},     /* 23 */
+           {"refresh-timeout", required_argument, NULL, 'L'},  /* 24 */
+           {"http-header", required_argument, NULL, 'L'},      /* 25 */
+           {"cache-clear", no_argument, NULL, 'L'},            /* 26 */
+           {"zero-len-is-dir", no_argument, NULL, 'L'},        /* 27 */
+           {"invalid-refresh", no_argument, NULL, 'L'},        /* 28 */
+           {"capath", required_argument, NULL, 'L'},           /* 29 */
+           {"proxy-capath", required_argument, NULL, 'L'},     /* 30 */
+           {"external-links", no_argument, NULL, 'L'},         /* 31 */
+           {"cache-min-size", required_argument, NULL, 'L'},   /* 32 */
+           {"cache-max-size", required_argument, NULL, 'L'},   /* 33 */
+           {"ignore-anchors", no_argument, NULL, 'L'},         /* 34 */
+           {"advanced-parsing-mode", no_argument, NULL, 'L'},  /* 35 */
+           {"max-html-size", required_argument, NULL, 'L'},    /* 36 */
+           {"same-origin-only", no_argument, NULL, 'L'},       /* 37 */
+           {"cache-clear-host", required_argument, NULL, 'L'}, /* 38 */
            {0, 0, 0, 0}};
     while ((c = getopt_long(argc, argv, short_opts, long_opts, &long_index))
            != -1) {
@@ -530,6 +531,9 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 37:
                 CONFIG.same_origin_only = 1;
                 break;
+            case 38:
+                CacheSystem_clear_host(optarg);
+                break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
                 exit(EXIT_FAILURE);
@@ -591,6 +595,10 @@ HTTPDirFS options:\n\
         --cache-clear       Delete the cache directory or the custom location\n\
                             specified with `--cache-location`, if the option is\n\
                             seen first. Then exit in either case.\n\
+        --cache-clear-host  Delete only the cache of a single server host,\n\
+                            given as a full URL or a bare host (both the http\n\
+                            and https origin directories are then removed).\n\
+                            Then exit.\n\
         --cache-min-size    Set minimum file size threshold for caching, in bytes\n\
                             (default: none)\n\
         --cache-max-size    Set maximum file size threshold for caching, in bytes\n\

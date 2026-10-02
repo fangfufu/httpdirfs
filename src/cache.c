@@ -24,6 +24,31 @@
 /**
  * \file cache.c
  * \brief Permanent cache system implementation
+ *
+ * Unified single-file cache architecture:
+ *
+ * Every cached URL is stored in exactly one container file:
+ *
+ *     <CACHE_DIR>/<ab>/<hash>
+ *
+ * where <hash> is the 32-character MD5 of the canonical source URL and
+ * <ab> is the first two hex characters of that hash (1-level sharding into
+ * 256 directories). The container file layout is:
+ *
+ *     +-----------------------------------------------------------------+
+ *     | CacheHeader (64 bytes)                                          |
+ *     | Canonical source URL string (url_len bytes, NUL-terminated)     |
+ *     | Raw HTTP response headers (http_header_len bytes)               |
+ *     | Segment bitmap (segbc bytes)                                    |
+ *     | Zero padding to the next 4096-byte boundary (header_size)       |
+ *     | Payload data (content_length bytes)                             |
+ *     +-----------------------------------------------------------------+
+ *
+ * A directory listing is just an HTTP resource (text/html), exactly like a
+ * video or a binary file: the cache engine stores the raw HTTP content of
+ * every resource uniformly, and the LinkTable of a directory is regenerated
+ * in memory on the fly with LinkTable_parse_html() when the cached payload
+ * is read.
  */
 
 #include "cache.h"
@@ -51,7 +76,7 @@
  * ---------------- External variables -----------------------
  */
 int CACHE_SYSTEM_INIT = 0;
-char *META_DIR;
+char *CACHE_DIR;
 
 /*
  * ----------------- Static variables -----------------------
@@ -64,15 +89,17 @@ char *META_DIR;
 static pthread_mutex_t cf_lock;
 
 /**
- * \brief The data directory
+ * \brief Whether CACHE_DIR was allocated by this module
+ * \details When the user supplies --cache-location, CACHE_DIR points to
+ * CONFIG.cache_dir which is freed by Config_cleanup().
  */
-static char *DATA_DIR;
+static int cache_dir_owned = 0;
 
 
 char *CacheSystem_get_cache_dir(void)
 {
     if (CONFIG.cache_dir) {
-        return CONFIG.cache_dir;
+        return STRDUP(CONFIG.cache_dir);
     }
 
     const char *default_cache_subdir = "/.cache";
@@ -103,12 +130,60 @@ char *CacheSystem_get_cache_dir(void)
     return cache_dir;
 }
 
-/**
- * \brief Calculate cache system directory path
- */
-static char *CacheSystem_calc_dir(const char *url)
+char *CacheSystem_get_cache_root(void)
 {
     char *cache_home = CacheSystem_get_cache_dir();
+    char *root;
+    if (CONFIG.cache_dir) {
+        /*
+         * A custom cache location is used verbatim as the cache root of the
+         * mounted server.
+         */
+        root = cache_home;
+    } else {
+        root = path_append(cache_home, "/httpdirfs/");
+        FREE(cache_home);
+    }
+    return root;
+}
+
+/**
+ * \brief Compute the cache directory path of a server origin without
+ * creating anything on disk.
+ * \note The caller must free the returned string with FREE().
+ */
+static char *cache_host_path(const char *url)
+{
+    char *cache_dir_root = CacheSystem_get_cache_root();
+    char *server_root = get_server_root(url);
+    const char *target_url = server_root ? server_root : url;
+    CURL *c = curl_easy_init();
+    char *escaped_url = curl_easy_escape(c, target_url, 0);
+    char *full_path = path_append(cache_dir_root, escaped_url);
+    FREE(cache_dir_root);
+    if (server_root) {
+        FREE(server_root);
+    }
+    curl_free(escaped_url);
+    curl_easy_cleanup(c);
+    return full_path;
+}
+
+char *CacheSystem_calc_dir(const char *url)
+{
+    char *cache_home = CacheSystem_get_cache_dir();
+
+    if (CONFIG.cache_dir) {
+        /*
+         * A custom cache location is the cache root of this server itself;
+         * no origin directory is appended.
+         */
+        if (mkdir(cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+            && (errno != EEXIST)) {
+            lprintf(fatal, "mkdir(): %s\n", strerror(errno));
+        }
+        return cache_home;
+    }
 
     if (mkdir(cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
@@ -119,6 +194,7 @@ static char *CacheSystem_calc_dir(const char *url)
         && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
+    FREE(cache_home);
 
     char *fn = path_append(cache_dir_root, "/CACHEDIR.TAG");
     FILE *fp = fopen(fn, "w");
@@ -136,23 +212,13 @@ static char *CacheSystem_calc_dir(const char *url)
     if (fclose(fp)) {
         lprintf(fatal, "fclose(%s): %s\n", fn, strerror(errno));
     }
-    char *server_root = get_server_root(url);
-    const char *target_url = server_root ? server_root : url;
-    CURL *c = curl_easy_init();
-    char *escaped_url = curl_easy_escape(c, target_url, 0);
-    char *full_path = path_append(cache_dir_root, escaped_url);
+    FREE(fn);
+
+    char *full_path = cache_host_path(url);
     if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
-    FREE(fn);
-    FREE(cache_home);
-    FREE(cache_dir_root);
-    if (server_root) {
-        FREE(server_root);
-    }
-    curl_free(escaped_url);
-    curl_easy_cleanup(c);
     return full_path;
 }
 
@@ -163,46 +229,15 @@ void CacheSystem_init(const char *path, int url_supplied)
     PTHREAD_MUTEX_INIT(&cf_lock, NULL);
 
     if (url_supplied) {
-        path = CacheSystem_calc_dir(path);
-    }
-
-    META_DIR = path_append(path, "meta/");
-    DATA_DIR = path_append(path, "data/");
-    /*
-     * Check if directories exist, if not, create them
-     */
-    if (mkdir(META_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "mkdir(): %s\n", strerror(errno));
-    }
-
-    if (mkdir(DATA_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "mkdir(): %s\n", strerror(errno));
-    }
-
-    if (CONFIG.mode == SONIC) {
-        char *sonic_path;
-        /*
-         * Create "rest" sub-directory for META_DIR
-         */
-        sonic_path = path_append(META_DIR, "rest/");
-        if (mkdir(sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
+        CACHE_DIR = CacheSystem_calc_dir(path);
+    } else {
+        CACHE_DIR = STRDUP(path);
+        if (mkdir(CACHE_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
             && (errno != EEXIST)) {
             lprintf(fatal, "mkdir(): %s\n", strerror(errno));
         }
-        FREE(sonic_path);
-
-        /*
-         * Create "rest" sub-directory for DATA_DIR
-         */
-        sonic_path = path_append(DATA_DIR, "rest/");
-        if (mkdir(sonic_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
-            lprintf(fatal, "mkdir(): %s\n", strerror(errno));
-        }
-        FREE(sonic_path);
     }
+    cache_dir_owned = 1;
 
     CACHE_SYSTEM_INIT = 1;
 }
@@ -210,8 +245,10 @@ void CacheSystem_init(const char *path, int url_supplied)
 void CacheSystem_cleanup(void)
 {
     if (CACHE_SYSTEM_INIT) {
-        FREE(META_DIR);
-        FREE(DATA_DIR);
+        if (cache_dir_owned) {
+            FREE(CACHE_DIR);
+            cache_dir_owned = 0;
+        }
         PTHREAD_MUTEX_DESTROY(&cf_lock);
         CACHE_SYSTEM_INIT = 0;
     }
@@ -228,206 +265,524 @@ static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
 
 void CacheSystem_clear(void)
 {
-    char *cache_home = CacheSystem_get_cache_dir();
-    const char *cache_del;
-    if (CONFIG.cache_dir) {
-        cache_del = cache_home;
-    } else {
-        cache_del = path_append(cache_home, "/httpdirfs/");
-    }
+    char *cache_del = CacheSystem_get_cache_root();
     nftw(cache_del, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
-    FREE(cache_home);
+    if (!CONFIG.cache_dir) {
+        FREE(cache_del);
+    }
     exit(EXIT_SUCCESS);
 }
 
-/**
- * \brief read a metadata file
- * \return 0 on success, errno on error.
- */
-static int Meta_read(Cache *cf)
+int CacheSystem_delete_host(const char *arg)
 {
-    FILE *fp = cf->mfp;
+    if (!arg || !arg[0]) {
+        lprintf(error, "--cache-clear-host requires a URL or host\n");
+        return -1;
+    }
+
+    static const char *schemes[2] = {"https", "http"};
+    int found = 0;
+
+    if (strstr(arg, "://")) {
+        /*
+         * A full URL was supplied: only the escaped server root directory of
+         * that origin is removed.
+         */
+        char *host_dir = cache_host_path(arg);
+        struct stat st;
+        if (stat(host_dir, &st) == 0) {
+            found = 1;
+        }
+        nftw(host_dir, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
+        if (remove(host_dir) && errno != ENOENT) {
+            lprintf(warning, "remove(%s): %s\n", host_dir, strerror(errno));
+        }
+        FREE(host_dir);
+    } else {
+        /*
+         * A bare host was supplied: check both the https and the http origin
+         * directories.
+         */
+        for (int i = 0; i < 2; i++) {
+            char *url = CALLOC(PATH_MAX + 1, sizeof(char));
+            snprintf(url, PATH_MAX + 1, "%s://%s", schemes[i], arg);
+            char *host_dir = cache_host_path(url);
+            struct stat st;
+            if (stat(host_dir, &st) == 0) {
+                found = 1;
+            }
+            nftw(host_dir, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
+            if (remove(host_dir) && errno != ENOENT) {
+                lprintf(warning, "remove(%s): %s\n", host_dir, strerror(errno));
+            }
+            FREE(host_dir);
+            FREE(url);
+        }
+    }
+    return found;
+}
+
+void CacheSystem_clear_host(const char *arg)
+{
+    (void)CacheSystem_delete_host(arg);
+    exit(EXIT_SUCCESS);
+}
+
+static void ensure_parent_dir(const char *filepath);
+
+/**
+ * \brief Return the canonical source string used as the cache key of a link
+ * \details For SONIC mode the stable track id is used (the stream URL
+ * contains per-session authentication tokens), for all other modes the
+ * canonical f_url is used.
+ */
+static const char *cache_key_source(const Link *link)
+{
+    if (CONFIG.mode == SONIC && link->sonic.id) {
+        return link->sonic.id;
+    }
+    return link->f_url;
+}
+
+static char *resolve_redirect_fn(const char *fn, int depth)
+{
+    if (!fn || depth > 5 || !CACHE_DIR) {
+        return fn ? STRDUP(fn) : NULL;
+    }
+    char *full_path = path_append(CACHE_DIR, fn);
+    FILE *fp = fopen(full_path, "r");
+    FREE(full_path);
+    if (!fp) {
+        return STRDUP(fn);
+    }
+    CacheHeader hdr;
+    if (fread(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE) {
+        fclose(fp);
+        return STRDUP(fn);
+    }
+    if (hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION
+        || !(hdr.flags & CACHE_FLAG_IS_REDIRECT)) {
+        fclose(fp);
+        return STRDUP(fn);
+    }
+    if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) != 0) {
+        fclose(fp);
+        return STRDUP(fn);
+    }
+    char *target_url = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
+    if (fread(target_url, 1, (size_t)hdr.content_length, fp)
+        != (size_t)hdr.content_length) {
+        FREE(target_url);
+        fclose(fp);
+        return STRDUP(fn);
+    }
+    fclose(fp);
+
+    char *target_fn = url_to_cache_path(target_url);
+    FREE(target_url);
+    if (!target_fn) {
+        return STRDUP(fn);
+    }
+    char *resolved = resolve_redirect_fn(target_fn, depth + 1);
+    FREE(target_fn);
+    return resolved;
+}
+
+/**
+ * \brief Derive the hash-sharded cache path ("ab/<hash>") of a link
+ * \note The caller must free the returned string with FREE().
+ */
+static char *cache_key_for_link(const Link *link)
+{
+    if (!link) {
+        return NULL;
+    }
+    char *initial_fn = NULL;
+    if (CONFIG.mode == SONIC && link->sonic.id) {
+        initial_fn = string_to_cache_path(link->sonic.id);
+    } else {
+        initial_fn = url_to_cache_path(cache_key_source(link));
+    }
+    if (!initial_fn) {
+        return NULL;
+    }
+    char *resolved = resolve_redirect_fn(initial_fn, 0);
+    FREE(initial_fn);
+    return resolved;
+}
+
+/**
+ * \brief Compute the on-disk section offsets of a container file
+ * \return 0 on success, -1 on overflow
+ */
+static int container_compute_layout(const char *url, size_t http_header_len,
+                                    long segbc, off_t *header_size,
+                                    off_t *bitmap_offset,
+                                    off_t *http_header_offset)
+{
+    size_t url_len = strnlen(url, PATH_MAX);
+    size_t raw_meta_size
+        = CACHE_HEADER_SIZE + url_len + 1 + http_header_len + (size_t)segbc;
+    if (raw_meta_size > (size_t)INT32_MAX - CACHE_PAGE_SIZE) {
+        return -1;
+    }
+    /*
+     * Align to a 4096-byte boundary so that the payload starts on a
+     * filesystem block boundary.
+     */
+    size_t hs = (raw_meta_size + CACHE_PAGE_SIZE - 1)
+                & ~(size_t)(CACHE_PAGE_SIZE - 1);
+    *http_header_offset = (off_t)(CACHE_HEADER_SIZE + url_len + 1);
+    *bitmap_offset = (off_t)(*http_header_offset + http_header_len);
+    *header_size = (off_t)hs;
+    return 0;
+}
+
+/**
+ * \brief Fill in the fixed CacheHeader structure from in-memory state
+ */
+static void container_fill_header(CacheHeader *hdr, const char *url,
+                                  size_t http_header_len, off_t header_size,
+                                  int64_t remote_mtime, off_t content_length,
+                                  int blksz, long segbc)
+{
+    memset(hdr, 0, CACHE_HEADER_SIZE);
+    hdr->magic = CACHE_MAGIC;
+    hdr->version = CACHE_VERSION;
+    hdr->flags = CACHE_FLAG_IS_SPARSE;
+    hdr->url_len = (uint32_t)strnlen(url, PATH_MAX);
+    hdr->header_size = (uint32_t)header_size;
+    hdr->http_header_len = (uint32_t)http_header_len;
+    hdr->cache_time = (int64_t)time(NULL);
+    hdr->remote_mtime = remote_mtime;
+    hdr->content_length = content_length;
+    hdr->blksz = blksz;
+    hdr->segbc = (int32_t)segbc;
+}
+
+/**
+ * \brief Create the container file of a cache entry
+ * \details Opens <CACHE_DIR>/<cf->path> with O_RDWR|O_CREAT|O_TRUNC, writes
+ * the CacheHeader, the canonical source URL and a zeroed segment bitmap,
+ * pads to the 4KB-aligned payload offset, then ftruncates to
+ * header_size + content_length so that the payload region is allocated
+ * sparsely.
+ * \return 0 on success, -1 on failure
+ */
+static int Container_create(Cache *cf)
+{
+    const char *url = cache_key_source(cf->link);
+    off_t content_length = (off_t)cf->link->content_length;
+    if (content_length < 0
+        || (size_t)content_length != cf->link->content_length) {
+        lprintf(fatal, "File size too large for system off_t: %zu\n",
+                cf->link->content_length);
+    }
+
+    char *full_path = path_append(CACHE_DIR, cf->path);
+    ensure_parent_dir(full_path);
+
+    /*
+     * Check if a HEAD-only container already exists for this URL.
+     * If so, preserve its HTTP headers and remote timestamp during promotion.
+     */
+    char *saved_http_hdr = NULL;
+    size_t saved_http_hdr_len = 0;
+    int existing_fd = open(full_path, O_RDONLY);
+    if (existing_fd != -1) {
+        CacheHeader ex_hdr;
+        if (read(existing_fd, &ex_hdr, CACHE_HEADER_SIZE)
+            == CACHE_HEADER_SIZE) {
+            if (ex_hdr.magic == CACHE_MAGIC && ex_hdr.version == CACHE_VERSION
+                && (ex_hdr.flags & CACHE_FLAG_IS_HEAD)) {
+                if (ex_hdr.http_header_len > 0) {
+                    off_t hdr_off
+                        = (off_t)(CACHE_HEADER_SIZE + ex_hdr.url_len + 1);
+                    if (lseek(existing_fd, hdr_off, SEEK_SET) == hdr_off) {
+                        saved_http_hdr = CALLOC((size_t)ex_hdr.http_header_len,
+                                                sizeof(char));
+                        if (read(existing_fd, saved_http_hdr,
+                                 ex_hdr.http_header_len)
+                            == (ssize_t)ex_hdr.http_header_len) {
+                            saved_http_hdr_len = (size_t)ex_hdr.http_header_len;
+                        } else {
+                            FREE(saved_http_hdr);
+                            saved_http_hdr = NULL;
+                        }
+                    }
+                }
+            }
+        }
+        close(existing_fd);
+    }
+
+    off_t header_size;
+    off_t bitmap_offset;
+    off_t http_header_offset;
+    if (container_compute_layout(url, saved_http_hdr_len, cf->segbc,
+                                 &header_size, &bitmap_offset,
+                                 &http_header_offset)) {
+        lprintf(fatal, "container layout overflow for %s\n", cf->path);
+    }
+    cf->header_size = header_size;
+    cf->bitmap_offset = bitmap_offset;
+    cf->http_header_offset = http_header_offset;
+
+    int fd = open(full_path, O_RDWR | O_CREAT | O_TRUNC,
+                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        lprintf(error, "open(%s): %s\n", cf->path, strerror(errno));
+        FREE(saved_http_hdr);
+        FREE(full_path);
+        return -1;
+    }
+    FREE(full_path);
+
+    cf->fp = fdopen(fd, "r+");
+    if (!cf->fp) {
+        lprintf(error, "fdopen(): %s\n", strerror(errno));
+        close(fd);
+        FREE(saved_http_hdr);
+        return -1;
+    }
+
+    CacheHeader hdr;
+    container_fill_header(&hdr, url, saved_http_hdr_len, header_size,
+                          (int64_t)cf->link->time, content_length, cf->blksz,
+                          cf->segbc);
+    hdr.flags |= CACHE_FLAG_IS_SPARSE;
+
+    int ok = 1;
+    if (fwrite(&hdr, 1, CACHE_HEADER_SIZE, cf->fp) != CACHE_HEADER_SIZE) {
+        ok = 0;
+    }
+    if (ok
+        && fwrite(url, 1, (size_t)hdr.url_len + 1, cf->fp)
+               != (size_t)hdr.url_len + 1) {
+        ok = 0;
+    }
+    if (ok && saved_http_hdr_len > 0
+        && fwrite(saved_http_hdr, 1, saved_http_hdr_len, cf->fp)
+               != saved_http_hdr_len) {
+        ok = 0;
+    }
+    if (ok && cf->segbc > 0
+        && fwrite(cf->seg, sizeof(Seg), (size_t)cf->segbc, cf->fp)
+               != (size_t)cf->segbc) {
+        ok = 0;
+    }
+    /*
+     * Seek to the last padding byte so that the write zero-fills the whole
+     * padding region up to the page-aligned payload offset.
+     */
+    if (ok && fseeko(cf->fp, header_size - 1, SEEK_SET) != 0) {
+        ok = 0;
+    }
+    if (ok && fputc('\0', cf->fp) != '\0') {
+        ok = 0;
+    }
+    if (ok && fflush(cf->fp) != 0) {
+        ok = 0;
+    }
+    if (ok && ftruncate(fd, header_size + content_length) != 0) {
+        lprintf(warning, "ftruncate(): %s\n", strerror(errno));
+    }
+    FREE(saved_http_hdr);
+
+    if (!ok) {
+        lprintf(error, "failed to write container file %s\n", cf->path);
+        if (fclose(cf->fp)) {
+            lprintf(error, "fclose(): %s\n", strerror(errno));
+        }
+        cf->fp = NULL;
+        return -1;
+    }
+    return 0;
+}
+
+/**
+ * \brief Read and validate the container header and bitmap of an open cache
+ * \details Validates the magic, the version, the canonical source URL, the
+ * deterministic timestamps (cache_time against CONFIG.refresh_timeout and
+ * remote_mtime against the live Link), the content length and the segment
+ * count, then loads the segment bitmap into memory.
+ * \return 0 on success, errno on error (EBADMSG for outdated/corrupt files)
+ */
+static int Container_read(Cache *cf)
+{
+    FILE *fp = cf->fp;
 
     if (!fp) {
-        /*
-         * The metadata file does not exist
-         */
         lprintf(error, "fopen(): %s\n", strerror(errno));
         return EIO;
     }
 
-    if (fseek(fp, 0, SEEK_SET) != 0) {
-        lprintf(error, "fseek(): %s\n", strerror(errno));
+    if (fseeko(fp, 0, SEEK_SET) != 0) {
+        lprintf(error, "fseeko(): %s\n", strerror(errno));
         return EIO;
     }
 
     if (!cf->link) {
-        lprintf(error, "cf->link is NULL in Meta_read\n");
+        lprintf(error, "cf->link is NULL in Container_read\n");
         return EINVAL;
     }
 
-    long disk_time;
-    off_t disk_content_length;
-
-    if (1 != fread(&disk_time, sizeof(long), 1, fp)
-        || 1 != fread(&disk_content_length, sizeof(off_t), 1, fp)
-        || 1 != fread(&cf->blksz, sizeof(int), 1, fp)
-        || 1 != fread(&cf->segbc, sizeof(long), 1, fp) || ferror(fp)) {
+    CacheHeader hdr;
+    if (fread(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE
+        || ferror(fp)) {
         lprintf(error, "error reading core metadata %s!\n", cf->path);
         return EIO;
     }
 
+    if (hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION) {
+        lprintf(error,
+                "not a valid cache container: %s (magic: 0x%08x, "
+                "version: %u)\n",
+                cf->path, hdr.magic, hdr.version);
+        return EBADMSG;
+    }
+
     /*
      * We do not support zero-byte files in the on-disk cache files.
-     * Both disk_content_length and cf->segbc must be strictly positive.
+     * Both content_length and segbc must be strictly positive.
      */
-    if (disk_content_length <= 0 || cf->blksz <= 0 || cf->segbc <= 0) {
+    if (hdr.content_length <= 0 || hdr.blksz <= 0 || hdr.segbc <= 0) {
         lprintf(error,
-                "corruption: content_length: %jd, blksz: %d, segbc: %jd\n",
-                (intmax_t)disk_content_length, cf->blksz, (intmax_t)cf->segbc);
+                "corruption: content_length: %jd, blksz: %d, segbc: %d\n",
+                (intmax_t)hdr.content_length, hdr.blksz, hdr.segbc);
+        return EBADMSG;
+    }
+    if (hdr.header_size < CACHE_PAGE_SIZE
+        || hdr.header_size % CACHE_PAGE_SIZE != 0) {
+        lprintf(error, "corruption: invalid header_size %u in %s\n",
+                hdr.header_size, cf->path);
         return EBADMSG;
     }
 
-    if (cf->blksz != CONFIG.data_blksz) {
-        lprintf(warning, "Warning: cf->blksz != CONFIG.data_blksz\n");
+    if (hdr.blksz != CONFIG.data_blksz) {
+        lprintf(warning, "Warning: cached blksz != CONFIG.data_blksz\n");
     }
 
-    if (disk_content_length > INT64_MAX - cf->blksz) {
-        lprintf(error, "Error: segbc upper bound overflow\n");
+    /*
+     * Read back the canonical source URL and verify it matches the live
+     * link. A mismatch means a (theoretically impossible) hash collision
+     * or a corrupt container.
+     */
+    if (hdr.url_len > PATH_MAX) {
+        lprintf(error, "corruption: invalid url_len %u in %s\n", hdr.url_len,
+                cf->path);
+        return EBADMSG;
+    }
+    char *disk_url = CALLOC((size_t)hdr.url_len + 1, sizeof(char));
+    if (fread(disk_url, 1, hdr.url_len, fp) != hdr.url_len || ferror(fp)) {
+        lprintf(error, "error reading URL from %s!\n", cf->path);
+        FREE(disk_url);
+        return EIO;
+    }
+    const char *src = cache_key_source(cf->link);
+    if (strncmp(src, disk_url, hdr.url_len) != 0 || src[hdr.url_len] != '\0') {
+        lprintf(warning, "cache key mismatch in %s, deleting\n", cf->path);
+        FREE(disk_url);
+        return EBADMSG;
+    }
+    FREE(disk_url);
+
+    /*
+     * Deterministic timestamp invalidation: the container is stale if it was
+     * downloaded more than CONFIG.refresh_timeout seconds ago. This is
+     * immune to filesystem timestamp quirks (progressive writes updating
+     * st_mtime, cp resetting timestamps, ...).
+     */
+    int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+    if (age > CONFIG.refresh_timeout) {
+        lprintf(warning, "outdated cache file: %s (age: %jd, limit: %d)\n",
+                cf->path, (intmax_t)age, CONFIG.refresh_timeout);
         return EBADMSG;
     }
 
-    /* Verify cached metadata matches the live Link metadata */
-    if (disk_time != cf->link->time) {
-        lprintf(warning, "outdated cache file: %s (disk: %ld, link: %ld)\n",
-                cf->path, disk_time, cf->link->time);
+    /*
+     * Verify the remote Last-Modified timestamp, if both are known.
+     */
+    if (hdr.remote_mtime > 0 && cf->link->time > 0
+        && hdr.remote_mtime != (int64_t)cf->link->time) {
+        lprintf(warning,
+                "outdated cache file: %s (disk mtime: %jd, link mtime: %ld)\n",
+                cf->path, (intmax_t)hdr.remote_mtime, cf->link->time);
         return EBADMSG;
     }
 
-    if ((uintmax_t)disk_content_length != (uintmax_t)cf->link->content_length) {
+    if ((uintmax_t)hdr.content_length != (uintmax_t)cf->link->content_length) {
         lprintf(warning, "cache size mismatch: %s (disk: %jd, link: %zu)\n",
-                cf->path, (intmax_t)disk_content_length,
+                cf->path, (intmax_t)hdr.content_length,
                 cf->link->content_length);
         return EBADMSG;
     }
 
-    off_t max_segbc = disk_content_length / cf->blksz;
-
+    off_t max_segbc = hdr.content_length / hdr.blksz;
     if (max_segbc >= INT_MAX) {
         max_segbc = INT_MAX;
-    } else if ((disk_content_length % cf->blksz) != 0) {
+    } else if (hdr.content_length % hdr.blksz != 0) {
         max_segbc += 1;
     }
-
-    if (cf->segbc != max_segbc) {
-        lprintf(error, "Error: invalid segbc size: %ld (expected: %ld)\n",
-                cf->segbc, (long)max_segbc);
+    if (hdr.segbc != max_segbc) {
+        lprintf(error, "Error: invalid segbc size: %d (expected: %ld)\n",
+                hdr.segbc, (long)max_segbc);
         return EBADMSG;
     }
 
     /*
-     * Allocate memory for all segments, and read them in
+     * Remember the section offsets, then skip to the bitmap and load it.
      */
-    cf->seg = CALLOC(cf->segbc, sizeof(Seg));
-    long nmemb = fread(cf->seg, sizeof(Seg), cf->segbc, fp);
+    cf->header_size = (off_t)hdr.header_size;
+    cf->http_header_offset = (off_t)(CACHE_HEADER_SIZE + hdr.url_len + 1);
+    cf->bitmap_offset = (off_t)(cf->http_header_offset + hdr.http_header_len);
 
-    /*
-     * We shouldn't have gone past the end of the file
-     */
-    if (feof(fp)) {
-        /*
-         * reached EOF
-         */
-        lprintf(error, "attempted to read past the end of the file!\n");
-        return EBADMSG;
-    }
-
-    /*
-     * Error checking for fread
-     */
-    if (ferror(fp)) {
-        lprintf(error, "error reading bitmap!\n");
+    if (fseeko(fp, cf->bitmap_offset, SEEK_SET) != 0) {
+        lprintf(error, "fseeko(): %s\n", strerror(errno));
         return EIO;
     }
-
-    /*
-     * Check for inconsistent metadata file
-     */
-    if (nmemb != cf->segbc) {
+    cf->segbc = hdr.segbc;
+    cf->seg = CALLOC((size_t)cf->segbc, sizeof(Seg));
+    if (fread(cf->seg, sizeof(Seg), (size_t)cf->segbc, fp)
+        != (size_t)cf->segbc) {
         lprintf(error, "corrupted metadata!\n");
+        FREE(cf->seg);
+        cf->seg = NULL;
         return EBADMSG;
+    }
+    if (ferror(fp)) {
+        lprintf(error, "error reading bitmap!\n");
+        FREE(cf->seg);
+        cf->seg = NULL;
+        return EIO;
     }
 
     return 0;
 }
 
 /**
- * \brief write a metadata file
- * \return
- *  - -1 on error,
- *  - 0 on success
+ * \brief Persist the current segment bitmap to the container file
+ * \note Must be called while holding cf->w_lock.
+ * \return 0 on success, -1 on failure
  */
-static int Meta_write(Cache *cf)
+static int Container_write_bitmap(Cache *cf)
 {
-    FILE *fp = cf->mfp;
-
-    if (!fp) {
-        /*
-         * Cannot create the metadata file
-         */
-        lprintf(error, "fopen(): %s\n", strerror(errno));
+    if (!cf->fp || cf->segbc <= 0 || !cf->seg) {
         return -1;
     }
-
-    if (fseek(fp, 0, SEEK_SET) != 0) {
-        lprintf(error, "fseek(): %s\n", strerror(errno));
+    if (fseeko(cf->fp, cf->bitmap_offset, SEEK_SET) != 0) {
+        lprintf(error, "fseeko(): %s\n", strerror(errno));
         return -1;
     }
-
-    if (!cf->link) {
-        lprintf(error, "cf->link is NULL in Meta_write\n");
-        return -1;
-    }
-
-    /*
-     * We do not support zero-byte files. Both write_content_length and
-     * cf->segbc must be strictly positive.
-     */
-    off_t write_content_length = (off_t)cf->link->content_length;
-    off_t expected_segbc = 0;
-    if (cf->blksz > 0 && write_content_length > 0) {
-        expected_segbc = write_content_length / cf->blksz;
-        if (expected_segbc >= INT_MAX) {
-            expected_segbc = INT_MAX;
-        } else if (write_content_length % cf->blksz != 0) {
-            expected_segbc += 1;
-        }
-    }
-    if (write_content_length <= 0
-        || (size_t)write_content_length != cf->link->content_length
-        || cf->blksz <= 0 || cf->segbc != expected_segbc || cf->segbc <= 0) {
-        lprintf(error,
-                "invalid metadata for write: content_length: %jd, blksz: %d, "
-                "segbc: %ld (expected: %ld)\n",
-                (intmax_t)write_content_length, cf->blksz, cf->segbc,
-                expected_segbc);
-        return -1;
-    }
-
-    fwrite(&cf->link->time, sizeof(long), 1, fp);
-    fwrite(&write_content_length, sizeof(off_t), 1, fp);
-    fwrite(&cf->blksz, sizeof(int), 1, fp);
-    fwrite(&cf->segbc, sizeof(long), 1, fp);
-    fwrite(cf->seg, sizeof(Seg), cf->segbc, fp);
-
-    /*
-     * Error checking for fwrite
-     */
-    if (ferror(fp)) {
+    if (fwrite(cf->seg, sizeof(Seg), (size_t)cf->segbc, cf->fp)
+        != (size_t)cf->segbc) {
         lprintf(error, "fwrite(): encountered error!\n");
         return -1;
     }
-
+    if (fflush(cf->fp) != 0) {
+        lprintf(error, "fflush(): encountered error!\n");
+        return -1;
+    }
     return 0;
 }
 
@@ -444,58 +799,6 @@ static void ensure_parent_dir(const char *filepath)
         *last_slash = '\0';
         (void)mkdir_p(tmp, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH);
     }
-}
-
-/**
- * \brief create a data file
- * \details We use sparse creation here
- * \return exit on failure
- */
-static void Data_create(Cache *cf)
-{
-    int fd;
-    int mode;
-
-    mode = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
-    char *datafn = path_append(DATA_DIR, cf->path);
-    ensure_parent_dir(datafn);
-    fd = open(datafn, O_WRONLY | O_CREAT, mode);
-    FREE(datafn);
-    if (fd == -1) {
-        lprintf(fatal, "open(): %s\n", strerror(errno));
-    }
-    if (!cf->link) {
-        lprintf(fatal, "cf->link is NULL in Data_create\n");
-    }
-    off_t truncate_size = (off_t)cf->link->content_length;
-    if (truncate_size < 0
-        || (size_t)truncate_size != cf->link->content_length) {
-        lprintf(fatal, "File size too large for system off_t: %zu\n",
-                cf->link->content_length);
-    }
-    if (ftruncate(fd, truncate_size)) {
-        lprintf(warning, "ftruncate(): %s\n", strerror(errno));
-    }
-    if (close(fd)) {
-        lprintf(fatal, "close:(): %s\n", strerror(errno));
-    }
-}
-
-/**
- * \brief obtain the data file size
- * \return file size on success, -1 on error
- */
-static off_t Data_size(const char *fn)
-{
-    char *datafn = path_append(DATA_DIR, fn);
-    struct stat st;
-    int s = stat(datafn, &st);
-    FREE(datafn);
-    if (!s) {
-        return st.st_size;
-    }
-    lprintf(error, "stat(): %s\n", strerror(errno));
-    return -1;
 }
 
 /**
@@ -545,9 +848,9 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
     }
 
     /*
-     * Seek to the right location
+     * Seek to the right location (the payload starts at cf->header_size)
      */
-    if (fseeko(cf->dfp, offset, SEEK_SET)) {
+    if (fseeko(cf->fp, cf->header_size + offset, SEEK_SET)) {
         /*
          * fseeko failed
          */
@@ -556,15 +859,15 @@ static long Data_read(Cache *cf, uint8_t *buf, off_t len, off_t offset)
         goto end;
     }
 
-    byte_read = fread(buf, sizeof(uint8_t), len, cf->dfp);
+    byte_read = fread(buf, sizeof(uint8_t), (size_t)len, cf->fp);
     if (byte_read != len) {
-        if (feof(cf->dfp)) {
+        if (feof(cf->fp)) {
             /*
              * reached EOF
              */
             lprintf(error, "fread(): reached the end of the file!\n");
         }
-        if (ferror(cf->dfp)) {
+        if (ferror(cf->fp)) {
             /*
              * filesystem error
              */
@@ -604,7 +907,10 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len, off_t offset)
 
     long byte_written = 0;
 
-    if (fseeko(cf->dfp, offset, SEEK_SET)) {
+    /*
+     * The payload starts at cf->header_size
+     */
+    if (fseeko(cf->fp, cf->header_size + offset, SEEK_SET)) {
         /*
          * fseeko failed
          */
@@ -613,14 +919,14 @@ static long Data_write(Cache *cf, const uint8_t *buf, off_t len, off_t offset)
         goto end;
     }
 
-    byte_written = fwrite(buf, sizeof(uint8_t), len, cf->dfp);
+    byte_written = fwrite(buf, sizeof(uint8_t), (size_t)len, cf->fp);
 
     if (byte_written != len) {
         lprintf(error, "fwrite(): requested %ld, returned %ld!\n", len,
                 byte_written);
     }
 
-    if (ferror(cf->dfp)) {
+    if (ferror(cf->fp)) {
         /*
          * filesystem error
          */
@@ -634,26 +940,6 @@ end:
     return byte_written;
 }
 
-int CacheDir_create(const char *dirn)
-{
-    char *metadirn = path_append(META_DIR, dirn);
-    char *datadirn = path_append(DATA_DIR, dirn);
-    int res = 0;
-    mode_t mode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
-
-    if (mkdir_p(metadirn, mode) != 0) {
-        lprintf(fatal, "mkdir(%s): %s\n", metadirn, strerror(errno));
-        res |= 1;
-    }
-
-    if (mkdir_p(datadirn, mode) != 0) {
-        lprintf(fatal, "mkdir(%s): %s\n", datadirn, strerror(errno));
-        res |= 2;
-    }
-    FREE(datadirn);
-    FREE(metadirn);
-    return res;
-}
 ActiveDownload *ActiveDownload_find(Cache *cf, off_t offset)
 {
     ActiveDownload *ad = cf->active_dls;
@@ -800,162 +1086,91 @@ static void Cache_free(Cache *cf)
 }
 
 /**
- * \brief Check if both metadata and data file exist, otherwise perform cleanup.
- * \details
- * This function checks if both metadata file and the data file exist. If that
- * is not the case, clean up is performed - the existing unpaired metadata file
- * or data file is deleted.
+ * \brief Check if the container file of a cache entry exists and is usable
+ * \details A container file whose size does not even cover the fixed
+ * CacheHeader (e.g. it was created but the header was never written) is
+ * treated as missing and deleted.
  * \return
- *  -   0, if both metadata and cache file exist
+ *  -   0, if the container file exists
  *  -   -1, otherwise
  */
 static int Cache_exist(const char *fn)
 {
-    char *metafn = path_append(META_DIR, fn);
-    char *datafn = path_append(DATA_DIR, fn);
-
-    struct stat metast;
-    struct stat datast;
-    int no_meta = stat(metafn, &metast);
-    int no_data = stat(datafn, &datast);
-
-    if (no_meta == 0 && metast.st_size == 0) {
-        no_meta = -1;
-    }
-    if (no_data == 0 && datast.st_size == 0) {
-        no_data = -1;
-    }
-
-    if ((no_meta == 0) != (no_data == 0)) {
-        lprintf(warning,
-                "Cache file partially missing or invalid (zero-length).\n");
-        if (no_meta != 0) {
-            if (unlink(datafn) && errno != ENOENT) {
+    char *full_path = path_append(CACHE_DIR, fn);
+    struct stat st;
+    int res = -1;
+    if (stat(full_path, &st) == 0) {
+        if (st.st_size >= CACHE_HEADER_SIZE) {
+            FILE *fp = fopen(full_path, "r");
+            if (fp) {
+                CacheHeader hdr;
+                if (fread(&hdr, 1, CACHE_HEADER_SIZE, fp)
+                    == CACHE_HEADER_SIZE) {
+                    if (hdr.magic == CACHE_MAGIC && hdr.version == CACHE_VERSION
+                        && (hdr.flags
+                            & (CACHE_FLAG_IS_COMPLETE
+                               | CACHE_FLAG_IS_SPARSE))) {
+                        res = 0;
+                    }
+                }
+                fclose(fp);
+            }
+        } else {
+            lprintf(warning,
+                    "Cache file partially missing or invalid (zero-length).\n");
+            if (unlink(full_path) && errno != ENOENT) {
                 lprintf(fatal, "unlink(): %s\n", strerror(errno));
             }
         }
-        if (no_data != 0) {
-            if (unlink(metafn) && errno != ENOENT) {
-                lprintf(fatal, "unlink(): %s\n", strerror(errno));
-            }
-        }
     }
-
-    FREE(metafn);
-    FREE(datafn);
-
-    return (no_meta != 0) || (no_data != 0);
+    FREE(full_path);
+    return res;
 }
 
 /**
- * \brief delete a cache file set
+ * \brief delete a cache file
  */
 void Cache_delete(const char *fn)
 {
     Link *link = path_to_Link(fn);
-    char *cache_key = NULL;
-    if (CONFIG.mode == SONIC) {
-        if (!link) {
-            return;
-        }
-        fn = link->sonic.id;
-    } else if (CONFIG.mode == NORMAL) {
-        if (!link) {
-            return;
-        }
-        cache_key = url_to_cache_path(link->f_url);
-        if (!cache_key) {
-            lprintf(error, "Failed to derive cache key from URL: %s\n",
-                    link->f_url);
-            LinkTable_unref(link->parent_table);
-            return;
-        }
-        fn = cache_key;
+    if (!link) {
+        return;
     }
-
-    char *metafn = path_append(META_DIR, fn);
-    char *datafn = path_append(DATA_DIR, fn);
-    if (unlink(metafn) && errno != ENOENT) {
-        lprintf(error, "unlink(): %s\n", strerror(errno));
-    }
-
-    if (unlink(datafn) && errno != ENOENT) {
-        lprintf(error, "unlink(): %s\n", strerror(errno));
-    }
-    FREE(metafn);
-    FREE(datafn);
-    if (cache_key) {
-        FREE(cache_key);
-    }
-    if (link) {
+    char *cache_key = cache_key_for_link(link);
+    if (!cache_key) {
+        lprintf(error, "Failed to derive cache key\n");
         LinkTable_unref(link->parent_table);
+        return;
     }
+    char *full_path = path_append(CACHE_DIR, cache_key);
+    if (unlink(full_path) && errno != ENOENT) {
+        lprintf(error, "unlink(): %s\n", strerror(errno));
+    }
+    FREE(full_path);
+    FREE(cache_key);
+    LinkTable_unref(link->parent_table);
 }
 
 /**
- * \brief Open the data file of a cache data set
+ * \brief Open the container file of a cache data set
  * \return
  *  -   0 on success
  *  -   -1 on failure, with appropriate errno set.
  */
-static int Data_open(Cache *cf)
+static int Container_open(Cache *cf)
 {
-    char *datafn = path_append(DATA_DIR, cf->path);
-    cf->dfp = fopen(datafn, "r+");
-    if (!cf->dfp) {
+    char *full_path = path_append(CACHE_DIR, cf->path);
+    cf->fp = fopen(full_path, "r+");
+    if (!cf->fp) {
         /*
-         * Failed to open the data file
+         * Failed to open the container file
          */
-        lprintf(error, "fopen(%s): %s\n", datafn, strerror(errno));
-        FREE(datafn);
+        lprintf(error, "fopen(%s): %s\n", cf->path, strerror(errno));
+        FREE(full_path);
         return -1;
     }
-    FREE(datafn);
+    FREE(full_path);
     return 0;
-}
-
-/**
- * \brief Open a metafile
- * \return
- *  -   0 on success
- *  -   -1 on failure, with appropriate errno set.
- */
-static int Meta_open(Cache *cf)
-{
-    char *metafn = path_append(META_DIR, cf->path);
-    cf->mfp = fopen(metafn, "r+");
-    if (!cf->mfp) {
-        /*
-         * Failed to open the data file
-         */
-        lprintf(error, "fopen(%s): %s\n", metafn, strerror(errno));
-        FREE(metafn);
-        return -1;
-    }
-    FREE(metafn);
-    return 0;
-}
-
-/**
- * \brief Create a metafile
- * \return exit on error
- */
-static void Meta_create(Cache *cf)
-{
-    char *metafn = path_append(META_DIR, cf->path);
-    ensure_parent_dir(metafn);
-    cf->mfp = fopen(metafn, "w");
-    if (!cf->mfp) {
-        /*
-         * Failed to open the data file
-         */
-        lprintf(fatal, "fopen(%s): %s\n", metafn, strerror(errno));
-    }
-    if (fclose(cf->mfp)) {
-        lprintf(error, "cannot close metadata after creation: %s.\n",
-                strerror(errno));
-    }
-    FREE(metafn);
 }
 
 int Cache_create(const char *path)
@@ -971,29 +1186,13 @@ int Cache_create(const char *path)
         return 1;
     }
 
-    char *fn = NULL;
-    char *fn_alloc = NULL;
-
-    if (CONFIG.mode == NORMAL) {
-        fn_alloc = url_to_cache_path(this_link->f_url);
-        fn = fn_alloc;
-    } else if (CONFIG.mode == SINGLE) {
-        fn = curl_easy_unescape(NULL, this_link->linkname, 0, NULL);
-    } else if (CONFIG.mode == SONIC) {
-        fn = this_link->sonic.id;
-    } else {
-        lprintf(fatal, "Invalid CONFIG.mode\n");
-    }
-
+    char *fn = cache_key_for_link(this_link);
     if (!fn) {
-        lprintf(error,
-                "Failed to derive cache key/name from URL or linkname\n");
-        if (fn_alloc) {
-            FREE(fn_alloc);
-        }
+        lprintf(error, "Failed to derive cache key from URL\n");
         LinkTable_unref(this_link->parent_table);
         return 1;
     }
+
     Cache *cf = Cache_alloc();
     cf->path = STRNDUP(fn, PATH_MAX);
     cf->link = this_link;
@@ -1009,44 +1208,28 @@ int Cache_create(const char *path)
     }
     cf->seg = CALLOC(cf->segbc, sizeof(Seg));
 
-    Meta_create(cf);
-
-    if (Meta_open(cf)) {
-        lprintf(error, "cannot open metadata file, %s.\n", fn);
-        Cache_free(cf);
+    int res = Container_create(cf);
+    if (res) {
+        lprintf(error, "Container_create() failed for %s\n", path);
     }
-
-    if (Meta_write(cf)) {
-        lprintf(error, "Meta_write() failed!\n");
-    }
-
-    if (fclose(cf->mfp)) {
-        lprintf(error, "cannot close metadata after write, %s.\n",
+    if (cf->fp && fclose(cf->fp)) {
+        lprintf(error, "cannot close container after write, %s.\n",
                 strerror(errno));
     }
-
-    Data_create(cf);
+    cf->fp = NULL;
 
     lprintf(cache_lock_debug, "Flushing cache file for %s after creating.\n",
-            fn);
+            path);
     Cache_free(cf);
 
-    int res = Cache_exist(fn);
+    res = Cache_exist(fn);
 
     if (res) {
         lprintf(fatal, "Cache file creation failed for %s\n", path);
     }
 
-    if (CONFIG.mode == NORMAL) {
-        FREE(fn_alloc);
-    } else if (CONFIG.mode == SINGLE) {
-        curl_free(fn);
-    }
-
-    if (this_link) {
-        LinkTable_unref(this_link->parent_table);
-    }
-
+    FREE(fn);
+    LinkTable_unref(this_link->parent_table);
     return res;
 }
 
@@ -1076,22 +1259,15 @@ Cache *Cache_open(const char *fn)
         return link->cache_ptr;
     }
 
-    char *actual_fn_alloc = NULL;
-    const char *actual_fn = fn;
-    if (CONFIG.mode == SONIC) {
-        actual_fn = link->sonic.id;
-    } else if (CONFIG.mode == NORMAL) {
-        actual_fn_alloc = url_to_cache_path(link->f_url);
-        if (!actual_fn_alloc) {
-            lprintf(error, "Failed to derive cache path from URL: %s\n",
-                    link->f_url);
-            lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
-                    (unsigned long)pthread_self());
-            PTHREAD_MUTEX_UNLOCK(&cf_lock);
-            LinkTable_unref(link->parent_table);
-            return NULL;
-        }
-        actual_fn = actual_fn_alloc;
+    char *actual_fn = cache_key_for_link(link);
+    if (!actual_fn) {
+        lprintf(error, "Failed to derive cache path from URL: %s\n",
+                link->f_url);
+        lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
+                (unsigned long)pthread_self());
+        PTHREAD_MUTEX_UNLOCK(&cf_lock);
+        LinkTable_unref(link->parent_table);
+        return NULL;
     }
 
     if (link->content_length <= 0) {
@@ -1100,9 +1276,7 @@ Cache *Cache_open(const char *fn)
                 (unsigned long)pthread_self());
         PTHREAD_MUTEX_UNLOCK(&cf_lock);
         LinkTable_unref(link->parent_table);
-        if (actual_fn_alloc) {
-            FREE(actual_fn_alloc);
-        }
+        FREE(actual_fn);
         return NULL;
     }
 
@@ -1111,15 +1285,15 @@ Cache *Cache_open(const char *fn)
     // one.
     for (int attempt = 0; attempt < 2; attempt++) {
         if (Cache_exist(actual_fn) != 0) {
-            Cache_delete(fn);
+            if (attempt > 0) {
+                Cache_delete(fn);
+            }
             if (Cache_create(fn) != 0) {
                 lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
                         (unsigned long)pthread_self());
                 PTHREAD_MUTEX_UNLOCK(&cf_lock);
                 LinkTable_unref(link->parent_table);
-                if (actual_fn_alloc) {
-                    FREE(actual_fn_alloc);
-                }
+                FREE(actual_fn);
                 return NULL;
             }
         }
@@ -1135,31 +1309,31 @@ Cache *Cache_open(const char *fn)
          * Associate the cache structure with a link
          */
         cf->link = link;
+        cf->blksz = CONFIG.data_blksz;
 
         int ok = 1;
-        if (Meta_open(cf)) {
-            lprintf(error, "cannot open metadata file %s.\n", actual_fn);
+        if (Container_open(cf)) {
+            lprintf(error, "cannot open container file %s.\n", actual_fn);
             ok = 0;
-        } else if (Meta_read(cf)) {
+        } else if (Container_read(cf)) {
             lprintf(error, "metadata error: %s.\n", actual_fn);
             ok = 0;
         } else {
-            off_t d_size = Data_size(actual_fn);
-            if (d_size < 0) {
-                lprintf(error, "cannot stat data file %s.\n", actual_fn);
+            char *full_path = path_append(CACHE_DIR, actual_fn);
+            struct stat st;
+            if (stat(full_path, &st) != 0) {
+                lprintf(error, "cannot stat container file %s.\n", actual_fn);
                 ok = 0;
             } else if ((uintmax_t)cf->link->content_length
-                       > (uintmax_t)d_size) {
+                       > (uintmax_t)st.st_size - (uintmax_t)cf->header_size) {
                 lprintf(error,
                         "metadata inconsistency %s, "
-                        "cf->link->content_length: %jd, Data_size(fn): %jd.\n",
-                        actual_fn, (intmax_t)cf->link->content_length,
-                        (intmax_t)d_size);
-                ok = 0;
-            } else if (Data_open(cf)) {
-                lprintf(error, "cannot open data file %s.\n", actual_fn);
+                        "cf->link->content_length: %zu, container size: %jd.\n",
+                        actual_fn, cf->link->content_length,
+                        (intmax_t)st.st_size);
                 ok = 0;
             }
+            FREE(full_path);
         }
 
         if (ok) {
@@ -1171,20 +1345,14 @@ Cache *Cache_open(const char *fn)
             lprintf(cache_lock_debug, "thread %lx: unlocking cf_lock;\n",
                     (unsigned long)pthread_self());
             PTHREAD_MUTEX_UNLOCK(&cf_lock);
-            if (actual_fn_alloc) {
-                FREE(actual_fn_alloc);
-            }
+            FREE(actual_fn);
             return cf;
         }
 
         // Clean up opened resources before retry
-        if (cf->mfp) {
-            fclose(cf->mfp);
-            cf->mfp = NULL;
-        }
-        if (cf->dfp) {
-            fclose(cf->dfp);
-            cf->dfp = NULL;
+        if (cf->fp) {
+            fclose(cf->fp);
+            cf->fp = NULL;
         }
         Cache_free(cf);
         Cache_delete(fn);
@@ -1194,9 +1362,7 @@ Cache *Cache_open(const char *fn)
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&cf_lock);
     LinkTable_unref(link->parent_table);
-    if (actual_fn_alloc) {
-        FREE(actual_fn_alloc);
-    }
+    FREE(actual_fn);
     return NULL;
 }
 
@@ -1228,17 +1394,22 @@ void Cache_close(Cache *cf)
         SEM_WAIT(&cf->bgt_sem);
     }
 
-    if (cf->mfp && Meta_write(cf)) {
-        lprintf(error, "Meta_write() error.");
+    /*
+     * Persist the final bitmap so that a restarted process does not
+     * re-download the segments that are already on disk. The CacheHeader is
+     * left untouched: cache_time must keep recording the download time for
+     * deterministic timestamp invalidation.
+     */
+    PTHREAD_MUTEX_LOCK(&cf->w_lock);
+    if (cf->fp && Container_write_bitmap(cf)) {
+        lprintf(error, "Container_write_bitmap() error.");
     }
+    PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
 
-    if (cf->mfp && fclose(cf->mfp)) {
-        lprintf(error, "cannot close metadata: %s.\n", strerror(errno));
+    if (cf->fp && fclose(cf->fp)) {
+        lprintf(error, "cannot close container file %s.\n", strerror(errno));
     }
-
-    if (cf->dfp && fclose(cf->dfp)) {
-        lprintf(error, "cannot close data file %s.\n", strerror(errno));
-    }
+    cf->fp = NULL;
 
     Link *link = cf->link;
     link->cache_ptr = NULL;
@@ -1332,6 +1503,11 @@ static void *Cache_bgdl(void *arg)
                 * (size_t)cf->blksz))) {
         if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
             Seg_set(cf, dl_offset, 1);
+            /*
+             * Persist the bitmap so that a crashed process does not
+             * re-download segments that are already on disk.
+             */
+            (void)Container_write_bitmap(cf);
         }
     } else {
         lprintf(error,
@@ -1582,6 +1758,11 @@ sync_dl:
         }
         if (Data_write(cf, recv_buf, recv, dl_offset) == recv) {
             Seg_set(cf, dl_offset, 1);
+            /*
+             * Persist the bitmap so that a crashed process does not
+             * re-download segments that are already on disk.
+             */
+            (void)Container_write_bitmap(cf);
         }
     } else {
         lprintf(error,
@@ -1691,4 +1872,597 @@ long Cache_read(Cache *cf, char *const output_buf, off_t len,
         }
     }
     return send;
+}
+
+/**
+ * \brief Write a fresh container file for a cached directory listing
+ * \details Stores the raw HTTP response headers and the HTML payload in a
+ * single container file at "<CACHE_DIR>/<shard>/<hash>", using the
+ * CacheHeader binary format. The payload is complete (the whole HTML page),
+ * so every segment of the bitmap is marked as present.
+ * \return 0 on success, -1 on failure
+ */
+int CacheContainer_write(const char *url, const char *payload,
+                         size_t payload_len, const char *http_header,
+                         size_t http_header_len)
+{
+    if (!CACHE_SYSTEM_INIT || !url || !payload || payload_len == 0) {
+        lprintf(error, "invalid arguments to CacheContainer_write\n");
+        return -1;
+    }
+
+    char *canon_url = canonicalize_url(url);
+    const char *key_url = canon_url ? canon_url : url;
+
+    char *fn = string_to_cache_path(key_url);
+    if (!fn) {
+        lprintf(error, "Failed to derive cache path from URL: %s\n", url);
+        FREE(canon_url);
+        return -1;
+    }
+
+    int blksz = CONFIG.data_blksz;
+    size_t segbc = payload_len / (size_t)blksz;
+    if (segbc >= INT_MAX) {
+        segbc = INT_MAX;
+    } else if (payload_len % (size_t)blksz != 0) {
+        segbc += 1;
+    }
+
+    off_t header_size;
+    off_t bitmap_offset;
+    off_t http_header_offset;
+    if (container_compute_layout(key_url, http_header_len, (long)segbc,
+                                 &header_size, &bitmap_offset,
+                                 &http_header_offset)) {
+        lprintf(error, "container layout overflow for %s\n", fn);
+        FREE(fn);
+        FREE(canon_url);
+        return -1;
+    }
+
+    char *full_path = path_append(CACHE_DIR, fn);
+    ensure_parent_dir(full_path);
+    int fd = open(full_path, O_RDWR | O_CREAT | O_TRUNC,
+                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        lprintf(error, "open(%s): %s\n", fn, strerror(errno));
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return -1;
+    }
+    FILE *fp = fdopen(fd, "r+");
+    if (!fp) {
+        lprintf(error, "fdopen(): %s\n", strerror(errno));
+        close(fd);
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return -1;
+    }
+
+    CacheHeader hdr;
+    container_fill_header(&hdr, key_url, http_header_len, header_size, 0,
+                          (off_t)payload_len, blksz, (long)segbc);
+    hdr.flags |= CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_DIR;
+
+    int ok = 1;
+    if (fwrite(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE) {
+        ok = 0;
+    }
+    if (ok
+        && fwrite(key_url, 1, (size_t)hdr.url_len + 1, fp)
+               != (size_t)hdr.url_len + 1) {
+        ok = 0;
+    }
+    if (ok && http_header_len > 0
+        && fwrite(http_header, 1, http_header_len, fp) != http_header_len) {
+        ok = 0;
+    }
+    /*
+     * The payload is complete: every segment is present.
+     */
+    const Seg seg_full = 1;
+    for (size_t i = 0; i < segbc && ok; i++) {
+        if (fwrite(&seg_full, sizeof(Seg), 1, fp) != 1) {
+            ok = 0;
+        }
+    }
+    if (ok && fseeko(fp, header_size - 1, SEEK_SET) != 0) {
+        ok = 0;
+    }
+    if (ok && fputc('\0', fp) != '\0') {
+        ok = 0;
+    }
+    if (ok && fwrite(payload, 1, payload_len, fp) != payload_len) {
+        ok = 0;
+    }
+    if (ok && fflush(fp) != 0) {
+        ok = 0;
+    }
+    if (ok && ferror(fp)) {
+        ok = 0;
+    }
+
+    if (!ok) {
+        lprintf(error, "failed to write container file %s\n", fn);
+        (void)fclose(fp);
+        if (unlink(full_path) && errno != ENOENT) {
+            lprintf(error, "unlink(): %s\n", strerror(errno));
+        }
+    } else if (fclose(fp)) {
+        lprintf(error, "fclose(%s): %s\n", fn, strerror(errno));
+    }
+    FREE(full_path);
+    FREE(fn);
+    FREE(canon_url);
+    return ok ? 0 : -1;
+}
+
+static int CacheContainer_read_internal(const char *url, char **out_payload,
+                                        size_t *out_payload_len,
+                                        char **out_http_header,
+                                        size_t *out_http_header_len, int depth)
+{
+    *out_payload = NULL;
+    *out_payload_len = 0;
+    *out_http_header = NULL;
+    *out_http_header_len = 0;
+
+    if (!CACHE_SYSTEM_INIT || !url || !url[0] || depth > 5) {
+        return 0;
+    }
+
+    char *canon_url = canonicalize_url(url);
+    const char *key_url = canon_url ? canon_url : url;
+
+    char *fn = string_to_cache_path(key_url);
+    if (!fn) {
+        FREE(canon_url);
+        return 0;
+    }
+
+    char *full_path = path_append(CACHE_DIR, fn);
+    FILE *fp = fopen(full_path, "r");
+    if (!fp) {
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return 0;
+    }
+
+    int res = -1;
+    CacheHeader hdr;
+    struct stat cst;
+    if (fread(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE
+        || ferror(fp)) {
+        lprintf(error, "corrupt container file %s\n", fn);
+    } else if (hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION) {
+        lprintf(error, "not a valid cache container: %s\n", fn);
+    } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
+        if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {
+            char *target_url
+                = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
+            if (fread(target_url, 1, (size_t)hdr.content_length, fp)
+                == (size_t)hdr.content_length) {
+                fclose(fp);
+                fp = NULL;
+                FREE(full_path);
+                FREE(fn);
+                FREE(canon_url);
+                res = CacheContainer_read_internal(
+                    target_url, out_payload, out_payload_len, out_http_header,
+                    out_http_header_len, depth + 1);
+                FREE(target_url);
+                return res;
+            }
+            FREE(target_url);
+        }
+    } else if (hdr.content_length <= 0 || hdr.header_size < CACHE_PAGE_SIZE
+               || hdr.header_size % CACHE_PAGE_SIZE != 0
+               || hdr.url_len > PATH_MAX) {
+        lprintf(error, "corrupt container geometry in %s\n", fn);
+    } else if (stat(full_path, &cst) != 0
+               || (uintmax_t)cst.st_size
+                      < (uintmax_t)hdr.header_size
+                            + (uintmax_t)hdr.content_length) {
+        lprintf(error, "truncated container file %s\n", fn);
+    } else {
+        char *disk_url = CALLOC((size_t)hdr.url_len + 1, sizeof(char));
+        if (fread(disk_url, 1, (size_t)hdr.url_len + 1, fp)
+                != (size_t)hdr.url_len + 1
+            || ferror(fp) || strncmp(key_url, disk_url, hdr.url_len) != 0
+            || key_url[hdr.url_len] != '\0') {
+            lprintf(error, "cache key mismatch in %s\n", fn);
+            FREE(disk_url);
+        } else {
+            FREE(disk_url);
+            int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+            if (age > CONFIG.refresh_timeout) {
+                lprintf(info,
+                        "cache container %s expired (age: %jd, "
+                        "limit: %d)\n",
+                        fn, (intmax_t)age, CONFIG.refresh_timeout);
+                res = 0;
+            } else {
+                if (hdr.http_header_len > 0) {
+                    char *http_hdr
+                        = CALLOC((size_t)hdr.http_header_len + 1, sizeof(char));
+                    if (fread(http_hdr, 1, hdr.http_header_len, fp)
+                            != hdr.http_header_len
+                        || ferror(fp)) {
+                        lprintf(error, "corrupt HTTP headers in %s\n", fn);
+                        FREE(http_hdr);
+                    } else {
+                        *out_http_header = http_hdr;
+                        *out_http_header_len = hdr.http_header_len;
+                    }
+                }
+                if (hdr.http_header_len == 0 || *out_http_header != NULL) {
+                    char *payload = CALLOC(1, (size_t)hdr.content_length + 1);
+                    if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) != 0
+                        || fread(payload, 1, (size_t)hdr.content_length, fp)
+                               != (size_t)hdr.content_length
+                        || ferror(fp)) {
+                        lprintf(error, "corrupt payload in %s\n", fn);
+                        FREE(payload);
+                        FREE(*out_http_header);
+                        *out_http_header = NULL;
+                        *out_http_header_len = 0;
+                    } else {
+                        *out_payload = payload;
+                        *out_payload_len = (size_t)hdr.content_length;
+                        res = 1;
+                    }
+                }
+            }
+        }
+    }
+
+    if (fp && fclose(fp)) {
+        lprintf(error, "fclose(%s): %s\n", fn, strerror(errno));
+    }
+
+    if (res == -1) {
+        if (unlink(full_path) && errno != ENOENT) {
+            lprintf(error, "unlink(): %s\n", strerror(errno));
+        }
+        FREE(*out_http_header);
+        *out_http_header = NULL;
+        *out_http_header_len = 0;
+    }
+    FREE(full_path);
+    FREE(fn);
+    FREE(canon_url);
+    return res;
+}
+
+int CacheContainer_read(const char *url, char **out_payload,
+                        size_t *out_payload_len, char **out_http_header,
+                        size_t *out_http_header_len)
+{
+    return CacheContainer_read_internal(url, out_payload, out_payload_len,
+                                        out_http_header, out_http_header_len,
+                                        0);
+}
+
+int CacheContainer_write_head(const char *url, long http_resp,
+                              curl_off_t content_length, time_t remote_mtime,
+                              const char *content_type, const char *raw_headers,
+                              size_t raw_headers_len, LinkType link_type)
+{
+    if (!CACHE_SYSTEM_INIT || !url || !url[0]) {
+        return -1;
+    }
+
+    char *canon_url = canonicalize_url(url);
+    const char *key_url = canon_url ? canon_url : url;
+    char *fn = string_to_cache_path(key_url);
+    if (!fn) {
+        FREE(canon_url);
+        return -1;
+    }
+
+    char *full_path = path_append(CACHE_DIR, fn);
+    ensure_parent_dir(full_path);
+
+    char synth_header[256];
+    const char *hdr_to_write = raw_headers;
+    size_t hdr_len_to_write = raw_headers_len;
+    if ((!hdr_to_write || hdr_len_to_write == 0) && content_type
+        && content_type[0]) {
+        snprintf(synth_header, sizeof(synth_header),
+                 "HTTP/1.1 %ld OK\r\nContent-Type: %s\r\n\r\n",
+                 http_resp > 0 ? http_resp : 200, content_type);
+        hdr_to_write = synth_header;
+        hdr_len_to_write = strlen(synth_header);
+    }
+
+    off_t header_size;
+    off_t bitmap_offset;
+    off_t http_header_offset;
+    if (container_compute_layout(key_url, hdr_len_to_write, 0, &header_size,
+                                 &bitmap_offset, &http_header_offset)) {
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return -1;
+    }
+
+    char tmp_path[PATH_MAX];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp.%d", full_path, (int)getpid());
+    int fd = open(tmp_path, O_RDWR | O_CREAT | O_TRUNC,
+                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return -1;
+    }
+
+    FILE *fp = fdopen(fd, "r+");
+    if (!fp) {
+        close(fd);
+        unlink(tmp_path);
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return -1;
+    }
+
+    CacheHeader hdr;
+    container_fill_header(&hdr, key_url, hdr_len_to_write, header_size,
+                          (int64_t)remote_mtime, (off_t)content_length, 0, 0);
+    hdr.flags
+        = CACHE_FLAG_IS_HEAD | (link_type == LINK_DIR ? CACHE_FLAG_IS_DIR : 0);
+
+    int ok = 1;
+    if (fwrite(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE) {
+        ok = 0;
+    }
+    if (ok
+        && fwrite(key_url, 1, (size_t)hdr.url_len + 1, fp)
+               != (size_t)hdr.url_len + 1) {
+        ok = 0;
+    }
+    if (ok && hdr_len_to_write > 0 && hdr_to_write
+        && fwrite(hdr_to_write, 1, hdr_len_to_write, fp) != hdr_len_to_write) {
+        ok = 0;
+    }
+    if (ok && fflush(fp) != 0) {
+        ok = 0;
+    }
+    if (fclose(fp)) {
+        ok = 0;
+    }
+
+    if (ok) {
+        if (rename(tmp_path, full_path) != 0) {
+            unlink(tmp_path);
+            ok = 0;
+        }
+    } else {
+        unlink(tmp_path);
+    }
+
+    FREE(full_path);
+    FREE(fn);
+    FREE(canon_url);
+    return ok ? 0 : -1;
+}
+
+static int CacheContainer_read_head_internal(const char *url,
+                                             CacheStat *stat_out, int depth)
+{
+    if (depth > 5 || !CACHE_SYSTEM_INIT || !url || !url[0]) {
+        return 0;
+    }
+
+    char *canon_url = canonicalize_url(url);
+    const char *key_url = canon_url ? canon_url : url;
+    char *fn = string_to_cache_path(key_url);
+    if (!fn) {
+        FREE(canon_url);
+        return 0;
+    }
+
+    char *full_path = path_append(CACHE_DIR, fn);
+    FILE *fp = fopen(full_path, "r");
+    if (!fp) {
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_url);
+        return 0;
+    }
+
+    int res = 0;
+    CacheHeader hdr;
+    if (fread(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE
+        || hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION) {
+        res = -1;
+    } else {
+        int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+        if (age > CONFIG.refresh_timeout) {
+            res = 0;
+        } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
+            if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {
+                char *target_url
+                    = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
+                if (fread(target_url, 1, (size_t)hdr.content_length, fp)
+                    == (size_t)hdr.content_length) {
+                    fclose(fp);
+                    fp = NULL;
+                    res = CacheContainer_read_head_internal(
+                        target_url, stat_out, depth + 1);
+                }
+                FREE(target_url);
+            }
+        } else if (hdr.flags
+                   & (CACHE_FLAG_IS_HEAD | CACHE_FLAG_IS_COMPLETE
+                      | CACHE_FLAG_IS_SPARSE)) {
+            memset(stat_out, 0, sizeof(CacheStat));
+            stat_out->content_length = (curl_off_t)hdr.content_length;
+            stat_out->remote_mtime = (time_t)hdr.remote_mtime;
+            stat_out->link_type
+                = (hdr.flags & CACHE_FLAG_IS_DIR) ? LINK_DIR : LINK_FILE;
+            stat_out->http_resp = 200;
+
+            if (hdr.http_header_len > 0) {
+                off_t hdr_off = (off_t)(CACHE_HEADER_SIZE + hdr.url_len + 1);
+                if (fseeko(fp, hdr_off, SEEK_SET) == 0) {
+                    char *raw
+                        = CALLOC((size_t)hdr.http_header_len + 1, sizeof(char));
+                    if (fread(raw, 1, hdr.http_header_len, fp)
+                        == hdr.http_header_len) {
+                        char *ct_line = strcasestr(raw, "Content-Type:");
+                        if (ct_line) {
+                            ct_line += 13;
+                            while (*ct_line == ' ') {
+                                ct_line++;
+                            }
+                            char *ct_end = strpbrk(ct_line, "\r\n;");
+                            size_t ct_len = ct_end ? (size_t)(ct_end - ct_line)
+                                                   : strlen(ct_line);
+                            if (ct_len >= sizeof(stat_out->content_type)) {
+                                ct_len = sizeof(stat_out->content_type) - 1;
+                            }
+                            strncpy(stat_out->content_type, ct_line, ct_len);
+                            stat_out->content_type[ct_len] = '\0';
+                        }
+                    }
+                    FREE(raw);
+                }
+            }
+            res = 1;
+        }
+    }
+
+    if (fp) {
+        fclose(fp);
+    }
+    if (res == -1) {
+        unlink(full_path);
+    }
+    FREE(full_path);
+    FREE(fn);
+    FREE(canon_url);
+    return res;
+}
+
+int CacheContainer_read_head(const char *url, CacheStat *stat_out)
+{
+    return CacheContainer_read_head_internal(url, stat_out, 0);
+}
+
+int CacheContainer_write_redirect(const char *source_url,
+                                  const char *target_url, long http_resp)
+{
+    if (!CACHE_SYSTEM_INIT || !source_url || !target_url) {
+        return -1;
+    }
+
+    char *canon_src = canonicalize_url(source_url);
+    char *canon_tgt = canonicalize_url(target_url);
+    const char *key_src = canon_src ? canon_src : source_url;
+    const char *key_tgt = canon_tgt ? canon_tgt : target_url;
+
+    if (strcmp(key_src, key_tgt) == 0) {
+        FREE(canon_src);
+        FREE(canon_tgt);
+        return 0;
+    }
+
+    char *fn = string_to_cache_path(key_src);
+    if (!fn) {
+        FREE(canon_src);
+        FREE(canon_tgt);
+        return -1;
+    }
+
+    char *full_path = path_append(CACHE_DIR, fn);
+    ensure_parent_dir(full_path);
+
+    char tmp_path[PATH_MAX];
+    snprintf(tmp_path, sizeof(tmp_path), "%s.tmp.%d", full_path, (int)getpid());
+    int fd = open(tmp_path, O_RDWR | O_CREAT | O_TRUNC,
+                  S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+    if (fd == -1) {
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_src);
+        FREE(canon_tgt);
+        return -1;
+    }
+
+    FILE *fp = fdopen(fd, "r+");
+    if (!fp) {
+        close(fd);
+        unlink(tmp_path);
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_src);
+        FREE(canon_tgt);
+        return -1;
+    }
+
+    size_t target_len = strlen(key_tgt);
+    off_t header_size;
+    off_t bitmap_offset;
+    off_t http_header_offset;
+    if (container_compute_layout(key_src, 0, 0, &header_size, &bitmap_offset,
+                                 &http_header_offset)) {
+        fclose(fp);
+        unlink(tmp_path);
+        FREE(full_path);
+        FREE(fn);
+        FREE(canon_src);
+        FREE(canon_tgt);
+        return -1;
+    }
+
+    CacheHeader hdr;
+    container_fill_header(&hdr, key_src, 0, header_size, 0, (off_t)target_len,
+                          (int32_t)http_resp, 0);
+    hdr.flags = CACHE_FLAG_IS_REDIRECT;
+
+    int ok = 1;
+    if (fwrite(&hdr, 1, CACHE_HEADER_SIZE, fp) != CACHE_HEADER_SIZE) {
+        ok = 0;
+    }
+    if (ok
+        && fwrite(key_src, 1, (size_t)hdr.url_len + 1, fp)
+               != (size_t)hdr.url_len + 1) {
+        ok = 0;
+    }
+    if (ok && fseeko(fp, header_size - 1, SEEK_SET) != 0) {
+        ok = 0;
+    }
+    if (ok && fputc('\0', fp) != '\0') {
+        ok = 0;
+    }
+    if (ok && fwrite(key_tgt, 1, target_len, fp) != target_len) {
+        ok = 0;
+    }
+    if (ok && fflush(fp) != 0) {
+        ok = 0;
+    }
+    if (fclose(fp)) {
+        ok = 0;
+    }
+
+    if (ok) {
+        if (rename(tmp_path, full_path) != 0) {
+            unlink(tmp_path);
+            ok = 0;
+        }
+    } else {
+        unlink(tmp_path);
+    }
+
+    FREE(full_path);
+    FREE(fn);
+    FREE(canon_src);
+    FREE(canon_tgt);
+    return ok ? 0 : -1;
 }
