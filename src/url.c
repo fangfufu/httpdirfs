@@ -694,72 +694,159 @@ int url_matches_head_link(const char *target_url, const char *head_url)
     return match;
 }
 
-char *url_to_cache_path(const char *url)
+char *string_to_cache_path(const char *source)
+{
+    if (!source || !source[0]) {
+        return NULL;
+    }
+
+    /*
+     * 1-level hash sharding: "<origin>/<first 2 hex of md5>/<full md5>".
+     * The shard directory completely eliminates file-versus-directory path
+     * collisions, and the 32-character hex filename is immune to the Linux
+     * NAME_MAX / PATH_MAX limits.
+     */
+    char *hash = generate_md5sum(source);
+    if (!hash) {
+        return NULL;
+    }
+    char rel_path[64];
+    snprintf(rel_path, sizeof(rel_path), "%.2s/%s", hash, hash);
+    char *result = STRDUP(rel_path);
+    FREE(hash);
+    return result;
+}
+
+static int is_unreserved_char(unsigned char c)
+{
+    return (isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~');
+}
+
+static void normalize_percent_encoding(char *str)
+{
+    if (!str) {
+        return;
+    }
+    char *src = str;
+    char *dst = str;
+    while (*src) {
+        if (*src == '%' && isxdigit((unsigned char)src[1])
+            && isxdigit((unsigned char)src[2])) {
+            int h1 = tolower((unsigned char)src[1]);
+            int h2 = tolower((unsigned char)src[2]);
+            int v1 = (h1 >= 'a') ? (h1 - 'a' + 10) : (h1 - '0');
+            int v2 = (h2 >= 'a') ? (h2 - 'a' + 10) : (h2 - '0');
+            unsigned char byte = (unsigned char)((v1 << 4) | v2);
+            if (is_unreserved_char(byte)) {
+                *dst++ = (char)byte;
+            } else {
+                *dst++ = '%';
+                *dst++ = (char)toupper((unsigned char)src[1]);
+                *dst++ = (char)toupper((unsigned char)src[2]);
+            }
+            src += 3;
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
+}
+
+static void collapse_duplicate_slashes(char *path)
+{
+    if (!path) {
+        return;
+    }
+    char *src = path;
+    char *dst = path;
+    int prev_slash = 0;
+    while (*src) {
+        if (*src == '/') {
+            if (!prev_slash) {
+                *dst++ = *src;
+            }
+            prev_slash = 1;
+        } else {
+            *dst++ = *src;
+            prev_slash = 0;
+        }
+        src++;
+    }
+    *dst = '\0';
+}
+
+char *canonicalize_url(const char *url)
 {
     if (!url) {
         return NULL;
     }
 
-    /*
-     * Check if this URL is cross-origin relative to the root table
-     */
-    if (ROOT_LINK_TBL && ROOT_LINK_TBL->links && ROOT_LINK_TBL->links[0]) {
-        const char *root_url = ROOT_LINK_TBL->links[0]->f_url;
-        if (is_cross_origin(root_url, url)) {
-            /*
-             * Cross-origin URL: sanitize into a flat cache filename.
-             */
-            char *temp = curl_easy_unescape(NULL, url, 0, NULL);
-            char *unescaped_path = temp ? STRDUP(temp) : STRDUP(url);
-            if (temp) {
-                curl_free(temp);
-            }
-            /* Sanitize ".." to prevent path traversal */
-            char *p = unescaped_path;
-            while ((p = strstr(p, ".."))) {
-                p[0] = '_';
-                p[1] = '_';
-                p += 2;
-            }
-            /* Flatten slashes and colons */
-            for (char *sp = unescaped_path; *sp; sp++) {
-                if (*sp == '/' || *sp == ':') {
-                    *sp = '_';
-                }
-            }
-            if (strlen(unescaped_path) > 200) {
-                char *hash = generate_md5sum(url);
-                if (hash) {
-                    unescaped_path[160] = '_';
-                    memcpy(unescaped_path + 161, hash, 32);
-                    unescaped_path[193] = '\0';
-                    FREE(hash);
-                }
-            }
-            return unescaped_path;
+    CURLU *cu = curl_url();
+    if (!cu) {
+        return NULL;
+    }
+
+    CURLUcode rc
+        = curl_url_set(cu, CURLUPART_URL, url, CURLU_NON_SUPPORT_SCHEME);
+    if (rc != CURLUE_OK) {
+        curl_url_cleanup(cu);
+        return NULL;
+    }
+
+    /* Strip URL fragment */
+    curl_url_set(cu, CURLUPART_FRAGMENT, NULL, 0);
+
+    /* Lowercase scheme */
+    char *scheme = NULL;
+    if (curl_url_get(cu, CURLUPART_SCHEME, &scheme, 0) == CURLUE_OK) {
+        for (char *p = scheme; *p; p++) {
+            *p = (char)tolower((unsigned char)*p);
         }
+        curl_url_set(cu, CURLUPART_SCHEME, scheme, 0);
+        curl_free(scheme);
     }
 
-    /*
-     * Same-origin or no root table: construct cache path from the root
-     * of the server itself.
-     */
-    const char *server_path = get_url_path_from_server_root(url);
-    char *temp = curl_easy_unescape(NULL, server_path, 0, NULL);
-    char *unescaped_path = temp ? STRDUP(temp) : STRDUP(server_path);
-    if (temp) {
-        curl_free(temp);
+    /* Lowercase host */
+    char *host = NULL;
+    if (curl_url_get(cu, CURLUPART_HOST, &host, 0) == CURLUE_OK) {
+        for (char *p = host; *p; p++) {
+            *p = (char)tolower((unsigned char)*p);
+        }
+        curl_url_set(cu, CURLUPART_HOST, host, 0);
+        curl_free(host);
     }
 
-    /* Sanitize unescaped_path to prevent path traversal via ".." */
-    char *p = unescaped_path;
-    while ((p = strstr(p, ".."))) {
-        p[0] = '_';
-        p[1] = '_';
-        p += 2;
+    /* Normalize path */
+    char *path = NULL;
+    if (curl_url_get(cu, CURLUPART_PATH, &path, 0) == CURLUE_OK) {
+        collapse_duplicate_slashes(path);
+        normalize_percent_encoding(path);
+        curl_url_set(cu, CURLUPART_PATH, path, CURLU_PATH_AS_IS);
+        curl_free(path);
     }
 
-    return unescaped_path;
+    char *out = NULL;
+    rc = curl_url_get(cu, CURLUPART_URL, &out, CURLU_NO_DEFAULT_PORT);
+    curl_url_cleanup(cu);
+
+    if (rc != CURLUE_OK || !out) {
+        return NULL;
+    }
+
+    char *res = STRDUP(out);
+    curl_free(out);
+    return res;
+}
+
+char *url_to_cache_path(const char *url)
+{
+    if (!url) {
+        return NULL;
+    }
+    char *canonical = canonicalize_url(url);
+    char *result = string_to_cache_path(canonical ? canonical : url);
+    FREE(canonical);
+    return result;
 }
 
 static int hex_char_to_val(char c)

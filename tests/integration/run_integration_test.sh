@@ -803,6 +803,15 @@ log_info "External HTTP server stopped."
     # ── Test 7: Cache size thresholds ───────────────────────────────────────────
     log_info "Test group: Cache size thresholds"
 
+    # Resolve the unified single-file cache container path of a URL:
+    # <CACHE_DIR>/<first 2 hex of md5(url)>/<md5(url)>
+    cache_container_path() {
+        local url="$1"
+        local hash
+        hash="$(printf '%s' "${url}" | md5sum | awk '{print $1}')"
+        printf '%s/%s/%s' "${CACHE_DIR}" "${hash:0:2}" "${hash}"
+    }
+
     # --- Test 7a: cache-min-size threshold ---
     log_info "Subgroup: Cache minimum size threshold"
     rm -rf "${CACHE_DIR:?}"
@@ -842,16 +851,16 @@ log_info "External HTTP server stopped."
 
         # Check cache directory
         # tiny.txt should NOT have a cache file
-        tiny_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*tiny.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -z "${tiny_cache_file}" ]]; then
+        tiny_cache_file="$(cache_container_path "${BASE_URL}tiny.txt")"
+        if [[ ! -f "${tiny_cache_file}" ]]; then
             pass "cache-min-size: tiny.txt (1 byte) was NOT cached (correct)"
         else
             fail "cache-min-size: tiny.txt (1 byte) was unexpectedly cached"
         fi
 
         # simple.txt should have a cache file
-        simple_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*simple.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -n "${simple_cache_file}" ]]; then
+        simple_cache_file="$(cache_container_path "${BASE_URL}simple.txt")"
+        if [[ -f "${simple_cache_file}" ]]; then
             pass "cache-min-size: simple.txt was cached (correct)"
         else
             fail "cache-min-size: simple.txt was NOT cached"
@@ -898,16 +907,16 @@ log_info "External HTTP server stopped."
 
         # Check cache directory
         # tiny.txt should have a cache file
-        tiny_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*tiny.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -n "${tiny_cache_file}" ]]; then
+        tiny_cache_file="$(cache_container_path "${BASE_URL}tiny.txt")"
+        if [[ -f "${tiny_cache_file}" ]]; then
             pass "cache-max-size: tiny.txt (1 byte) was cached (correct)"
         else
             fail "cache-max-size: tiny.txt (1 byte) was NOT cached"
         fi
 
         # simple.txt should NOT have a cache file
-        simple_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*simple.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -z "${simple_cache_file}" ]]; then
+        simple_cache_file="$(cache_container_path "${BASE_URL}simple.txt")"
+        if [[ ! -f "${simple_cache_file}" ]]; then
             pass "cache-max-size: simple.txt (>100 bytes) was NOT cached (correct)"
         else
             fail "cache-max-size: simple.txt (>100 bytes) was unexpectedly cached"
@@ -943,6 +952,32 @@ log_info "External HTTP server stopped."
     else
         fail "cache size validation: min > max inconsistency not rejected correctly: ${err_out}"
     fi
+
+    # --- Test 7d: cache clear options ---
+    log_info "Subgroup: Cache clear options (--cache-clear-host and --cache-clear)"
+
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fexample.com/ab"
+    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_DIR}/https%3A%2F%2Fexample.com/ab/deadbeef"
+    touch "${CACHE_DIR}/https%3A%2F%2Fother.com/cd/cafebabe"
+
+    # Test --cache-clear-host
+    "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear-host "example.com"
+    if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fexample.com" && -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
+        pass "cache-clear-host: deleted target host cache directory (correct)"
+    else
+        fail "cache-clear-host: failed to delete target host or deleted unexpected host"
+    fi
+
+    # Test --cache-clear
+    "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear
+    if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
+        pass "cache-clear: cleared custom cache directory (correct)"
+    else
+        fail "cache-clear: failed to clear cache directory"
+    fi
+
 
     # ── Test 8: Advanced Parsing Mode ───────────────────────────────────────────
     log_info "Test group: Advanced Parsing Mode"

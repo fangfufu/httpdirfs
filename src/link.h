@@ -135,17 +135,6 @@ Link *path_to_Link(const char *path);
 LinkTable *path_to_LinkTable(const char *path);
 
 /**
- * \brief dump a link table to the disk.
- */
-int LinkTable_disk_save(LinkTable *linktbl, const char *dirn);
-
-/**
- * \brief load a link table from the disk.
- * \param[in] dirn We expected the unescaped_path here!
- */
-LinkTable *LinkTable_disk_open(const char *dirn);
-
-/**
  * \brief Allocate a LinkTable
  * \note This does not fill in the LinkTable.
  */
