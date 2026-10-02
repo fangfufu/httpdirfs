@@ -604,7 +604,8 @@ HTTPDirFS options:\n\
         --cache-max-size    Set maximum file size threshold for caching, in bytes\n\
                             (default: none)\n\
         --cacert            Certificate authority for the server\n\
-        --capath            Certificate authority directory for the server\n\
+        --capath            Certificate authority directory for the server\n");
+    fprintf(stderr, "\
         --dl-seg-size       Set cache download segment size, in MB (default: " XSTR(
                         DEFAULT_DATA_BLKSZ_MB) ")\n\
                             Note: this setting is ignored if previously\n\
@@ -627,12 +628,13 @@ HTTPDirFS options:\n\
                             directory listings (default: off)\n\
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links\n\
                             starting with '#' (default: off)\n\
-        --advanced-parsing-mode  Enable advanced parsing mode for non-standard\n\
-                            directory listings\n\
+        --advanced-parsing-mode\n\
+                            Enable advanced parsing mode for non-standard\n\
+                            directory listings (default: off)\n\
         --max-html-size     Set maximum HTML size for directory listing\n\
                             promotion (default: 2M)\n\
         --same-origin-only  Restrict link traversal to the mounted web server\n\
-                            (default: off, cross-server allowed)\n\
+                            in advanced parsing mode (default: off)\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
                             directory.\n\n");
