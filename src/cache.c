@@ -24,68 +24,6 @@
 /**
  * \file cache.c
  * \brief Permanent cache system implementation
- *
- * Unified single-file cache architecture:
- *
- * Every cached URL is stored in exactly one container file:
- *
- *     <CACHE_DIR>/<ab>/<hash>
- *
- * where <CACHE_DIR> is `<cache_root>/<escaped_server_root>`, <hash> is the
- * 32-character MD5 hex digest of the canonical source URL (normalized via
- * canonicalize_url()), and <ab> is the first two hex characters of that hash
- * (1-level sharding into 256 directories).
- *
- * Container file layout:
- *
- *     +-----------------------------------------------------------------+
- *     | CacheHeader (64 bytes, fixed-size binary metadata)              |
- *     | Canonical source URL string (url_len bytes, NUL-terminated)     |
- *     | Raw HTTP response headers (http_header_len bytes)               |
- *     | Segment bitmap (segbc bytes, omitted when segbc == 0)           |
- *     | Zero padding to the next 4096-byte boundary (header_size)       |
- *     | Payload data (content_length bytes)                             |
- *     +-----------------------------------------------------------------+
- *
- * Container States & Bitmask Flags:
- *
- * 1. HEAD-Only Stat Container (CACHE_FLAG_IS_HEAD):
- *    - Caches HTTP HEAD responses (Content-Length, remote Last-Modified mtime,
- *      Content-Type MIME, status code, and raw headers) before data is
- * downloaded.
- *    - segbc is 0, payload is omitted on disk (file size is only metadata + URL
- *      + raw HTTP headers, typically < 600 bytes).
- *    - Directory listings resolve file attributes (getattr) directly from cache
- *      in < 0.05 ms without issuing network requests.
- *
- * 2. Directory Listing Container (CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_DIR):
- *    - In HTTPDirFS, an HTML directory listing is simply an HTTP resource
- *      (text/html), exactly like a video or binary file.
- *    - Contains raw HTTP response headers and full HTML payload text (segbc ==
- * 1).
- *    - The in-memory LinkTable is regenerated on the fly with
- * LinkTable_parse_html() when reading cached directory payloads.
- *
- * 3. Partial File Container (CACHE_FLAG_IS_SPARSE):
- *    - Sparse-allocated payload with 4096-byte aligned header_size.
- *    - Segment bitmap (segbc bytes) tracks downloaded blocks (e.g. 8 MB
- * chunks).
- *
- * 4. Complete File Container (CACHE_FLAG_IS_COMPLETE):
- *    - All payload data segments fully downloaded and verified.
- *
- * 5. Redirect Pointer Container (CACHE_FLAG_IS_REDIRECT):
- *    - Created when a request is redirected (HTTP 301/302/307/308 or curl
- *      CURLINFO_EFFECTIVE_URL differs from request URL).
- *    - Stores target canonical URL in the payload section.
- *    - Cache lookups transparently follow pointers up to depth 5 to avoid
- *      duplicate downloads and redundant network roundtrips.
- *
- * Container Promotion:
- *    - When file content is downloaded for a URL with an existing HEAD
- * container, the container is atomically promoted in-place from
- * CACHE_FLAG_IS_HEAD to CACHE_FLAG_IS_SPARSE, preserving the cached HTTP
- * headers and metadata.
  */
 
 #include "cache.h"
