@@ -118,6 +118,9 @@ typedef struct CacheHeader {
     uint8_t reserved[12]; /**< Reserved for future use (zero) */
 } __attribute__((packed)) CacheHeader;
 
+_Static_assert(sizeof(CacheHeader) == CACHE_HEADER_SIZE,
+               "CacheHeader size must be CACHE_HEADER_SIZE");
+
 
 typedef struct ActiveDownload {
     off_t offset;
