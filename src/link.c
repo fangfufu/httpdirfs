@@ -581,10 +581,9 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
                     "Failed to read the cached directory listing "
                     "for %s!\n",
                     url);
+        } else {
+            lprintf(info, "cached directory listing not found for %s\n", url);
         }
-        /*
-         * loaded == 0: not cached or expired, download a fresh copy below.
-         */
     }
 
     /*
