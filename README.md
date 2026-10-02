@@ -26,22 +26,22 @@ different file segments in parallel.
 There is support for Airsonic / Subsonic server. This allows you to mount a
 remote music collection locally.
 
-If you enable the `--external-links` flag, HTTPDirFS will also parse the HTML
-directory listing of the mounted server and identify any `<a href>` tags
-pointing to absolute external (cross-origin) URLs. These external files and
-directories will appear alongside local files in the mountpoint. External URLs
-ending with a trailing slash (`/`) are treated as directories; navigating into
-them triggers a recursive layout discovery on the remote server.
+HTTPDirFS parses HTML directory listings using the Gumbo HTML5 parser. It
+extracts descriptive filenames from anchor text (`<a>`), resolves name
+collisions with progressive URL path escalation, and prevents navigation loops.
+
+By default, cross-origin links are discarded to confine filesystem traversal to
+the mounted server's origin. You can follow external origin links using
+`--allow-external-origin`.
+
+By default, resources whose URLs do not end with a trailing slash are treated as
+regular files. If you are mounting websites where subdirectories are represented
+by HTML pages without trailing slashes, you can enable `--html-is-directory` to
+dynamically inspect and promote linked HTML pages into browsable directories.
 
 If you only want to access a single file, there is also a simplified Single File
 Mode. This can be especially useful if the web server does not present a HTTP
 directory listing.
-
-If you are mounting websites, archives, or web portals with non-standard
-directory listings (such as custom HTML pages where filenames reside in anchor
-text rather than URL paths), you can enable `--advanced-parsing-mode`. HTTPDirFS
-extracts descriptive filenames from anchor text, resolves name collisions,
-promotes HTML pages into browsable subdirectories, and avoids navigation loops.
 
 ## Usage
 
@@ -241,68 +241,6 @@ This can be useful if the web server does not present a HTTP directory listing.
 This feature was implemented due to Github
 [issue #86](https://github.com/fangfufu/httpdirfs/issues/86)
 
-## Advanced parsing mode
-
-By default, HTTPDirFS expects standard web server directory listings (such as
-Apache, nginx, lighttpd, or Caddy autoindex pages) where directory paths end
-with a trailing slash (`/`) and files are referenced by direct URL paths.
-
-However, many websites, software archives, and web applications (such as custom
-file archives, download portals, or web forums) do not present standard
-autoindex tables. Instead, they present HTML pages where:
-
-- URLs are opaque IDs or slugs (e.g., `/view/1382/foo` or `download.php?id=42`).
-- Meaningful filenames and descriptions reside inside the HTML link anchor text
-  (e.g., `<a href="/view/1382/foo">Software_Disc_1.iso</a>`).
-- Subdirectories are simply HTML pages linking to further resources.
-
-To mount and navigate these sites, enable `--advanced-parsing-mode`:
-
-```bash
-./httpdirfs -f --cache --advanced-parsing-mode https://example.com/archive /mnt/archive
-```
-
-### Features
-
-- **Anchor text extraction:** HTTPDirFS parses the text inside `<a>` tags and
-  uses it as the virtual filename or directory name. Whitespace is trimmed,
-  internal whitespace is collapsed, and slashes (`/`) are converted to
-  underscores (`_`) to prevent broken path hierarchies. Preceding dots are also
-  stripped so files do not become hidden files on Unix systems.
-- **Collision resolution:** When multiple links on a page share identical or
-  conflicting anchor text, HTTPDirFS automatically disambiguates them by
-  appending or prepending path segments from the target URL (e.g.,
-  `Readme-readme.txt`, `Readme-38601-readme.txt`). If the anchor text already
-  matches the URL segment case-insensitively, redundant prefixing is omitted. If
-  conflicts persist after exhausting all URL path segments, a numeric suffix
-  (`-1`, `-2`, ...) is appended.
-- **Early duplicate removal:** If the same target URL is linked multiple times
-  on an HTML page (for example, in header navigation, breadcrumbs, or repeated
-  buttons), only the first link is added, using the first encountered anchor
-  text.
-- **Directory promotion:** HTTPDirFS inspects the `Content-Type` header of
-  linked resources. Any link returning `Content-Type: text/html` (whose size is
-  within `--max-html-size`) is promoted to a directory, allowing you to browse
-  into it as a subdirectory. Non-HTML resources (such as ISOs, archives, images,
-  and binaries) are exposed as regular files.
-- **Loop prevention:** Links pointing back to the current directory or any of
-  its ancestor directories are automatically discarded to prevent infinite
-  directory recursion.
-
-### Options
-
-- `--advanced-parsing-mode`: Enables advanced parsing mode.
-- `--max-html-size <size>`: Sets the maximum size of an HTML page eligible for
-  directory listing promotion (default: `2M`). HTML resources larger than this
-  limit are treated as regular files instead of directories to avoid excessive
-  memory consumption on huge documents. Suffixes such as `K`, `M`, or `G` are
-  supported (e.g., `--max-html-size 4M`).
-- `--same-origin-only`: Restricts link traversal to the mounted server's origin
-  (protocol, host, and port). In advanced parsing mode, cross-server links are
-  followed by default; enabling `--same-origin-only` discards external links.
-- `--ignore-anchors`: Ignores intra-page HTML fragment links starting with `#`
-  (e.g., `#top` or `#details`).
-
 ## Permanent cache system
 
 You can cache the files you have accessed permanently on your hard drive by
@@ -378,6 +316,25 @@ Note that HTTPDirFS requires the server to support HTTP Range Request, some
 servers support this features, but does not present `"Accept-Ranges: bytes` in
 the header responses. HTTPDirFS by default checks for this header field. You can
 disable this check by using the `--no-range-check` flag.
+
+### Directory Detection and Name Collision Resolution
+
+HTTPDirFS uses a universal HTML parsing and collision resolution pipeline:
+
+- **Anchor text extraction:** Text inside `<a>` tags is extracted, whitespace is
+  normalized, and slashes (`/`) are converted to underscores (`_`). Leading dots
+  and spaces are trimmed so entries do not become hidden Unix files.
+- **Progressive collision escalation:** When multiple links share identical
+  anchor text, HTTPDirFS disambiguates names by combining anchor text with
+  backward URL path segments (e.g. `Title-filename.iso`,
+  `Title-subdir-filename.iso`). When anchor text matches the filename
+  case-insensitively, redundant prefixing is omitted.
+- **Deterministic directory detection:** Trailing slashes (`/`) denote
+  directories. When `--html-is-directory` is enabled, linked HTML resources
+  (within `--max-html-size`) are dynamically promoted to virtual subdirectories.
+
+For complete technical specifications, see
+\[docs/specs/directory_detection_and_naming.md\](file:///home/fangfufu/projects/httpdirfs/docs/specs/directory_detection_and_naming.md).
 
 ### Allowed characters in filenames
 

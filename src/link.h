@@ -109,10 +109,6 @@ extern LinkTable *ROOT_LINK_TBL;
  */
 Link *Link_new(const char *linkname, LinkType type);
 
-/**
- * \brief classify a linkname into LinkType
- */
-LinkType linkname_to_LinkType(const char *linkname);
 
 /**
  * \brief initialise link sub-system.

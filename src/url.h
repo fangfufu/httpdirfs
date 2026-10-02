@@ -45,14 +45,6 @@ int is_external_url(const char *url);
  */
 int is_cross_origin(const char *page_url, const char *link_url);
 
-/**
- * \brief Extract the filename component from an external URL.
- * \details For "http://example.com/path/file.iso" returns "file.iso".
- *          For "http://example.com/path/dir/" returns "dir".
- *          Query strings are stripped. Returns "" for root-only URLs.
- * \note The caller must free the returned string with FREE().
- */
-char *external_url_to_filename(const char *url);
 
 /**
  * \brief Extract the server root (scheme://host[:port]) from a URL.
@@ -97,12 +89,6 @@ char *canonicalize_url(const char *url);
  */
 char *url_to_cache_path(const char *url);
 
-/**
- * \brief Convert a link URL to be relative to the parent page URL.
- * \param page_url The URL of the parent directory page.
- * \param link_url The URL from the href attribute to convert in-place.
- */
-void make_link_relative(const char *page_url, char *link_url);
 
 /**
  * \brief Resolve an href attribute to a full canonical URL.

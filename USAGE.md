@@ -99,17 +99,15 @@ HTTPDirFS options:
         --zero-len-is-dir   If a file has a zero length, treat it as a directory
         --insecure-tls      Disable libcurl TLS certificate verification by
                             setting CURLOPT_SSL_VERIFYHOST to 0
-        --external-links    Include external (cross-origin) links from
-                            directory listings (default: off)
+        --allow-external-origin
+                            Allow cross-origin links to be parsed and accessed
+                            (default: off)
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links
                             starting with '#' (default: off)
-        --advanced-parsing-mode
-                            Enable advanced parsing mode for non-standard
-                            directory listings (default: off)
+        --html-is-directory Promote linked HTML pages (Content-Type: text/html)
+                            to virtual directories (default: off)
         --max-html-size     Set maximum HTML size for directory listing
                             promotion (default: 2M)
-        --same-origin-only  Restrict link traversal to the mounted web server
-                            in advanced parsing mode (default: off)
         --single-file-mode  Single file mode - rather than mounting a whole
                             directory, present a single file inside a virtual
                             directory.
@@ -388,27 +386,24 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-### External Links (`--external-links`)
+### External Origins (`--allow-external-origin`)
 
-When `--external-links` is enabled, HTTPDirFS parses the HTML directory listing
-of the mounted server and identifies any `<a href>` tags pointing to absolute
-external (cross-origin) URLs.
+By default, HTTPDirFS confines filesystem traversal strictly to the origin
+(scheme, host, port) of the URL specified at mount time. Any links pointing to
+external (cross-origin) servers are dropped during HTML parsing.
+
+Enabling `--allow-external-origin` allows HTTPDirFS to follow and mount links
+pointing to external origins.
 
 #### How It Works
 
 - **File and Directory Exposure:** External files and directories will appear
   alongside local files in the mountpoint. External URLs ending with a trailing
-  slash (`/`) are treated as directories; navigating into them triggers a
-  recursive layout discovery on the remote server.
-- **First-Wins Deduplication:** If multiple external links produce the same
-  filename after extraction, only the first encountered link is kept.
-- **Path Sanitization:** Filenames derived from external URLs are automatically
-  sanitized. URL-decoded slash characters (`%2F`) are unescaped and converted to
-  underscores (`_`) to prevent directory traversal or invalid FUSE entry
-  creations.
+  slash (`/`) are treated as directories; navigating into them triggers
+  recursive discovery on the remote server.
 - **Cache Compatibility:** Caching works seamlessly with external links. Cache
-  paths for external files are safely flattened and sanitized within the
-  metadata and data cache directory structures to avoid directory traversal.
+  paths are safely hashed and segregated into dedicated origin directories
+  within the unified container cache to avoid path traversal.
 
 #### Security & Credentials Scoping
 
@@ -424,26 +419,18 @@ external (cross-origin) URLs.
 
 ______________________________________________________________________
 
-### Advanced Parsing Mode (`--advanced-parsing-mode`)
+### Universal Link Parsing and Directory Detection
 
-By default, HTTPDirFS expects standard web server directory listings (such as
-Apache, nginx, lighttpd, or Caddy autoindex pages) where directory paths end
-with a trailing slash (`/`) and filenames are directly represented in link URLs.
+HTTPDirFS parses HTML listing documents using the Gumbo HTML5 parser. It
+extracts descriptive filenames from anchor text, resolves name collisions, and
+identifies directories.
 
-When mounting websites, software archives, or web applications with non-standard
-directory structures (such as custom file archives, download portals, or web
-forums), filenames often reside in human-readable anchor text rather than URL
-slugs, and subdirectories are presented as linked HTML pages.
-
-Enabling `--advanced-parsing-mode` activates advanced scraping, link
-classification, collision resolution, and directory promotion.
-
-#### Key Mechanics
+#### Universal Parsing Mechanics
 
 - **Anchor Text Filename Extraction:** The text inside `<a>...</a>` tags is
   extracted, sanitized, and used as the virtual file or directory name.
-  Whitespace is collapsed, slashes (`/`) are converted to underscores (`_`), and
-  leading dots are stripped to avoid hidden Unix files.
+  Whitespace is normalized, slashes (`/`) are converted to underscores (`_`),
+  and leading dots and spaces are stripped to avoid hidden Unix files.
 - **Progressive Collision Resolution:** If multiple links share identical anchor
   text, HTTPDirFS disambiguates names by combining anchor text with URL path
   segments (e.g., `Readme-readme.txt`, `Readme-38601-readme.txt`). If the anchor
@@ -452,14 +439,19 @@ classification, collision resolution, and directory promotion.
   suffixes (`-1`, `-2`, ...) are appended.
 - **Early Duplicate Removal:** If the exact same target URL appears multiple
   times on a page, only the first encountered link and anchor text are kept.
-- **Directory Promotion via Content-Type:** HTTPDirFS inspects the HTTP
-  `Content-Type` response header for linked resources. Any resource returning
-  `Content-Type: text/html` (with a size within `--max-html-size`) is promoted
-  to a directory, allowing you to browse into it as a subdirectory. Non-HTML
-  resources are treated as regular files.
 - **Ancestor Loop Prevention:** Links pointing back to the current directory or
   any of its parent directories are discarded to prevent infinite recursive
   loops.
+
+#### `--html-is-directory`
+
+- **Description:** By default, resources whose URLs do not end with a trailing
+  slash (`/`) are treated as regular files. When `--html-is-directory` is
+  enabled, HTTPDirFS inspects the HTTP `Content-Type` response header of linked
+  resources during link initialization. Any resource returning
+  `Content-Type: text/html` (with a size within `--max-html-size`) is promoted
+  to a virtual directory, allowing you to browse into it as a subdirectory.
+  Non-HTML resources remain regular files.
 
 #### `--max-html-size <size>`
 
@@ -469,11 +461,8 @@ classification, collision resolution, and directory promotion.
   excessive memory usage. Suffixes like `K`, `M`, or `G` are supported (e.g.,
   `--max-html-size 4M`).
 
-#### `--same-origin-only`
-
-- **Description:** Restricts link traversal to the mounted server's origin
-  (scheme, host, port). In advanced parsing mode, cross-server links are allowed
-  by default; this flag restricts exploration strictly to the mounted host.
+For the comprehensive architectural specification, see
+\[docs/specs/directory_detection_and_naming.md\](file:///home/fangfufu/projects/httpdirfs/docs/specs/directory_detection_and_naming.md).
 
 ______________________________________________________________________
 

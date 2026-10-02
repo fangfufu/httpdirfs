@@ -80,7 +80,7 @@ void Config_init(void)
 
     CONFIG.invalid_refresh = 0;
 
-    CONFIG.external_links = 0;
+    CONFIG.allow_external_origin = 0;
 
     CONFIG.ignore_anchors = 0;
 
@@ -103,10 +103,9 @@ void Config_init(void)
 
     CONFIG.sonic_insecure = 0;
 
-    /*--------- Advanced parsing related --------*/
-    CONFIG.advanced_parsing_mode = 0;
+    /*--------- Directory promotion & traversal related --------*/
+    CONFIG.html_is_directory = 0;
     CONFIG.max_html_size = DEFAULT_MAX_HTML_SIZE;
-    CONFIG.same_origin_only = 0;
 
     atexit(mem_cleanup);
 }

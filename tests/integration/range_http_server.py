@@ -241,9 +241,9 @@ class _RangeFile:
         self._f.close()
 
 
-class ReusableTCPServer(socketserver.TCPServer):
+class ReusableTCPServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
-    allow_reuse_port = True
+    daemon_threads = True
 
 
 def main():

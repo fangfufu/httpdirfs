@@ -79,7 +79,7 @@ static int is_same_origin(const char *link_url)
     if (!ROOT_LINK_TBL || !ROOT_LINK_TBL->links || !ROOT_LINK_TBL->links[0]) {
         return 1;
     }
-    if (!CONFIG.external_links && !CONFIG.advanced_parsing_mode) {
+    if (!CONFIG.allow_external_origin) {
         return 1;
     }
     return !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
@@ -184,8 +184,8 @@ CURL *Link_to_curl(Link *link)
     if (CONFIG.http_username) {
         /*
          * Only apply credentials to the mounted server. When
-         * --external-links is active, cross-origin links must NOT receive
-         * the user's credentials for the primary server.
+         * --allow-external-origin is active, cross-origin links must NOT
+         * receive the user's credentials for the primary server.
          */
         if (is_same_origin(link->f_url)) {
             ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
@@ -358,40 +358,26 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
         return current_type;
     }
 
-    if (CONFIG.advanced_parsing_mode) {
-        if (is_html_content_type(content_type)) {
-            if (cl > 0 && (off_t)cl > CONFIG.max_html_size) {
-                if (content_len_out) {
-                    *content_len_out = (size_t)cl;
-                }
-                return LINK_FILE;
+    if (CONFIG.html_is_directory && is_html_content_type(content_type)) {
+        if (cl > 0 && (off_t)cl > CONFIG.max_html_size) {
+            if (content_len_out) {
+                *content_len_out = (size_t)cl;
             }
-            return LINK_DIR;
+            return LINK_FILE;
         }
-        /* Non-HTML Content-Type (image, binary, ISO, etc.) */
-        if (cl < 0) {
-            return LINK_INVALID;
-        }
-        if (cl == 0 && CONFIG.zero_len_is_dir) {
-            return LINK_DIR;
-        }
-        if (content_len_out) {
-            *content_len_out = (size_t)cl;
-        }
-        return LINK_FILE;
+        return LINK_DIR;
     }
 
-    /* Vanilla mode */
     if (cl < 0) {
         return LINK_INVALID;
-    } else if (cl == 0 && CONFIG.zero_len_is_dir) {
-        return LINK_DIR;
-    } else {
-        if (content_len_out) {
-            *content_len_out = (size_t)cl;
-        }
-        return LINK_FILE;
     }
+    if (cl == 0 && CONFIG.zero_len_is_dir) {
+        return LINK_DIR;
+    }
+    if (content_len_out) {
+        *content_len_out = (size_t)cl;
+    }
+    return LINK_FILE;
 }
 
 void Link_set_file_stat(Link *this_link, CURL *curl)
@@ -428,8 +414,8 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
          * Emit a targeted warning if an external link needs authentication
          * that we are not providing.
          */
-        if (CONFIG.external_links && (http_resp == 401 || http_resp == 403)
-            && ROOT_LINK_TBL
+        if (CONFIG.allow_external_origin
+            && (http_resp == 401 || http_resp == 403) && ROOT_LINK_TBL
             && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url,
                                this_link->f_url)) {
             lprintf(warning,
@@ -452,7 +438,7 @@ static size_t write_download_full_callback(void *recv_data, size_t size,
 {
     TransferStruct *ts = (TransferStruct *)userp;
     size_t recv_size = size * nmemb;
-    if (CONFIG.advanced_parsing_mode && CONFIG.max_html_size >= 0) {
+    if (CONFIG.html_is_directory && CONFIG.max_html_size >= 0) {
         if (ts->curr_size + recv_size > (size_t)CONFIG.max_html_size) {
             lprintf(warning,
                     "HTML directory page download exceeded max_html_size (%ld "
