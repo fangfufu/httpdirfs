@@ -5,6 +5,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>
 #include <ftw.h>
 #include <stdlib.h>
 #include <string.h>
@@ -557,7 +558,12 @@ void test_container_file_create_open(void)
     TEST_ASSERT_TRUE((uintmax_t)st.st_blocks * 512 < (uintmax_t)st.st_size);
 #endif
 
-    FILE *f = fopen(full_path, "r");
+    int fd = open(full_path, O_RDONLY);
+    TEST_ASSERT_TRUE(fd >= 0);
+    FILE *f = fdopen(fd, "r");
+    if (f == NULL) {
+        close(fd);
+    }
     TEST_ASSERT_NOT_NULL(f);
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
