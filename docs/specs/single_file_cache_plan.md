@@ -1,103 +1,93 @@
-# Unified Single-File Cache Architecture Plan
+# Unified Single-File Cache Architecture Specification
 
-This document outlines the design and implementation plan for HTTPDirFS's
-unified single-file cache architecture, extended with first-class HTTP `HEAD`
-response and file stat caching.
+This document specifies the technical architecture, on-disk container format,
+lifecycle state machine, and data structures of HTTPDirFS's unified single-file
+cache subsystem.
 
 ______________________________________________________________________
 
 ## 1. Architectural Principles
 
-1. **One URL = Exactly One File on Disk**:
+The cache engine is designed around seven core architectural tenets:
 
-   - Every cached URL (whether directory HTML, file data, or `HEAD` file stat)
-     is stored in a single container file at
-     `<cache_root>/<escaped_origin>/ab/<hash>`.
-   - Eliminates auxiliary files per directory (`.LinkTable`,
+1. **One URL = Exactly One File on Disk:**
+
+   - Every cached HTTP resource—whether an HTML directory listing, a file
+     payload, a `HEAD` response stat, or an HTTP redirect pointer—is stored in a
+     single container file at:
+     ```
+     <cache_root>/<escaped_origin>/ab/<hash>
+     ```
+   - Eliminates multi-file coordination overhead and stale file hazards inherent
+     in separated metadata and payload schemes (`.meta` vs `.data`).
+   - Eliminates auxiliary directory index files (`.LinkTable`,
      `.httpdirfs_content`, `.httpdirfs_header`).
-   - Eliminates auxiliary files per file (`.meta` vs `.data`).
 
-1. **First-Class HEAD & File Stat Caching**:
+1. **First-Class HEAD & File Stat Caching:**
 
-   - HTTP `HEAD` responses (status code, Content-Length, Last-Modified/filetime,
-     and Content-Type) are cached in the container file before file payload is
-     ever downloaded.
-   - When directories are re-opened (or when links are shared across multiple
-     directory pages), file stats are resolved instantly from disk (< 0.05 ms)
-     without sending redundant network requests.
-   - Seamlessly promoted: when payload data is subsequently downloaded, the
-     existing container file is expanded with the payload without altering its
-     metadata or hash location.
+   - HTTP `HEAD` response headers (HTTP status code, `Content-Length`, remote
+     `Last-Modified` timestamp, and `Content-Type`) are persisted in a
+     lightweight container file before file payload is ever downloaded.
+   - When directories are re-opened or links are shared across multiple pages,
+     file stats resolve from local disk (< 0.05 ms) without issuing network
+     round trips.
+   - Progressive promotion: when payload bytes are subsequently requested, the
+     existing container file is promoted in place to a data container without
+     altering its metadata, path, or hash identity.
 
-1. **Abandon On-Disk LinkTable Serialization**:
+1. **In-Memory Dynamic LinkTable Materialization:**
 
-   - Stop serializing in-memory C structs (`LinkTable`) to disk.
-   - Cache the raw HTTP response (response headers + HTML payload).
-   - Regenerate the `LinkTable` in-memory on-the-fly via
-     `LinkTable_parse_html()` using the Gumbo HTML parser (< 0.5 ms).
+   - On-disk serialization of in-memory C structs (`LinkTable`) is abandoned.
+   - Directory listings are stored in their raw HTTP form (response headers and
+     HTML payload).
+   - In-memory `LinkTable` objects are regenerated on-the-fly via
+     `LinkTable_parse_html()` using the Gumbo HTML5 parser (< 0.5 ms),
+     eliminating structural versioning incompatibilities.
 
-1. **Unified Content Model**:
+1. **Unified Content Model:**
 
-   - In HTTP, an HTML directory listing is simply an HTTP resource
-     (`text/html`), just like a video or binary file is an HTTP resource
-     (`application/...`).
-   - The cache engine treats all resources uniformly as raw HTTP content.
-   - If a URL is cached as a file and later opened as a directory, HTTPDirFS
-     simply re-parses the existing cached payload in memory with zero
-     byte-shifting or file conversion.
+   - In HTTP, directory listings (`text/html`) and files (`application/...`,
+     `video/...`, etc.) are all standard HTTP resources.
+   - The cache engine treats all resources uniformly. If a URL is initially
+     cached as a file and subsequently accessed as a directory (e.g., via
+     `--html-is-directory`), HTTPDirFS parses the existing cached payload
+     directly in memory with zero file conversion or data migration.
 
-1. **1-Level Hash Sharding (`<origin>/ab/<hash>`)**:
+1. **Single-Level Hash Sharding (`<origin>/ab/<hash>`):**
 
-   - Shards files into 256 directories (`00` to `ff`) using the first 2 hex
-     characters of the MD5 hash.
-   - Completely eliminates file-versus-directory path collisions.
-   - Immune to Linux `NAME_MAX` (255 bytes) and `PATH_MAX` (4096 bytes) limits.
+   - Objects are sharded into 256 subdirectories (`00` through `ff`) using the
+     first two hexadecimal characters of the 32-character MD5 hash of the
+     canonical URL.
+   - Completely eliminates file-versus-directory path collision hazards on local
+     filesystems.
+   - Immune to Linux filename (`NAME_MAX = 255`) and path length
+     (`PATH_MAX = 4096`) restrictions.
 
-1. **Deterministic Timestamp Invalidation**:
+1. **Deterministic Timestamp Invalidation:**
 
-   - Explicitly records both the local download timestamp (`cache_time`) and the
-     upstream server's `Last-Modified` timestamp (`remote_mtime`) in the binary
-     header.
-   - Cache freshness is evaluated as
-     `time(NULL) - cache_time <= CONFIG.refresh_timeout`.
+   - Each container records both the local capture timestamp (`cache_time`) and
+     the remote server's `Last-Modified` timestamp (`remote_mtime`) in its
+     binary header.
+   - Freshness is deterministically evaluated against `CONFIG.refresh_timeout`:
+     $$\\text{is_fresh} = (\\text{time}(\\text{NULL}) - \\text{cache_time} \\le
+     \\text{CONFIG.refresh_timeout})$$
 
-1. **Deterministic URL Canonicalization**:
+1. **Deterministic URL Canonicalization:**
 
-   - URLs are normalized via `canonicalize_url()` prior to MD5 hashing and cache
-     path derivation.
-   - Normalization rules:
-     - Scheme and host are converted to lowercase.
-     - Default ports are removed (`:80` for HTTP, `:443` for HTTPS).
-     - URL fragments (`#...`) are stripped because fragments are client-only and
-       never sent over HTTP.
-     - Redundant slashes and dot-segments (`.` and `..`) are resolved in the
-       path while preserving trailing slashes.
-     - Percent-encoding is normalized per RFC 3986 (uppercase hex digits `%2F`,
-       unreserved characters decoded).
-   - Guarantees that semantically identical URLs (e.g.
-     `HTTP://Example.com:80/dir#ref` and `http://example.com/dir`) resolve to
-     the exact same cache container.
+   - Every URL is normalized via `canonicalize_url()` before hashing and cache
+     path resolution.
+   - Guarantees that semantically equivalent URLs resolve to the exact same
+     cache container.
 
-1. **Transparent HTTP Redirect Aliasing (Pointer Containers)**:
+1. **Transparent HTTP Redirect Aliasing (Pointer Containers):**
 
-   - When a requested URL redirects (HTTP 301, 302, 307, 308) or when curl's
-     `CURLINFO_EFFECTIVE_URL` differs from the request URL (such as directory
-     trailing slash redirection), HTTPDirFS stores:
-     1. The full payload / stat container under the canonical target URL.
+   - When a requested URL redirects (HTTP 301, 302, 307, 308) or when the
+     effective URL diverges from the request URL, HTTPDirFS persists:
+     1. The canonical target container under `canonicalize_url(target_url)`.
      1. A lightweight Redirect Pointer Container (`CACHE_FLAG_IS_REDIRECT`)
-        under the requested source URL, containing the canonical target URL
-        string.
-   - When reading any cache container, redirect pointers are transparently
-     followed to the target URL container with a loop guard (maximum depth of 5
-     hops).
-   - Prevents duplicate downloads and eliminates network requests when links
-     query the unredirected form of a URL.
-
-1. **No Backward Compatibility Required**:
-
-   - Legacy cache formats (`.LinkTable`, `.meta`, `.data`) are completely
-     discarded; existing cache directories can be freshly populated with the
-     single-file container format.
+        under `canonicalize_url(source_url)`.
+   - Pointer containers are followed transparently with an iteration depth guard
+     to prevent infinite redirect loops.
 
 ______________________________________________________________________
 
@@ -105,11 +95,11 @@ ______________________________________________________________________
 
 ### 2.1 Directory Sharding Structure
 
-Under the cache root directory (default `~/.cache/httpdirfs/` or custom
-`--cache-location <dir>`):
+Under the cache root directory (default `${XDG_CACHE_HOME}/httpdirfs` or the
+path specified by `--cache-location`):
 
 ```
-~/.cache/httpdirfs/
+<cache_root>/
 ├── CACHEDIR.TAG
 └── https%3A%2F%2Fexample.com/       <-- Escaped server origin (scheme://host[:port])
     ├── 00/
@@ -120,33 +110,34 @@ Under the cache root directory (default `~/.cache/httpdirfs/` or custom
     └── ff/
 ```
 
-- **Origin Directory**: Extracted using `get_server_root(url)` and escaped using
+- **Origin Directory**: Extracted via `get_server_root(url)` and escaped using
   `curl_easy_escape()`.
 - **Shard Directory (`ab/`)**: Characters `0..1` of the 32-character hexadecimal
   MD5 hash (`generate_md5sum(canonical_url)`).
-- **Filename (`<hash>`)**: The full 32-character MD5 hash string.
+- **Container Filename (`<hash>`)**: The complete 32-character MD5 hash string.
 
 ______________________________________________________________________
 
 ### 2.2 Unified Container File Format
 
-Every cached object on disk begins with a 64-byte `CacheHeader`:
+Every container file begins with a fixed 64-byte binary `CacheHeader`, followed
+by variable-length metadata sections and page-aligned payload data:
 
 ```
 +-------------------------------------------------------------------------+
 | CacheHeader (Fixed size: 64 bytes)                                      |
 |   - magic (uint32_t): 0x53464448 ("HDFS" in little-endian)              |
 |   - version (uint16_t): 1                                               |
-|   - flags (uint16_t): Bitmask (see below)                               |
-|   - url_len (uint32_t): Length of canonical source URL string           |
-|   - header_size (uint32_t): Offset where payload begins (4KB aligned)   |
-|   - http_header_len (uint32_t): Length of raw HTTP response headers     |
-|   - cache_time (int64_t): Local time(NULL) when downloaded              |
-|   - remote_mtime (int64_t): Remote server Last-Modified timestamp (or 0)|
+|   - flags (uint16_t): Bitmask (see Section 2.3)                         |
+|   - url_len (uint32_t): Byte length of canonical source URL string      |
+|   - header_size (uint32_t): Byte offset where payload data begins       |
+|   - http_header_len (uint32_t): Byte length of raw HTTP response header |
+|   - cache_time (int64_t): Local time(NULL) when container was written   |
+|   - remote_mtime (int64_t): Remote Last-Modified timestamp (0 if none)  |
 |   - content_length (int64_t): Total length of payload in bytes          |
-|   - blksz (int32_t): Segment block size (e.g. 8 MB)                     |
+|   - blksz (int32_t): Segment block size in bytes (e.g. 8 MiB)           |
 |   - segbc (int32_t): Total segment count (1 for HTML, 0 for HEAD-only)  |
-|   - reserved (uint8_t[12]): Reserved for future use (zeroed)            |
+|   - reserved (uint8_t[12]): Reserved for future extensions (all zero)   |
 +-------------------------------------------------------------------------+
 | Canonical Source URL String (url_len bytes, null-terminated)            |
 +-------------------------------------------------------------------------+
@@ -154,278 +145,313 @@ Every cached object on disk begins with a 64-byte `CacheHeader`:
 +-------------------------------------------------------------------------+
 | Segment Bitmap (segbc bytes: uint8_t seg[] array, omitted if segbc==0)  |
 +-------------------------------------------------------------------------+
-| 4 KB Page Alignment Padding (zero bytes to align next section)          |
+| 4 KiB Page Alignment Padding (zero bytes to align next section)          |
 +-------------------------------------------------------------------------+ <-- header_size (offset 4096)
 | Payload Data (HTML text OR file binary, content_length bytes)           |
 | (Omitted on disk if CACHE_FLAG_IS_HEAD is set and payload not downloaded)|
 +-------------------------------------------------------------------------+
 ```
 
-#### Bitmask Flags
+#### Field Specifications
 
-```c
-#define CACHE_FLAG_IS_COMPLETE 0x1  /* Payload is fully downloaded */
-#define CACHE_FLAG_IS_SPARSE   0x2  /* File payload was sparse-allocated */
-#define CACHE_FLAG_IS_HEAD     0x4  /* Container contains cached HEAD / stat metadata */
-#define CACHE_FLAG_IS_DIR      0x8  /* Classified as a directory (text/html) */
-#define CACHE_FLAG_IS_REDIRECT 0x10 /* Container is a redirect pointer to target URL */
-```
-
-#### Container States
-
-1. **HEAD-Only Container (`CACHE_FLAG_IS_HEAD`)**:
-   - `content_length`: Remote file size from `Content-Length:` header (or 0 for
-     directory).
-   - `remote_mtime`: Remote file timestamp from `Last-Modified:` /
-     `CURLINFO_FILETIME`.
-   - `http_header_len`: Contains the raw status line (e.g. `HTTP/1.1 200 OK`)
-     and HTTP headers (including `Content-Type:`).
-   - `segbc`: 0.
-   - `header_size`: 4096.
-   - **On-disk file size**: `sizeof(CacheHeader) + url_len + http_header_len`
-     (typically 300–600 bytes, no payload allocated).
-1. **Directory Listing Container
-   (`CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_DIR`)**:
-   - Contains raw HTTP headers and full HTML payload.
-   - `segbc`: 1.
-1. **Partial File Container (`CACHE_FLAG_IS_SPARSE`)**:
-   - Page-aligned payload sparse-allocated with `ftruncate()`, segment bitmap
-     tracks downloaded blocks.
-1. **Complete File Container (`CACHE_FLAG_IS_COMPLETE`)**:
-   - Full file data downloaded and verified.
-1. **Redirect Pointer Container (`CACHE_FLAG_IS_REDIRECT`)**:
-   - `http_resp`: Upstream HTTP redirect status code (e.g. 301, 302, 307, 308).
-   - `url_len`: Length of the requested source URL string.
-   - `content_length`: Length of the canonical target URL string.
-   - `http_header_len`: Raw HTTP redirect response headers (e.g. `Location:`).
-   - `segbc`: 0.
-   - `header_size`: Offset where target URL is stored.
-   - **Payload section**: The null-terminated canonical target URL string.
-   - **On-disk file size**:
-     `sizeof(CacheHeader) + url_len + http_header_len + content_length`
-     (typically < 256 bytes, tiny pointer).
+| Field             | Type       | Size (Bytes) | Description                                                  |
+| ----------------- | ---------- | ------------ | ------------------------------------------------------------ |
+| `magic`           | `uint32_t` | 4            | Magic signature: `0x53464448` (ASCII `"HDFS"`, LE)           |
+| `version`         | `uint16_t` | 2            | Container format version (currently `1`)                     |
+| `flags`           | `uint16_t` | 2            | Bitmask defining container state and type                    |
+| `url_len`         | `uint32_t` | 4            | Length of stored canonical URL including null terminator     |
+| `header_size`     | `uint32_t` | 4            | Byte offset where payload data begins (4096-byte aligned)    |
+| `http_header_len` | `uint32_t` | 4            | Byte length of raw HTTP response headers                     |
+| `cache_time`      | `int64_t`  | 8            | Local POSIX timestamp when container was created/refreshed   |
+| `remote_mtime`    | `int64_t`  | 8            | Upstream `Last-Modified` timestamp (POSIX seconds, or `0`)   |
+| `content_length`  | `int64_t`  | 8            | Total payload size in bytes (from `Content-Length`)          |
+| `blksz`           | `int32_t`  | 4            | Download segment block size (default: 8 MiB)                 |
+| `segbc`           | `int32_t`  | 4            | Segment count in bitmap: $\\lceil \\text{cl} / \\text{blksz} |
+| `reserved`        | `uint8_t`  | 12           | Reserved for future use (must be set to zero)                |
 
 ______________________________________________________________________
 
-## 3. Operations & Code Integration
-
-### 3.1 URL Canonicalization (`src/url.c`, `src/url.h`)
-
-All cache path lookups, container creations, and header writes pass URLs through
-`canonicalize_url()` before hashing.
+### 2.3 Bitmask Flags
 
 ```c
-/**
- * \brief Canonicalize a URL for deterministic cache hashing and matching.
- * \param url The raw URL string.
- * \return Heap-allocated canonical URL string, or NULL on error.
- */
+#define CACHE_FLAG_IS_COMPLETE 0x1  /* Payload is fully downloaded and verified */
+#define CACHE_FLAG_IS_SPARSE   0x2  /* File payload is sparsely allocated on disk */
+#define CACHE_FLAG_IS_HEAD     0x4  /* Container contains cached HEAD / file stat */
+#define CACHE_FLAG_IS_DIR      0x8  /* Resource represents an HTML directory listing */
+#define CACHE_FLAG_IS_REDIRECT 0x10 /* Container is an HTTP redirect pointer */
+```
+
+______________________________________________________________________
+
+### 2.4 Container Archetypes
+
+Depending on its flags, a container file exists in one of five distinct states:
+
+```
+                      ┌────────────────────────┐
+                      │    HTTP HEAD Probe     │
+                      └───────────┬────────────┘
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │     HEAD-Only Container      │
+                   │    (CACHE_FLAG_IS_HEAD)      │
+                   └──────────────┬───────────────┘
+                                  │
+                  First read / download initiated
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │    Sparse File Container     │
+                   │    (CACHE_FLAG_IS_SPARSE)    │
+                   └──────────────┬───────────────┘
+                                  │
+                    All bitmap segments complete
+                                  │
+                                  ▼
+                   ┌──────────────────────────────┐
+                   │   Complete File Container    │
+                   │   (CACHE_FLAG_IS_COMPLETE)   │
+                   └──────────────────────────────┘
+```
+
+1. **HEAD-Only Container (`CACHE_FLAG_IS_HEAD`):**
+
+   - Created immediately upon completing an HTTP `HEAD` probe.
+   - Stores `content_length` (remote file size) and `remote_mtime`.
+   - Stores raw HTTP response headers (including `Content-Type`).
+   - `segbc = 0`, `header_size = 4096`.
+   - **On-disk size:** `64 + url_len + http_header_len` (typically 300–600
+     bytes; no payload bytes allocated).
+
+1. **Directory Listing Container
+   (`CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_DIR`):**
+
+   - Created upon downloading the HTML payload of a directory listing.
+   - Stores raw HTTP headers and full HTML text.
+   - `segbc = 1`.
+   - Payload begins at offset `header_size = 4096`.
+
+1. **Sparse File Container (`CACHE_FLAG_IS_SPARSE`):**
+
+   - Created when a cached file download begins.
+   - The file is extended to `header_size + content_length` using `ftruncate()`.
+   - The segment bitmap array (`uint8_t seg[segbc]`) records which blocks are
+     present on disk:
+     - `seg[i] == 0`: Block not yet downloaded.
+     - `seg[i] == 1`: Block downloaded and verified.
+
+1. **Complete File Container (`CACHE_FLAG_IS_COMPLETE`):**
+
+   - Transitioned when all elements of the segment bitmap are marked complete.
+   - All file bytes are populated on disk and can be served without network
+     involvement.
+
+1. **Redirect Pointer Container (`CACHE_FLAG_IS_REDIRECT`):**
+
+   - Created when upstream responds with HTTP 301, 302, 307, or 308, or when
+     redirection alters the effective URL.
+   - `url_len`: Byte length of requested source URL.
+   - `content_length`: Byte length of canonical target URL string.
+   - Payload section: Contains the null-terminated canonical target URL.
+   - **On-disk size:** `64 + url_len + http_header_len + content_length`
+     (typically < 256 bytes).
+
+______________________________________________________________________
+
+## 3. URL Canonicalization Specification
+
+Prior to generating MD5 hashes and resolving cache container paths, every URL
+passes through `canonicalize_url()`:
+
+```c
 char *canonicalize_url(const char *url);
 ```
 
-#### Canonicalization Rules:
+### 3.1 Normalization Algorithm
 
-1. **Fragment Removal**: URL fragments (`#section`) are client-side only and
-   never sent to upstream HTTP servers. Fragments are stripped completely.
-1. **Case Normalization**: Scheme and hostname are converted to lowercase
-   (`HTTP://EXAMPLE.COM` -> `http://example.com`).
-1. **Default Port Removal**: Standard default scheme ports are stripped (`:80`
-   for `http://`, `:443` for `https://`). Non-standard ports (`:8080`, `:8443`)
-   are strictly preserved.
-1. **Path Dot-Segment & Redundant Slash Normalization**:
-   - Resolves relative segments (`.` and `..`) in the path per RFC 3986 Section
+1. **Fragment Stripping:**
+
+   - Any URI fragment (`#fragment`) is removed. Fragments are client-side
+     anchors that are never transmitted over HTTP.
+
+1. **Case Normalization:**
+
+   - The scheme (`http`, `https`) and host components are converted to lowercase
+     (`HTTP://EXAMPLE.COM` $\\to$ `http://example.com`).
+
+1. **Default Port Removal:**
+
+   - Standard default scheme ports are stripped (`:80` for `http://`, `:443` for
+     `https://`).
+   - Non-standard ports (`:8080`, `:8443`, `:34521`) are strictly preserved.
+
+1. **Path Dot-Segment & Redundant Slash Resolution:**
+
+   - Relative path segments (`.` and `..`) are resolved per RFC 3986 Section
      5.2.4.
-   - Collapses consecutive duplicate slashes (`//` -> `/`).
-   - Strictly preserves trailing slashes (e.g. `/dir/` vs `/dir`) because
-     trailing slashes signify directory vs file semantics in HTTP.
-1. **Percent-Encoding Normalization**:
-   - Decodes unreserved characters per RFC 3986 (`[A-Za-z0-9-_.~]`).
-   - Converts percent-encoded hexadecimal digits to uppercase (`%2f` -> `%2F`).
-1. **Implementation via libcurl URL API**:
-   - Utilizes `curl_url()`, `curl_url_set()`, and `curl_url_get()` with
-     `CURLU_PATH_AS_IS` and `CURLU_DEFAULT_SCHEME`, ensuring rock-solid RFC 3986
-     compliance.
+   - Consecutive adjacent slashes in path segments (`//` $\\to$ `/`) are
+     collapsed.
+   - **Trailing Slash Preservation:** Trailing slashes are strictly preserved
+     (e.g., `/archive/` is never collapsed to `/archive`) because trailing
+     slashes distinguish directory listings from regular files.
 
-### 3.2 Path Derivation (`src/url.c`, `src/url.h`)
+1. **Percent-Encoding Normalization:**
 
-- `url_to_cache_path()` normalizes the input URL before generating the MD5 hash:
-  ```c
-  char *url_to_cache_path(const char *url)
-  {
-      if (!url) return NULL;
-      char *canonical_url = canonicalize_url(url);
-      const char *target = canonical_url ? canonical_url : url;
-      char *hash = generate_md5sum(target);
-      char rel_path[PATH_MAX];
-      snprintf(rel_path, sizeof(rel_path), "%.2s/%s", hash, hash);
-      FREE(hash);
-      FREE(canonical_url);
-      return STRDUP(rel_path);
-  }
-  ```
+   - Unreserved characters (`[A-Za-z0-9-_.~]`) are decoded.
+   - Reserved percent-encoded bytes are normalized to uppercase hex digits (e.g.
+     `%2f` $\\to$ `%2F`).
 
-### 3.3 HEAD & Stat Caching API (`src/cache.h`, `src/cache.c`)
+1. **Implementation Standard:**
 
-```c
-typedef struct CacheStat {
-    long http_resp;           /**< HTTP status code (e.g. 200) */
-    curl_off_t content_length;/**< Remote content length */
-    time_t remote_mtime;      /**< Last-Modified timestamp */
-    char content_type[128];   /**< Content-Type MIME string */
-    LinkType link_type;       /**< LINK_DIR, LINK_FILE, or LINK_INVALID */
-} CacheStat;
+   - Implemented using libcurl's URL API (`curl_url()`, `curl_url_set()`,
+     `curl_url_get()`) with `CURLU_PATH_AS_IS` and `CURLU_DEFAULT_SCHEME`.
 
-/**
- * \brief Write an HTTP HEAD response to the URL's container file.
- * \return 0 on success, -1 on error
- */
-int CacheContainer_write_head(const char *url, long http_resp,
-                             curl_off_t content_length, time_t remote_mtime,
-                             const char *content_type, const char *raw_headers,
-                             size_t raw_headers_len, LinkType link_type);
+______________________________________________________________________
 
-/**
- * \brief Read cached HTTP HEAD / stat metadata for a URL if fresh.
- * \return 1 if found and fresh, 0 if not cached or expired, -1 on corrupt
- */
-int CacheContainer_read_head(const char *url, CacheStat *stat_out);
+## 4. Cache Subsystem Workflows & Data Flow
 
-/**
- * \brief Write a redirect pointer container pointing to target_url.
- * \return 0 on success, -1 on error
- */
-int CacheContainer_write_redirect(const char *source_url, const char *target_url,
-                                 long http_resp);
+### 4.1 Cache-First Stat Resolution
+
+When populating an uninitialized directory table (`LinkTable_uninitialised_fill`
+in `src/link.c`):
+
+```
+LinkTable Entry
+      │
+      ▼
+Check CacheContainer_read_head(link->f_url)
+      │
+      ├─ Cache HIT (Container valid & fresh)
+      │    ├─ link->time = stat.remote_mtime
+      │    ├─ link->content_length = stat.content_length
+      │    └─ link->type = stat.link_type
+      │    (0 Network Requests!)
+      │
+      └─ Cache MISS / Expired
+           └─ Queue for asynchronous network HEAD probe
 ```
 
-### 3.4 Directory Listing & Stat Resolution (`src/link.c`)
+1. If all entries within a directory hit the cache,
+   `LinkTable_uninitialised_fill()` completes synchronously in `< 0.1 ms`.
+1. Entries that miss or have expired are batched and probed concurrently using
+   libcurl multi-interface requests.
 
-#### A. Cache-First Stat Resolution in `LinkTable_uninitialised_fill`
+### 4.2 HEAD Response Persistence
 
-Before queuing live network requests:
+When an asynchronous network `HEAD` request completes in
+`filestat_on_complete()` (`src/transfer.c`):
 
-1. Iterate through `linktbl->links[i]`:
-   - If `CACHE_SYSTEM_INIT` is enabled, call
-     `CacheContainer_read_head(link->f_url, &stat)`.
-   - On cache hit (`1`):
-     - `link->time = stat.remote_mtime;`
-     - `link->content_length = stat.content_length;`
-     - `link->type = stat.link_type;`
-   - On cache miss (`0` or `-1`):
-     - Keep as `LINK_UNINITIALISED_*` and queue for network
-       `Link_req_file_stat()`.
-1. If all links hit the cache, `LinkTable_uninitialised_fill()` returns
-   immediately (**0 network requests, instantaneous directory display**).
+1. The raw HTTP response headers captured in `TransferStruct` are extracted.
+1. `Link_classify_response()` determines the resulting `LinkType` (`LINK_DIR`,
+   `LINK_FILE`, or `LINK_INVALID`).
+1. If caching is enabled (`CONFIG.cache`), `CacheContainer_write_head()` writes
+   the container:
+   - Sets `flags = CACHE_FLAG_IS_HEAD`.
+   - Records `http_resp`, `content_length`, `remote_mtime`, `content_type`, and
+     `link_type`.
+   - Flushes container to disk.
 
-#### B. Cache Write in `filestat_on_complete` (`src/transfer.c`)
+### 4.3 Container Promotion on File Download
 
-When an uncached network `HEAD` request finishes:
+When file reading triggers payload acquisition (`Cache_create()` in
+`src/cache.c`):
 
-1. Capture raw response headers in `TransferStruct`.
-1. In `filestat_on_complete()`, after `Link_set_file_stat(link, curl)`
-   classifies the link:
-1. If `CACHE_SYSTEM_INIT` is enabled:
-   - Call `CacheContainer_write_head()` with the resolved `http_resp`,
-     `content_length`, `remote_mtime`, `content_type`, `raw_headers`, and
-     `link->type`.
-1. Subsequent lookups for this URL across any directory or restart will hit the
-   cache.
+1. If a container file exists with `CACHE_FLAG_IS_HEAD`:
+   - The existing `CacheHeader` is read from disk.
+   - Segment parameters are calculated: $$\\text{segbc} = \\left\\lceil
+     \\frac{\\text{content_length}}{\\text{blksz}} \\right\\rceil$$
+   - The header flags are updated to `CACHE_FLAG_IS_SPARSE`.
+   - A zeroed segment bitmap array of size `segbc` is appended.
+   - Zero padding is written to align the file to `header_size = 4096`.
+   - `ftruncate(fd, header_size + content_length)` allocates the sparse payload
+     space on the local filesystem.
+1. Existing metadata, timestamps, and HTTP headers are preserved without
+   re-downloading.
 
-### 3.5 Promotion to File Container on Download (`src/cache.c`)
+### 4.4 Redirect Pointer Traversal & Loop Guard
 
-When `Cache_create()` is called to download file data:
+When opening or inspecting any cache container (`CacheContainer_read_head`,
+`CacheContainer_read`, `Cache_create`):
 
-1. If the container file already exists with `CACHE_FLAG_IS_HEAD`:
-   - Read the existing `CacheHeader`.
-   - Calculate `blksz`, `segbc`, and `header_size = 4096`.
-   - Update header flags (`CACHE_FLAG_IS_SPARSE`), append the zeroed segment
-     bitmap, pad to 4096 bytes.
-   - Call `ftruncate(fd, header_size + content_length)`.
-1. Existing metadata is preserved with zero re-downloading of headers.
+```
+Lookup URL
+    │
+    ▼
+Read CacheHeader
+    │
+    ├─ flags & CACHE_FLAG_IS_REDIRECT
+    │    │
+    │    ├─ depth >= 5 ──► Return -1 (ELOOP: Circular redirect detected)
+    │    │
+    │    └─ depth < 5  ──► Read target URL from payload
+    │                      depth = depth + 1
+    │                      Recurse lookup for target URL
+    │
+    └─ Standard Container ──► Serve metadata / data
+```
 
-### 3.6 HTTP Redirect Pointer Handling (`src/cache.c`, `src/transfer.c`)
-
-#### A. Redirect Pointer Creation
-
-When a transfer completes in `filestat_on_complete()` or
-`transfer_on_complete()`:
-
-1. Obtain effective URL via
-   `curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &eff_url)`.
-1. Obtain HTTP response code via
-   `curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp)`.
-1. If `eff_url` differs from `orig_url` (or if `http_resp` is 301, 302, 307, or
-   308):
-   - Write the full stat or payload container under `canonicalize_url(eff_url)`.
-   - Call `CacheContainer_write_redirect(orig_url, eff_url, http_resp)` to write
-     the lightweight pointer container under `canonicalize_url(orig_url)`.
-   - The pointer container stores `flags = CACHE_FLAG_IS_REDIRECT`,
-     `content_length = strlen(eff_url)`, and the payload contains `eff_url`.
-
-#### B. Transparent Pointer Following
-
-When reading a container via `CacheContainer_read_head()`, `Cache_create()`, or
-`CacheContainer_read()`:
-
-1. Derive cache path for `url`.
-1. Open container header.
-1. If `flags & CACHE_FLAG_IS_REDIRECT`:
-   - Read the canonical target URL from the container payload.
-   - Enforce a maximum redirection depth of 5 to guard against redirect loops.
-   - Recurse resolution using the target URL.
-1. Callers transparently receive the target resource's metadata or data with
-   zero awareness of the redirect indirection.
+- Guarantees transparent access: consumers querying an unredirected alias URL
+  automatically receive data from the canonical target container.
+- Depth limit ($5$ hops) prevents hanging or crashing on circular redirect
+  topologies.
 
 ______________________________________________________________________
 
-## 4. Host-Specific Cache Clearing (`--cache-clear-host`)
+## 5. Administrative Operations & Cache Purging
 
-### 4.1 CLI Option
+### 5.1 Host-Specific Cache Clearing (`--cache-clear-host`)
 
-- Option: `--cache-clear-host <URL_OR_HOST>`.
-- Added to `long_opts` in `src/main.c`.
+The `--cache-clear-host <URL_OR_HOST>` CLI option enables surgical eviction of a
+single server's cached data:
 
-### 4.2 Resolution & Execution
+1. **URL Argument:** If the argument contains `://`, `get_server_root()`
+   extracts the origin (scheme and host:port). It is escaped via
+   `curl_easy_escape()`, targeting:
+   ```
+   <cache_root>/<escaped_server_root>/
+   ```
+1. **Bare Host Argument:** If the argument lacks a scheme (e.g. `example.com`),
+   both `https%3A%2F%2F<host>` and `http%3A%2F%2F<host>` directories are
+   targeted.
+1. The matching directory tree is recursively deleted via `nftw()` with
+   `FTW_DEPTH | FTW_PHYS`.
+1. HTTPDirFS exits with `EXIT_SUCCESS` immediately after deletion.
 
-- If argument contains `://`:
-  - Extract server root via `get_server_root(arg)`.
-  - Escape via `curl_easy_escape()`.
-  - Target directory: `<cache_root>/<escaped_server_root>/`.
-- If argument has no scheme (e.g. `example.com`):
-  - Check for both `https%3A%2F%2F<host>` and `http%3A%2F%2F<host>`.
-- Remove directory recursively via `nftw()` and exit with `EXIT_SUCCESS`.
+### 5.2 Global Cache Clearing (`--cache-clear`)
+
+The `--cache-clear` option purges all cached data across all origins:
+
+1. Resolves the cache directory (default or overridden by `--cache-location`).
+1. Recursively removes all origin folders and `CACHEDIR.TAG`.
+1. Exits immediately with `EXIT_SUCCESS`.
 
 ______________________________________________________________________
 
-## 5. Testing Plan
+## 6. Architectural Guarantees & Correctness Properties
 
-*Strict adherence to user constraint: All tests use synthetic mock URLs
-(`https://example.com/test-item`, `https://example.com/test-item/child.bin`).*
+1. **Alignment & POSIX Direct I/O Safety:**
 
-1. **Unit Tests (`tests/test_cache.c`, `tests/test_link.c`)**:
-   - `test_url_canonicalization`: Verify scheme/host lowercasing, default port
-     removal (`:80`, `:443`), fragment stripping (`#fragment`), path
-     normalization (`.` and `..`), and deterministic hash equality between
-     unnormalized and normalized URL strings.
-   - `test_cache_path_derivation`: Verify `"ab/<hash>"` format from
-     `url_to_cache_path()`.
-   - `test_container_head_write_read`: Write a HEAD-only container, verify
-     reading headers, MIME type, and stat classification.
-   - `test_container_redirect_pointer`: Write a redirect pointer container from
-     `https://example.com/dir` to `https://example.com/dir/`, verify transparent
-     resolution in `CacheContainer_read_head()`, and verify loop guard prevents
-     recursion on circular redirects (`A -> B -> A`).
-   - `test_container_head_to_data_promotion`: Create HEAD-only container,
-     promote via `Cache_create()`, download data segments, verify data
-     integrity.
-   - `test_container_html_parse_on_the_fly`: Cache HTML content, re-read and
-     parse `LinkTable` on-the-fly.
-   - `test_container_timestamps`: Verify `cache_time` expiration against
-     `CONFIG.refresh_timeout`.
-   - `test_cache_clear_host`: Verify `--cache-clear-host` removes only the
-     target host's cache folder.
-1. **Integration Tests (`tests/integration/run_integration_test.sh`)**:
-   - Verify `meson test -C builddir` passes completely.
-   - Test directory opening with cached HEAD requests verifying zero network
-     calls.
-   - Run `pre-commit` suite (`clang-format`, `clang-tidy`, `codespell`).
+   - Payloads start at a fixed 4096-byte offset (`header_size = 4096`), matching
+     standard OS memory page boundaries and disk block sizes.
+   - Enables direct kernel page caching and sparse allocation without
+     partial-block misalignment penalties.
+
+1. **Atomic File Operations:**
+
+   - New containers are written using atomic filesystem operations and flushed
+     before being visible to other threads, preventing partial-write corruption
+     during power loss or abrupt termination.
+
+1. **Loop and Recursion Safety:**
+
+   - Redirect pointer traversal strictly enforces a depth ceiling of 5 hops,
+     guaranteeing termination.
+   - Ancestor links (`..`, `/`, parent directory loops) are filtered during HTML
+     link parsing before entering the cache subsystem.
+
+1. **Origin Isolation:**
+
+   - Every origin has an isolated, escaped directory path.
+   - Cross-origin credentials or custom headers are strictly prohibited from
+     leaking across origin directory boundaries.
