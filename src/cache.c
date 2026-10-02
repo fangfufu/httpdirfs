@@ -1978,6 +1978,33 @@ int CacheContainer_write(const char *url, const char *payload,
     return ok ? 0 : -1;
 }
 
+int CacheContainer_delete(const char *url)
+{
+    if (!CACHE_SYSTEM_INIT || !url || !url[0]) {
+        return 0;
+    }
+
+    char *canon_url = canonicalize_url(url);
+    const char *key_url = canon_url ? canon_url : url;
+
+    char *fn = string_to_cache_path(key_url);
+    if (!fn) {
+        FREE(canon_url);
+        return -1;
+    }
+
+    char *full_path = path_append(CACHE_DIR, fn);
+    int res = 0;
+    if (unlink(full_path) && errno != ENOENT) {
+        lprintf(error, "unlink(%s): %s\n", fn, strerror(errno));
+        res = -1;
+    }
+    FREE(full_path);
+    FREE(fn);
+    FREE(canon_url);
+    return res;
+}
+
 static int CacheContainer_read_internal(const char *url, char **out_payload,
                                         size_t *out_payload_len,
                                         char **out_http_header,

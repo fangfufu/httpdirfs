@@ -126,6 +126,26 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
             fs = os.fstat(f.fileno())
             file_size = fs.st_size
 
+            # Pages under /adv_chunked_dir/ named chunked_* are served without
+            # a Content-Length header (HTTP/1.0 read-to-EOF response) to
+            # exercise the unknown-content-size directory path. They are HTML
+            # pages, so they are served as text/html. Pages named notype_* are
+            # served without a Content-Length *and* without a Content-Type
+            # header, mimicking a dodgy server that generates a directory
+            # listing on the fly with no size and no MIME type.
+            _base = os.path.basename(urllib.parse.unquote(self.path))
+            _in_special_dir = ("/adv_chunked_dir/" in self.path
+                               or "/adv_notype_dir/" in self.path)
+            if _in_special_dir and _base.startswith(
+                ("chunked_", "notype_")
+            ):
+                self.send_response(200)
+                if _base.startswith("chunked_"):
+                    self.send_header("Content-type", "text/html")
+                # notype_* : deliberately omit Content-Type
+                self.end_headers()
+                return f
+
             range_header = self.headers.get("Range")
             if range_header:
                 return self._handle_range_request(f, file_size, fs, path)

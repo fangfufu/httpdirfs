@@ -69,6 +69,10 @@ struct TransferStruct {
     ActiveDownload *ad_ptr;
     /** \brief Optional completion callback for asynchronous transfers */
     TransferCompleteCb on_complete;
+    /** \brief Abort the transfer once curr_size exceeds this (0 = no cap) */
+    size_t size_cap;
+    /** \brief Set to 1 by the capped callback if the transfer was aborted */
+    int cap_hit;
 };
 
 #include "link.h"
@@ -78,6 +82,15 @@ struct TransferStruct {
  */
 size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp);
+
+/**
+ * \brief Body callback for capped full downloads
+ * \details Buffers the body like write_memory_callback but aborts the transfer
+ * (returning 0, setting ts->cap_hit) once the accumulated size would exceed
+ * ts->size_cap.
+ */
+size_t write_memory_capped_callback(void *recv_data, size_t size, size_t nmemb,
+                                    void *userp);
 
 /**
  * \brief Configure a CURL easy handle for a Link

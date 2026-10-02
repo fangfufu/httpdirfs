@@ -279,6 +279,16 @@ int CacheContainer_write(const char *url, const char *payload,
                          size_t http_header_len);
 
 /**
+ * \brief Delete the cached container file of a URL, if present.
+ * \param[in] url Resource URL.
+ * \return 0 on success (including when nothing was cached), -1 on error
+ * \note Called by LinkTable_new() when a cached directory listing now exceeds
+ * max_html_size (the limit was lowered after caching), to drop the
+ * now-inconsistent container before the entry degrades to an empty folder.
+ */
+int CacheContainer_delete(const char *url);
+
+/**
  * \brief Read a cached container file for a URL, if it is still fresh.
  * \details A container is fresh if it is well-formed (magic, version, URL
  * and size checks) and
