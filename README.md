@@ -238,8 +238,9 @@ This feature was implemented due to Github
 ## Permanent cache system
 
 You can cache the files you have accessed permanently on your hard drive by
-using the `--cache` flag. The file it caches persist across sessions, but can
-clear the cache using `--cache-clear`
+using the `--cache` flag. The files it caches persist across sessions. You can
+clear the entire cache using `--cache-clear`, or clear only a specific server
+using `--cache-clear-host <URL_OR_HOST>`.
 
 > [!WARNING]
 > If `--cache-location <dir>` appears before `--cache-clear`, the entire
@@ -251,8 +252,9 @@ By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
 whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs` is normally
 `${HOME}/.cache/httpdirfs`.
 
-Each HTTP directory gets its own cache folder, they are named using the escaped
-URL of the HTTP directory.
+Each HTTP server origin gets its own cache directory, named using the escaped
+server root URL. Within each origin, files are sharded into 256 subdirectories
+using the first two hex characters of their canonical URL's MD5 hash.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
 again. Subsequent reads are served offline at local storage speed.
@@ -300,9 +302,9 @@ For \*sonic servers, rather than using the Gumbo parser, this program parses
 \*sonic servers' XML responses using
 [expat](https://github.com/libexpat/libexpat).
 
-The cache system stores the metadata and the downloaded file into two separate
-directories. It uses `uint8_t` arrays to record which segments of the file had
-been downloaded.
+The cache system uses a unified single-file container architecture. Each URL
+maps to exactly one container file storing its binary header, canonical URL, raw
+HTTP response headers, segment download bitmap, and payload data.
 
 Note that HTTPDirFS requires the server to support HTTP Range Request, some
 servers support this features, but does not present `"Accept-Ranges: bytes` in
