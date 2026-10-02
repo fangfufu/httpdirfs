@@ -6,10 +6,6 @@ configuration and usage flags supported by HTTPDirFS.
 
 ### Command Syntax
 
-Below is the raw help output displaying all available flags, generated from Git
-commit SHA
-[`0855c0a`](https://github.com/fangfufu/httpdirfs/commit/0855c0a46a2fa8f8e2d4d084f51d5d124092d067):
-
 ```bash
 usage: httpdirfs [options] URL mountpoint
 
@@ -76,6 +72,10 @@ HTTPDirFS options:
         --cache-clear       Delete the cache directory or the custom location
                             specified with `--cache-location`, if the option is
                             seen first. Then exit in either case.
+        --cache-clear-host  Delete only the cache of a single server host,
+                            given as a full URL or a bare host (both the http
+                            and https origin directories are then removed).
+                            Then exit.
         --cache-min-size    Set minimum file size threshold for caching, in bytes
                             (default: none)
         --cache-max-size    Set maximum file size threshold for caching, in bytes
@@ -101,6 +101,15 @@ HTTPDirFS options:
                             setting CURLOPT_SSL_VERIFYHOST to 0
         --external-links    Include external (cross-origin) links from
                             directory listings (default: off)
+        --ignore-anchors    Ignore intra-page HTML anchor/fragment links
+                            starting with '#' (default: off)
+        --advanced-parsing-mode
+                            Enable advanced parsing mode for non-standard
+                            directory listings (default: off)
+        --max-html-size     Set maximum HTML size for directory listing
+                            promotion (default: 2M)
+        --same-origin-only  Restrict link traversal to the mounted web server
+                            in advanced parsing mode (default: off)
         --single-file-mode  Single file mode - rather than mounting a whole
                             directory, present a single file inside a virtual
                             directory.
@@ -272,6 +281,13 @@ ______________________________________________________________________
   exits. Highly useful for cleaning up disk space or forcing a full directory
   recrawl.
 
+#### `--cache-clear-host <URL_OR_HOST>`
+
+- **Description:** Deletes only the cached data and metadata of a single server
+  host, provided as a full URL (e.g., `https://example.com/dir`) or a bare
+  hostname (e.g., `example.com`), clearing both the HTTP and HTTPS origin cache
+  directories, and immediately exits.
+
 #### `--dl-seg-size <size>`
 
 - **Description:** Sets the size of individual file cache segments in Megabytes
@@ -364,6 +380,12 @@ ______________________________________________________________________
   URL as a single virtual file inside the mountpoint. This is highly useful for
   files hosted on servers that do not present any directory listings.
 
+#### `--ignore-anchors`
+
+- **Description:** Ignores intra-page HTML fragment links starting with `#`
+  (e.g., `#top` or `#section`), preventing them from appearing as entries in
+  directory listings.
+
 ______________________________________________________________________
 
 ### External Links (`--external-links`)
@@ -399,6 +421,59 @@ external (cross-origin) URLs.
 - **Authentication Warnings:** External servers requiring authentication
   (returning HTTP 401 or 403) will log a warning indicating that credentials are
   restricted to the main server.
+
+______________________________________________________________________
+
+### Advanced Parsing Mode (`--advanced-parsing-mode`)
+
+By default, HTTPDirFS expects standard web server directory listings (such as
+Apache, nginx, lighttpd, or Caddy autoindex pages) where directory paths end
+with a trailing slash (`/`) and filenames are directly represented in link URLs.
+
+When mounting websites, software archives, or web applications with non-standard
+directory structures (such as custom file archives, download portals, or web
+forums), filenames often reside in human-readable anchor text rather than URL
+slugs, and subdirectories are presented as linked HTML pages.
+
+Enabling `--advanced-parsing-mode` activates advanced scraping, link
+classification, collision resolution, and directory promotion.
+
+#### Key Mechanics
+
+- **Anchor Text Filename Extraction:** The text inside `<a>...</a>` tags is
+  extracted, sanitized, and used as the virtual file or directory name.
+  Whitespace is collapsed, slashes (`/`) are converted to underscores (`_`), and
+  leading dots are stripped to avoid hidden Unix files.
+- **Progressive Collision Resolution:** If multiple links share identical anchor
+  text, HTTPDirFS disambiguates names by combining anchor text with URL path
+  segments (e.g., `Readme-readme.txt`, `Readme-38601-readme.txt`). If the anchor
+  text already matches the URL segment case-insensitively, redundant prefixing
+  is omitted. If all segments are exhausted and collisions persist, numeric
+  suffixes (`-1`, `-2`, ...) are appended.
+- **Early Duplicate Removal:** If the exact same target URL appears multiple
+  times on a page, only the first encountered link and anchor text are kept.
+- **Directory Promotion via Content-Type:** HTTPDirFS inspects the HTTP
+  `Content-Type` response header for linked resources. Any resource returning
+  `Content-Type: text/html` (with a size within `--max-html-size`) is promoted
+  to a directory, allowing you to browse into it as a subdirectory. Non-HTML
+  resources are treated as regular files.
+- **Ancestor Loop Prevention:** Links pointing back to the current directory or
+  any of its parent directories are discarded to prevent infinite recursive
+  loops.
+
+#### `--max-html-size <size>`
+
+- **Description:** Sets the maximum size of an HTML document eligible for
+  directory listing promotion (default: `2M`). HTML resources exceeding this
+  threshold are presented as regular files instead of directories to prevent
+  excessive memory usage. Suffixes like `K`, `M`, or `G` are supported (e.g.,
+  `--max-html-size 4M`).
+
+#### `--same-origin-only`
+
+- **Description:** Restricts link traversal to the mounted server's origin
+  (scheme, host, port). In advanced parsing mode, cross-server links are allowed
+  by default; this flag restricts exploration strictly to the mounted host.
 
 ______________________________________________________________________
 
