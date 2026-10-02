@@ -547,8 +547,15 @@ void test_container_file_create_open(void)
     /*
      * Sparse allocation: only the (single) header page is actually
      * allocated, the 1 MiB payload region is not.
+     *
+     * Physical block accounting for ftruncate-created dataless regions
+     * is filesystem-dependent: ext4 reports them as unallocated, while
+     * macOS (APFS) reports the logical size in st_blocks. Only assert
+     * where the filesystem accounts sparse regions (Linux).
      */
+#ifndef __APPLE__
     TEST_ASSERT_TRUE((uintmax_t)st.st_blocks * 512 < (uintmax_t)st.st_size);
+#endif
 
     FILE *f = fopen(full_path, "r");
     TEST_ASSERT_NOT_NULL(f);

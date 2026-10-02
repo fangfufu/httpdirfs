@@ -50,11 +50,11 @@ CURLSH *CURL_SHARE;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
 /** \brief  mutex for transfer functions */
-static pthread_mutex_t transfer_lock;
+static pthread_mutex_t transfer_lock = PTHREAD_MUTEX_INITIALIZER;
 /** \brief the lock array for cryptographic functions */
 static pthread_mutex_t *crypto_lockarray;
 /** \brief mutex for curl share interface itself */
-static pthread_mutex_t curl_lock;
+static pthread_mutex_t curl_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * -------------------- Functions --------------------------
@@ -229,8 +229,6 @@ void NetworkSystem_init(void)
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 
-    PTHREAD_MUTEX_INIT(&curl_lock, NULL);
-
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
 
@@ -245,11 +243,6 @@ void NetworkSystem_init(void)
                       CONFIG.max_conns);
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_HOST_CONNECTIONS,
                       CONFIG.max_conns);
-
-    /*
-     * ------------ Initialise locks ---------
-     */
-    PTHREAD_MUTEX_INIT(&transfer_lock, NULL);
 
     /*
      * cryptographic lock functions were shamelessly copied from
