@@ -254,16 +254,22 @@ using `--cache-clear-host <URL_OR_HOST>`.
 > non-empty directories to be used as cache.
 
 By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
-`${HOME}/.cache/httpdirfs`, or the current working directory `./.cache`,
-whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs` is normally
-`${HOME}/.cache/httpdirfs`.
+`${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
+directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
+is normally `${HOME}/.cache/httpdirfs`.
+
+Please note that a custom directory supplied via `--cache-location` is used
+verbatim as the cache root of the mounted server: unlike the default location,
+no per-origin subdirectory is appended to it.
 
 Each HTTP server origin gets its own cache directory, named using the escaped
 server root URL. Within each origin, files are sharded into 256 subdirectories
 using the first two hex characters of their canonical URL's MD5 hash.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
-again. Subsequent reads are served offline at local storage speed.
+again. Subsequent reads are served offline at local storage speed. Both files
+and directories are considered stale, and refetched from the server, once they
+are older than `--refresh-timeout` seconds (default: 3600).
 
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your local storage device will get heavy I/O
@@ -335,6 +341,13 @@ HTTPDirFS uses a universal HTML parsing and collision resolution pipeline:
 
 For complete technical specifications, see
 \[docs/specs/directory_detection_and_naming.md\](file:///home/fangfufu/projects/httpdirfs/docs/specs/directory_detection_and_naming.md).
+
+### Diagnostics
+
+Every directory listing exposes a hidden virtual `.httpdirfs` directory,
+containing `CONTENT` (the raw HTML payload of the listing page) and `HEADER`
+(the raw HTTP response headers). This is useful for debugging how a web server
+presents a directory when HTTPDirFS appears to misparse a listing.
 
 ### Allowed characters in filenames
 

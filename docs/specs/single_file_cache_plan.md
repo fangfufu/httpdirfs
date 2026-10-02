@@ -71,6 +71,9 @@ The cache engine is designed around seven core architectural tenets:
    - Freshness is deterministically evaluated against `CONFIG.refresh_timeout`:
      $$\\text{is_fresh} = (\\text{time}(\\text{NULL}) - \\text{cache_time} \\le
      \\text{CONFIG.refresh_timeout})$$
+   - File payload containers are additionally re-validated at open time
+     (`Container_read` in `src/cache.c`): they are rejected if the cached
+     `remote_mtime` or `content_length` no longer matches the live file stat.
 
 1. **Deterministic URL Canonicalization:**
 
@@ -115,6 +118,10 @@ path specified by `--cache-location`):
 - **Shard Directory (`ab/`)**: Characters `0..1` of the 32-character hexadecimal
   MD5 hash (`generate_md5sum(canonical_url)`).
 - **Container Filename (`<hash>`)**: The complete 32-character MD5 hash string.
+- **Custom location:** When `--cache-location <dir>` is supplied, `<dir>` is
+  used verbatim as the cache root of the mounted server itself: no escaped
+  origin directory is appended (shard directories are created directly inside
+  `<dir>`), and no `CACHEDIR.TAG` is written.
 
 ______________________________________________________________________
 
@@ -139,7 +146,7 @@ by variable-length metadata sections and page-aligned payload data:
 |   - segbc (int32_t): Total segment count (1 for HTML, 0 for HEAD-only)  |
 |   - reserved (uint8_t[12]): Reserved for future extensions (all zero)   |
 +-------------------------------------------------------------------------+
-| Canonical Source URL String (url_len bytes, null-terminated)            |
+| Canonical Source URL String (url_len bytes + null terminator)          |
 +-------------------------------------------------------------------------+
 | Raw HTTP Response Headers (http_header_len bytes: status line + headers)|
 +-------------------------------------------------------------------------+
@@ -154,20 +161,20 @@ by variable-length metadata sections and page-aligned payload data:
 
 #### Field Specifications
 
-| Field             | Type       | Size (Bytes) | Description                                                  |
-| ----------------- | ---------- | ------------ | ------------------------------------------------------------ |
-| `magic`           | `uint32_t` | 4            | Magic signature: `0x53464448` (ASCII `"HDFS"`, LE)           |
-| `version`         | `uint16_t` | 2            | Container format version (currently `1`)                     |
-| `flags`           | `uint16_t` | 2            | Bitmask defining container state and type                    |
-| `url_len`         | `uint32_t` | 4            | Length of stored canonical URL including null terminator     |
-| `header_size`     | `uint32_t` | 4            | Byte offset where payload data begins (4096-byte aligned)    |
-| `http_header_len` | `uint32_t` | 4            | Byte length of raw HTTP response headers                     |
-| `cache_time`      | `int64_t`  | 8            | Local POSIX timestamp when container was created/refreshed   |
-| `remote_mtime`    | `int64_t`  | 8            | Upstream `Last-Modified` timestamp (POSIX seconds, or `0`)   |
-| `content_length`  | `int64_t`  | 8            | Total payload size in bytes (from `Content-Length`)          |
-| `blksz`           | `int32_t`  | 4            | Download segment block size (default: 8 MiB)                 |
-| `segbc`           | `int32_t`  | 4            | Segment count in bitmap: $\\lceil \\text{cl} / \\text{blksz} |
-| `reserved`        | `uint8_t`  | 12           | Reserved for future use (must be set to zero)                |
+| Field             | Type       | Size (Bytes) | Description                                                                 |
+| ----------------- | ---------- | ------------ | --------------------------------------------------------------------------- |
+| `magic`           | `uint32_t` | 4            | Magic signature: `0x53464448` (ASCII `"HDFS"`, LE)                          |
+| `version`         | `uint16_t` | 2            | Container format version (currently `1`)                                    |
+| `flags`           | `uint16_t` | 2            | Bitmask defining container state and type                                   |
+| `url_len`         | `uint32_t` | 4            | Length of stored canonical URL (null terminator is written but not counted) |
+| `header_size`     | `uint32_t` | 4            | Byte offset where payload data begins (4096-byte aligned)                   |
+| `http_header_len` | `uint32_t` | 4            | Byte length of raw HTTP response headers                                    |
+| `cache_time`      | `int64_t`  | 8            | Local POSIX timestamp when container was created/refreshed                  |
+| `remote_mtime`    | `int64_t`  | 8            | Upstream `Last-Modified` timestamp (POSIX seconds, or `0`)                  |
+| `content_length`  | `int64_t`  | 8            | Total payload size in bytes (from `Content-Length`)                         |
+| `blksz`           | `int32_t`  | 4            | Download segment block size (default: 8 MiB)                                |
+| `segbc`           | `int32_t`  | 4            | Segment count in bitmap: $\\lceil \\text{cl} / \\text{blksz}                |
+| `reserved`        | `uint8_t`  | 12           | Reserved for future use (must be set to zero)                               |
 
 ______________________________________________________________________
 
@@ -220,17 +227,23 @@ Depending on its flags, a container file exists in one of five distinct states:
    - Created immediately upon completing an HTTP `HEAD` probe.
    - Stores `content_length` (remote file size) and `remote_mtime`.
    - Stores raw HTTP response headers (including `Content-Type`).
-   - `segbc = 0`, `header_size = 4096`.
-   - **On-disk size:** `64 + url_len + http_header_len` (typically 300–600
+   - `segbc = 0`. `header_size` is the 4096-aligned size of the metadata
+     sections (typically `4096`). The file itself is **not** padded to
+     `header_size`.
+   - Written atomically to a temporary file, then renamed into place.
+   - **On-disk size:** `64 + url_len + 1 + http_header_len` (typically 300–600
      bytes; no payload bytes allocated).
 
 1. **Directory Listing Container
-   (`CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_DIR`):**
+   (`CACHE_FLAG_IS_SPARSE | CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_DIR`):**
 
    - Created upon downloading the HTML payload of a directory listing.
    - Stores raw HTTP headers and full HTML text.
-   - `segbc = 1`.
-   - Payload begins at offset `header_size = 4096`.
+   - $\\text{segbc} = \\lceil \\text{payload_len} / \\text{blksz} \\rceil$ (i.e.
+     `1` for any payload smaller than the segment block size, which covers all
+     listings under the default `--max-html-size`). Every bitmap segment is
+     marked present.
+   - Payload begins at offset `header_size` (4096-aligned, typically `4096`).
 
 1. **Sparse File Container (`CACHE_FLAG_IS_SPARSE`):**
 
@@ -252,10 +265,14 @@ Depending on its flags, a container file exists in one of five distinct states:
    - Created when upstream responds with HTTP 301, 302, 307, or 308, or when
      redirection alters the effective URL.
    - `url_len`: Byte length of requested source URL.
-   - `content_length`: Byte length of canonical target URL string.
-   - Payload section: Contains the null-terminated canonical target URL.
-   - **On-disk size:** `64 + url_len + http_header_len + content_length`
-     (typically < 256 bytes).
+   - `content_length`: Byte length of canonical target URL string (no null
+     terminator).
+   - `blksz`: Repurposed to store the HTTP redirect status code (e.g. `301`).
+   - Payload section: Contains the canonical target URL, exactly
+     `content_length` bytes, starting at offset `header_size`.
+   - Written atomically to a temporary file, then renamed into place.
+   - **On-disk size:** `header_size + content_length` (typically
+     `4096 + content_length` bytes).
 
 ______________________________________________________________________
 
@@ -305,7 +322,9 @@ char *canonicalize_url(const char *url);
 1. **Implementation Standard:**
 
    - Implemented using libcurl's URL API (`curl_url()`, `curl_url_set()`,
-     `curl_url_get()`) with `CURLU_PATH_AS_IS` and `CURLU_DEFAULT_SCHEME`.
+     `curl_url_get()`): the input is parsed with `CURLU_NON_SUPPORT_SCHEME`, the
+     path is re-asserted with `CURLU_PATH_AS_IS`, and the result is retrieved
+     with `CURLU_NO_DEFAULT_PORT`.
 
 ______________________________________________________________________
 
@@ -345,12 +364,17 @@ When an asynchronous network `HEAD` request completes in
 1. The raw HTTP response headers captured in `TransferStruct` are extracted.
 1. `Link_classify_response()` determines the resulting `LinkType` (`LINK_DIR`,
    `LINK_FILE`, or `LINK_INVALID`).
-1. If caching is enabled (`CONFIG.cache`), `CacheContainer_write_head()` writes
-   the container:
-   - Sets `flags = CACHE_FLAG_IS_HEAD`.
+1. If the cache system is initialised (`CACHE_SYSTEM_INIT`) and the file size is
+   not bypassed by the `--cache-min-size` / `--cache-max-size` thresholds,
+   `CacheContainer_write_head()` writes the container:
+   - Sets `flags = CACHE_FLAG_IS_HEAD` (plus `CACHE_FLAG_IS_DIR` when the link
+     is classified as a directory).
    - Records `http_resp`, `content_length`, `remote_mtime`, `content_type`, and
      `link_type`.
-   - Flushes container to disk.
+   - Flushes and atomically renames the container into place.
+1. If the effective URL differs from the requested URL (a redirect occurred), a
+   Redirect Pointer Container is additionally written via
+   `CacheContainer_write_redirect()`.
 
 ### 4.3 Container Promotion on File Download
 
@@ -363,11 +387,13 @@ When file reading triggers payload acquisition (`Cache_create()` in
      \\frac{\\text{content_length}}{\\text{blksz}} \\right\\rceil$$
    - The header flags are updated to `CACHE_FLAG_IS_SPARSE`.
    - A zeroed segment bitmap array of size `segbc` is appended.
-   - Zero padding is written to align the file to `header_size = 4096`.
+   - Zero padding is written to align the payload to the page-aligned
+     `header_size` (typically `4096`).
    - `ftruncate(fd, header_size + content_length)` allocates the sparse payload
      space on the local filesystem.
-1. Existing metadata, timestamps, and HTTP headers are preserved without
-   re-downloading.
+1. The remote metadata (`remote_mtime`) and raw HTTP response headers are
+   preserved from the HEAD container without re-downloading; `cache_time` is
+   updated to the promotion time.
 
 ### 4.4 Redirect Pointer Traversal & Loop Guard
 
@@ -380,21 +406,22 @@ Lookup URL
     ▼
 Read CacheHeader
     │
-    ├─ flags & CACHE_FLAG_IS_REDIRECT
-    │    │
-    │    ├─ depth >= 5 ──► Return -1 (ELOOP: Circular redirect detected)
-    │    │
-    │    └─ depth < 5  ──► Read target URL from payload
-    │                      depth = depth + 1
-    │                      Recurse lookup for target URL
-    │
-    └─ Standard Container ──► Serve metadata / data
+     ├─ flags & CACHE_FLAG_IS_REDIRECT
+     │    │
+     │    ├─ depth > 5 ──► Return 0 (cache miss; circular redirect detected)
+     │    │
+     │    └─ depth <= 5 ─► Read target URL from payload
+     │                      depth = depth + 1
+     │                      Recurse lookup for target URL
+     │
+     └─ Standard Container ──► Serve metadata / data
 ```
 
 - Guarantees transparent access: consumers querying an unredirected alias URL
   automatically receive data from the canonical target container.
-- Depth limit ($5$ hops) prevents hanging or crashing on circular redirect
-  topologies.
+- Depth limit (up to $5$ pointer hops) prevents hanging or crashing on circular
+  redirect topologies; exceeding it is treated as a cache miss, so the data is
+  refetched from the network.
 
 ______________________________________________________________________
 
@@ -432,16 +459,22 @@ ______________________________________________________________________
 
 1. **Alignment & POSIX Direct I/O Safety:**
 
-   - Payloads start at a fixed 4096-byte offset (`header_size = 4096`), matching
-     standard OS memory page boundaries and disk block sizes.
+   - Payloads start at a 4096-byte aligned offset (`header_size`), matching
+     standard OS memory page boundaries and disk block sizes. In practice
+     `header_size` is `4096`; it grows to the next page boundary only for
+     unusually long URLs or HTTP headers.
    - Enables direct kernel page caching and sparse allocation without
      partial-block misalignment penalties.
 
-1. **Atomic File Operations:**
+1. **Crash-Safe Container Writes:**
 
-   - New containers are written using atomic filesystem operations and flushed
-     before being visible to other threads, preventing partial-write corruption
-     during power loss or abrupt termination.
+   - HEAD and redirect pointer containers are written to a temporary file and
+     atomically renamed into place, so readers never observe a partial
+     container.
+   - Directory listing containers and file payload containers are written in
+     place (`O_TRUNC`) and flushed (`fflush`) before use; a container whose
+     on-disk size is smaller than `header_size + content_length` is treated as
+     corrupt and deleted.
 
 1. **Loop and Recursion Safety:**
 
