@@ -2001,6 +2001,7 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
     char *full_path = path_append(CACHE_DIR, fn);
     FILE *fp = fopen(full_path, "r");
     if (!fp) {
+        lprintf(info, "cache container not found for %s (%s)\n", url, fn);
         FREE(full_path);
         FREE(fn);
         FREE(canon_url);
@@ -2034,6 +2035,12 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
             }
             FREE(target_url);
         }
+    } else if (hdr.flags & CACHE_FLAG_IS_HEAD) {
+        lprintf(info,
+                "cache container %s contains HEAD metadata only, payload not "
+                "cached\n",
+                fn);
+        res = 0;
     } else if (hdr.content_length <= 0 || hdr.header_size < CACHE_PAGE_SIZE
                || hdr.header_size % CACHE_PAGE_SIZE != 0
                || hdr.url_len > PATH_MAX) {
@@ -2245,6 +2252,7 @@ static int CacheContainer_read_head_internal(const char *url,
     char *full_path = path_append(CACHE_DIR, fn);
     FILE *fp = fopen(full_path, "r");
     if (!fp) {
+        lprintf(info, "cache head container not found for %s (%s)\n", url, fn);
         FREE(full_path);
         FREE(fn);
         FREE(canon_url);
@@ -2259,6 +2267,10 @@ static int CacheContainer_read_head_internal(const char *url,
     } else {
         int64_t age = (int64_t)time(NULL) - hdr.cache_time;
         if (age > CONFIG.refresh_timeout) {
+            lprintf(
+                info,
+                "cache head container expired for %s (age: %jd, limit: %d)\n",
+                url, (intmax_t)age, CONFIG.refresh_timeout);
             res = 0;
         } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
             if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {

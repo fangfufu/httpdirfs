@@ -999,6 +999,23 @@ void test_container_head_write_read(void)
     TEST_ASSERT_EQUAL_INT64(1700000000, cs2.remote_mtime);
     TEST_ASSERT_EQUAL_INT(LINK_FILE, cs2.link_type);
 
+    /* Reading payload data from a HEAD-only container must return 0 (not
+     * cached), and must NOT corrupt or delete the container.
+     */
+    char *payload = NULL;
+    size_t payload_len = 0;
+    char *http_hdr = NULL;
+    size_t http_hdr_len = 0;
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_read(url, &payload, &payload_len,
+                                                 &http_hdr, &http_hdr_len));
+    TEST_ASSERT_NULL(payload);
+    TEST_ASSERT_NULL(http_hdr);
+
+    /* Verify the HEAD container is still intact and readable */
+    CacheStat cs3;
+    TEST_ASSERT_EQUAL_INT(1, CacheContainer_read_head(url, &cs3));
+    TEST_ASSERT_EQUAL_INT64(123456, cs3.content_length);
+
     CacheSystem_cleanup();
     CONFIG.cache_dir = old_cache_dir;
     cleanup_temp_dir(tmp_cache_dir);
