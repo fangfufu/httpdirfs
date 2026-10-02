@@ -1191,6 +1191,213 @@ EOF
         wait "${MAX_SIZE_PID}" 2>/dev/null || true
     fi
 
+    # --- Test 8c2: Unknown-size (no Content-Length) HTML pages ---
+    log_info "Subgroup: Unknown-size HTML pages with --max-html-size (no Content-Length)"
+
+    ADV_CHUNKED_DIR="${SERVE_DIR}/adv_chunked_dir"
+    mkdir -p "${ADV_CHUNKED_DIR}"
+
+    # Small chunked-style page (within max_html_size) -> should be promoted to a directory
+    echo -n "chunked nested file content" > "${ADV_CHUNKED_DIR}/nested_file.txt"
+    cat > "${ADV_CHUNKED_DIR}/chunked_small_page" <<'EOF'
+<!DOCTYPE html>
+<html>
+<body>
+<a href="nested_file.txt">Chunked Nested File</a>
+</body>
+</html>
+EOF
+
+    # Large page (>1024 bytes) served without Content-Length -> tentatively a
+    # directory; the capped download exceeds max_html_size on first browse, so
+    # it degrades to an empty folder (a directory is never a file)
+    python3 -c "
+with open('${ADV_CHUNKED_DIR}/chunked_large_page', 'w') as f:
+    f.write('<!DOCTYPE html><html><body>\n')
+    for i in range(100):
+        f.write(f'<a href=\"nested_file.txt\">Link item {i}</a>\n')
+    f.write('</body></html>\n')
+"
+
+    cat > "${ADV_CHUNKED_DIR}/index.html" <<'EOF'
+<!DOCTYPE html>
+<html>
+<body>
+<a href="chunked_small_page">Small Chunked Dir</a>
+<a href="chunked_large_page">Large Chunked Page</a>
+</body>
+</html>
+EOF
+
+    CHUNKED_URL="${BASE_URL}adv_chunked_dir/"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        --max-html-size 1024 \
+        "${CHUNKED_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    CHUNKED_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (unknown-size HTML) failed to mount"
+        kill "${CHUNKED_PID}" 2>/dev/null || true
+    else
+        # chunked_large_page has no Content-Length and exceeds max_html_size
+        # (1024 bytes). A directory is never turned into a file: on first
+        # browse the capped download exceeds the cap, so the entry degrades to
+        # an empty folder. Trigger the browse now; the kernel caches FUSE
+        # attributes for ~1s (no attr_timeout set), so wait for the stale
+        # directory attributes to expire.
+        ls "${ADV_MOUNT_DIR}/Large Chunked Page-chunked_large_page" 2>/dev/null || true
+        sleep 2
+
+        # It must remain a directory (never demoted to a file)
+        if [[ -d "${ADV_MOUNT_DIR}/Large Chunked Page-chunked_large_page" ]]; then
+            pass "max_html_size: oversized unknown-size HTML stays a directory"
+        else
+            fail "max_html_size: oversized unknown-size HTML is not a directory"
+        fi
+
+        # ...and an empty folder (no entries parsed from the oversized body)
+        chunked_entries=$(ls -A "${ADV_MOUNT_DIR}/Large Chunked Page-chunked_large_page" 2>/dev/null | wc -l)
+        if [[ "${chunked_entries}" -eq 0 ]]; then
+            pass "max_html_size: oversized unknown-size HTML is an empty folder"
+        else
+            fail "max_html_size: oversized unknown-size HTML not empty (${chunked_entries} entries)"
+        fi
+
+        # chunked_small_page is within max_html_size, so it stays a directory
+        if [[ -d "${ADV_MOUNT_DIR}/Small Chunked Dir-chunked_small_page" ]]; then
+            pass "max_html_size: small unknown-size HTML still promoted to directory"
+            if [[ -f "${ADV_MOUNT_DIR}/Small Chunked Dir-chunked_small_page/Chunked Nested File-nested_file.txt" ]]; then
+                pass "max_html_size: promoted directory contents present"
+            else
+                fail "max_html_size: promoted directory contents missing"
+            fi
+        else
+            fail "max_html_size: small unknown-size HTML was not promoted to directory"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${CHUNKED_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8c3: No-Content-Type + unknown-size (no Content-Length) entries ---
+    log_info "Subgroup: No-Content-Type + no-Content-Length entries (on-the-fly listings)"
+
+    ADV_NOTYPE_DIR="${SERVE_DIR}/adv_notype_dir"
+    mkdir -p "${ADV_NOTYPE_DIR}"
+
+    # A headerless HTML listing (no Content-Type, no Content-Length) that DOES
+    # parse into entries -> a directory with contents, in both flag modes.
+    # NOTE: the nested file must NOT be named notype_*, otherwise the server
+    # would serve it headerless too and it would be a tentative directory
+    # instead of a plain file.
+    echo -n "notype nested content" > "${ADV_NOTYPE_DIR}/nested_content.txt"
+    cat > "${ADV_NOTYPE_DIR}/notype_listing" <<'EOF'
+<!DOCTYPE html>
+<html><body>
+<a href="nested_content.txt">Notype Nested</a>
+</body></html>
+EOF
+
+    # A headerless body with no anchors -> parses to zero entries -> empty
+    # folder (parsing "fails" to find entries, but a directory is never a file).
+    echo -n "A headerless body with no anchors and no content type; it parses to zero entries, so the tentative directory degrades to an empty folder." > "${ADV_NOTYPE_DIR}/notype_blob"
+
+    cat > "${ADV_NOTYPE_DIR}/index.html" <<'EOF'
+<!DOCTYPE html>
+<html><body>
+<a href="notype_listing">Notype Listing</a>
+<a href="notype_blob">Notype Blob</a>
+</body></html>
+EOF
+
+    NOTYPE_URL="${BASE_URL}adv_notype_dir/"
+
+    check_notype() {
+        local mode="$1"
+        # notype_listing has no Content-Type and no Content-Length: it is a
+        # tentative directory in both flag modes, and its body parses into
+        # entries, so it is a directory with contents.
+        if [[ -d "${ADV_MOUNT_DIR}/Notype Listing-notype_listing" ]]; then
+            pass "${mode}: headerless listing is a directory"
+            if [[ -f "${ADV_MOUNT_DIR}/Notype Listing-notype_listing/Notype Nested-nested_content.txt" ]]; then
+                pass "${mode}: headerless listing contents present"
+            else
+                fail "${mode}: headerless listing contents missing"
+            fi
+        else
+            fail "${mode}: headerless listing is not a directory"
+        fi
+        # notype_blob parses to zero user entries -> an empty folder. (Plain
+        # `ls`, not `ls -A`: every real directory carries the hidden
+        # .httpdirfs entry, which an empty one still has.)
+        if [[ -d "${ADV_MOUNT_DIR}/Notype Blob-notype_blob" ]]; then
+            pass "${mode}: headerless linkless body is a directory"
+            notype_entries=$(ls "${ADV_MOUNT_DIR}/Notype Blob-notype_blob" 2>/dev/null | wc -l)
+            if [[ "${notype_entries}" -eq 0 ]]; then
+                pass "${mode}: headerless linkless body is an empty folder"
+            else
+                fail "${mode}: headerless linkless body not empty (${notype_entries} entries)"
+            fi
+        else
+            fail "${mode}: headerless linkless body is not a directory"
+        fi
+    }
+
+    # Flag on (--html-is-directory)
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        --max-html-size 1024 \
+        "${NOTYPE_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    NOTYPE_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (no-Content-Type) failed to mount"
+        kill "${NOTYPE_PID}" 2>/dev/null || true
+    else
+        check_notype "html-is-directory"
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${NOTYPE_PID}" 2>/dev/null || true
+
+        # Flag off (default): no-Content-Type unknown-size is still a
+        # tentative directory, so the same expectations hold.
+        "${HTTPDIRFS_BIN}" \
+            -f \
+            --max-html-size 1024 \
+            "${NOTYPE_URL}" \
+            "${ADV_MOUNT_DIR}" &
+        NOTYPE_PID=$!
+
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+            sleep 1
+        done
+
+        if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+            fail "httpdirfs (no-Content-Type, default mode) failed to mount"
+            kill "${NOTYPE_PID}" 2>/dev/null || true
+        else
+            check_notype "default-mode"
+            do_unmount "${ADV_MOUNT_DIR}"
+            wait "${NOTYPE_PID}" 2>/dev/null || true
+        fi
+    fi
+
     # --- Test 8d: Default mode without --html-is-directory ---
     log_info "Subgroup: Default mode without --html-is-directory"
 

@@ -872,10 +872,16 @@ void test_LinkTable_expired_subdirectory(void)
     /* Set sub_tbl to be expired (older than CONFIG.refresh_timeout) */
     sub_tbl->index_time = time(NULL) - 20;
 
-    /* When traversing into /sub/file, the expired table is retired/detached */
+    /*
+     * When traversing into /sub/file, the expired table is retired/detached
+     * and a fresh table is reloaded. With no server available the reload
+     * yields an empty folder (a directory never becomes a file or vanishes),
+     * so the link keeps a non-NULL (empty) next_table, and /sub/file is not
+     * found within it.
+     */
     Link *link = path_to_Link("/sub/file");
     TEST_ASSERT_NULL(link);
-    TEST_ASSERT_NULL(subdir->next_table);
+    TEST_ASSERT_NOT_NULL(subdir->next_table);
 
     LinkTable_free(ROOT_LINK_TBL);
     ROOT_LINK_TBL = NULL;
@@ -1224,9 +1230,23 @@ void test_Link_classify_response(void)
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
                                                  1000, "text/html", &out_len));
     TEST_ASSERT_EQUAL_INT(1000, (int)out_len);
-    TEST_ASSERT_EQUAL_INT(LINK_INVALID,
+    // flag off + HTML + unknown size -> tentative directory (size is learned
+    // on first browse; an oversized or failed download degrades to an empty
+    // folder)
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
                                                  -1, "text/html", &out_len));
+    // flag off + non-HTML + unknown size -> hidden (LINK_INVALID)
+    TEST_ASSERT_EQUAL_INT(LINK_INVALID,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 -1, "image/png", &out_len));
+    // flag off + no content type + unknown size -> tentative directory
+    // (on-the-fly generated listings often have neither Content-Type nor
+    // Content-Length)
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 -1, NULL, &out_len));
+    // non-200 -> invalid regardless of size
     TEST_ASSERT_EQUAL_INT(LINK_INVALID,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 404,
                                                  1000, "text/html", &out_len));
@@ -1266,10 +1286,17 @@ void test_Link_classify_response(void)
                                                  50000, "image/png", &out_len));
     TEST_ASSERT_EQUAL_INT(50000, (int)out_len);
 
-    // Non-HTML chunked -> LINK_INVALID
+    // flag on + non-HTML + unknown size -> hidden (a concrete non-HTML type is
+    // trusted to be a file, not a listing, so it is never parsed; and its size
+    // is unknown, so it cannot be presented as a file either)
     TEST_ASSERT_EQUAL_INT(LINK_INVALID,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
                                                  -1, "image/png", &out_len));
+
+    // flag on + no content type + unknown size -> tentative directory
+    TEST_ASSERT_EQUAL_INT(LINK_DIR,
+                          Link_classify_response(LINK_UNINITIALISED_FILE, 200,
+                                                 -1, NULL, &out_len));
 
     // Directory types preserved
     TEST_ASSERT_EQUAL_INT(LINK_DIR,
@@ -1279,6 +1306,45 @@ void test_Link_classify_response(void)
     // Reset config
     CONFIG.html_is_directory = 0;
     CONFIG.zero_len_is_dir = 0;
+}
+
+void test_write_memory_capped_callback(void)
+{
+    char buf[64];
+    memset(buf, 'a', sizeof(buf));
+
+    // Capped at 100 bytes: the first 60-byte chunk fits, the second would
+    // push the buffer past the cap, so the callback aborts (returns 0) and
+    // flags cap_hit without buffering the excess.
+    TransferStruct ts = {0};
+    ts.size_cap = 100;
+    ts.cap_hit = 0;
+
+    size_t r1 = write_memory_capped_callback(buf, 1, 60, &ts);
+    TEST_ASSERT_EQUAL_INT(60, (int)r1);
+    TEST_ASSERT_EQUAL_INT(0, ts.cap_hit);
+    TEST_ASSERT_EQUAL_INT(60, (int)ts.curr_size);
+
+    size_t r2 = write_memory_capped_callback(buf, 1, 60, &ts);
+    TEST_ASSERT_EQUAL_INT(0, (int)r2);
+    TEST_ASSERT_EQUAL_INT(1, ts.cap_hit);
+    TEST_ASSERT_EQUAL_INT(60, (int)ts.curr_size);
+    TEST_ASSERT_NOT_NULL(ts.data);
+    FREE(ts.data);
+
+    // No cap (size_cap = 0): buffers the full body, never aborts.
+    TransferStruct ts2 = {0};
+    ts2.size_cap = 0;
+    ts2.cap_hit = 0;
+    size_t r3 = write_memory_capped_callback(buf, 1, 60, &ts2);
+    TEST_ASSERT_EQUAL_INT(60, (int)r3);
+    TEST_ASSERT_EQUAL_INT(0, ts2.cap_hit);
+    TEST_ASSERT_EQUAL_INT(60, (int)ts2.curr_size);
+    size_t r4 = write_memory_capped_callback(buf, 1, 60, &ts2);
+    TEST_ASSERT_EQUAL_INT(60, (int)r4);
+    TEST_ASSERT_EQUAL_INT(0, ts2.cap_hit);
+    TEST_ASSERT_EQUAL_INT(120, (int)ts2.curr_size);
+    FREE(ts2.data);
 }
 
 void test_unified_parsing_HTML_to_LinkTable(void)
@@ -1562,6 +1628,7 @@ int main(void)
     RUN_TEST(test_generate_collision_free_name);
     RUN_TEST(test_is_html_content_type);
     RUN_TEST(test_Link_classify_response);
+    RUN_TEST(test_write_memory_capped_callback);
     RUN_TEST(test_unified_parsing_HTML_to_LinkTable);
     RUN_TEST(test_parsing_allow_external_origin_disabled);
     RUN_TEST(test_is_ancestor_head_link_hierarchy);

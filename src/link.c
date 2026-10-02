@@ -537,6 +537,32 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
             url, &payload, &payload_len, &http_header, &http_header_len,
             &cache_time);
         if (loaded == 1) {
+            /*
+             * Re-apply the max_html_size gate to a cached body. A cached
+             * listing for a promoted (no-trailing-slash) directory that now
+             * exceeds max_html_size (e.g. the limit was lowered after it was
+             * cached) is treated as an empty folder, not parsed. Real
+             * directories (trailing slash) are exempt, as at download time.
+             */
+            const char *qf = strpbrk(url, "?#");
+            size_t tlen = qf ? (size_t)(qf - url) : strlen(url);
+            int real_dir = (tlen > 0 && url[tlen - 1] == '/');
+            if (!real_dir && CONFIG.html_is_directory
+                && CONFIG.max_html_size > 0
+                && (off_t)payload_len > CONFIG.max_html_size) {
+                lprintf(warning,
+                        "cached listing for %s is %zu bytes, exceeding "
+                        "max_html_size (%ld bytes); leaving it as an empty "
+                        "folder\n",
+                        url, payload_len, (long)CONFIG.max_html_size);
+                FREE(payload);
+                FREE(http_header);
+                linktbl = LinkTable_alloc(url);
+                linktbl->parent_tbl = parent_tbl;
+                linktbl->index_time = time(NULL);
+                CacheContainer_delete(url);
+                return linktbl;
+            }
             lprintf(info, "loaded cached directory listing for %s in < 1 ms\n",
                     url);
             linktbl = LinkTable_alloc(url);
@@ -572,10 +598,26 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
          */
         TransferStruct header_ts = {0};
         TransferStruct ts = Link_download_full(linktbl->links[0], &header_ts);
-        if (ts.curr_size == 0) {
+
+        /*
+         * A directory is never turned into a file. If the listing could not be
+         * fetched (non-200 / empty body) or exceeded max_html_size (the capped
+         * download aborted), keep the freshly allocated table as an empty
+         * folder (head link only, no children) rather than parsing a partial
+         * body. The caller attaches it to the link, so the entry stays a
+         * directory.
+         */
+        if (ts.curr_size == 0 || ts.cap_hit) {
+            lprintf(warning,
+                    ts.cap_hit
+                        ? "directory listing for %s exceeds max_html_size "
+                          "(%ld bytes); leaving it as an empty folder\n"
+                        : "failed to download directory listing for %s; "
+                          "leaving it as an empty folder\n",
+                    url, (long)CONFIG.max_html_size);
+            FREE(ts.data);
             FREE(header_ts.data);
-            LinkTable_free(linktbl);
-            return NULL;
+            return linktbl;
         }
 
         /*

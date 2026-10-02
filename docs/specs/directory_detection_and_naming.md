@@ -47,14 +47,19 @@ URL Resolution: resolve_target_url()
                                                 │
                  ┌──────────────────────────────┴──────────────────────────────┐
                  │                                                             │
-      --html-is-directory is OFF (Default)                          --html-is-directory is ON
-                 │                                                             │
-                 ├─ Content-Type header ignored                                ├─ Content-Type: text/html?
-                 ├─ cl == 0 && --zero-len-is-dir ──► LINK_DIR                  │     ├─ cl > max_html_size ──► LINK_FILE
-                 └─ cl >= 0                     ──► LINK_FILE                  │     └─ cl <= max_html_size ─► LINK_DIR (Promoted!)
-                                                                               └─ Content-Type non-HTML
-                                                                                     ├─ cl == 0 && --zero-len-is-dir ──► LINK_DIR
-                                                                                     └─ cl >= 0                     ──► LINK_FILE
+       --html-is-directory is OFF (Default)                          --html-is-directory is ON
+                  │                                                             │
+                  ├─ cl >= 0 (known size) ──────────► LINK_FILE                 ├─ Content-Type: text/html?
+                  │    (cl == 0 && --zero-len-is-dir ► LINK_DIR)                │     ├─ cl > max_html_size ──► LINK_FILE
+                  │                                                             │     ├─ cl <= max_html_size ─► LINK_DIR (Promoted!)
+                   └─ cl < 0 (unknown size):                                     │     └─ cl < 0 (unknown size) ─► LINK_DIR
+                         ├─ text/html ───────────► LINK_DIR (may be empty folder)│
+                         ├─ no Content-Type ─────► LINK_DIR (may be empty folder)│
+                          └─ non-HTML real CT ────► LINK_INVALID (hidden)         └─ Content-Type non-HTML / none:
+                                                                                       ├─ cl >= 0 (known size) ──► LINK_FILE
+                                                                                       │    (cl == 0 && --zero-len-is-dir ► LINK_DIR)
+                                                                                       ├─ cl < 0 + non-HTML real CT ► LINK_INVALID (hidden)
+                                                                                       └─ cl < 0 + no CT ──────────► LINK_DIR (may be empty folder)
 ```
 
 ### Phase 1: URL Syntax Parsing
@@ -93,38 +98,66 @@ entries concurrently using HTTP `HEAD` requests (`CURLOPT_NOBODY`) via
 
   - **When `--html-is-directory` is Disabled (Default):**
 
-    - The `Content-Type` header is completely ignored.
-    - If `Content-Length == 0` and `--zero-len-is-dir` is enabled, the entry is
-      converted to `LINK_DIR`.
-    - Otherwise, if `Content-Length >= 0`, the entry is confirmed as
-      `LINK_FILE`. Linked HTML pages remain downloadable files.
-    - If `Content-Length < 0` (e.g. chunked transfer without known length), the
-      entry is marked `LINK_INVALID`.
+    - If the size is known (`Content-Length >= 0`), the entry is confirmed as
+      `LINK_FILE` (or `LINK_DIR` if `Content-Length == 0` and
+      `--zero-len-is-dir` is enabled). Linked HTML pages remain downloadable
+      files.
+    - If the size is unknown (`Content-Length < 0`, e.g. chunked / no
+      `Content-Length`), the size cannot be reported without downloading the
+      whole body, so the decision falls back to the content type:
+      - `text/html` is tentatively a directory (`LINK_DIR`); its real size is
+        learned on first browse, and an oversized or failed download degrades it
+        to an empty folder.
+      - A missing or empty `Content-Type` is likewise a tentative directory
+        (`LINK_DIR`): on-the-fly generated directory listings often send neither
+        a `Content-Type` nor a `Content-Length`, so hiding them would make such
+        directories disappear.
+      - Any other known non-HTML content type is hidden (`LINK_INVALID`), since
+        a file whose size we cannot report is not exposed.
 
   - **When `--html-is-directory` is Enabled:**
 
     - The `Content-Type` header is parsed using `is_html_content_type()`.
-    - If the response header matches `text/html` (e.g., `text/html`,
-      `text/html; charset=utf-8`):
-      - If `Content-Length > CONFIG.max_html_size`, the resource is considered
-        too large for a directory listing and falls back to a readable
-        `LINK_FILE`.
-      - If `Content-Length <= CONFIG.max_html_size` (or chunked `cl == -1`), the
-        entry is **promoted to `LINK_DIR`**. Browsing into it triggers recursive
-        HTML directory listing on that page.
-    - If `Content-Type` is non-HTML (e.g. `application/octet-stream`,
-      `image/png`, `application/zip`):
-      - If `Content-Length == 0 && CONFIG.zero_len_is_dir`, it transitions to
-        `LINK_DIR`.
-      - Otherwise, it transitions to `LINK_FILE`.
+    - **`text/html`** (e.g. `text/html`, `text/html; charset=utf-8`):
+      - known size `> CONFIG.max_html_size` → readable `LINK_FILE` (decided at
+        probe time; it is never a directory).
+      - known size `<= CONFIG.max_html_size`, or unknown size (`cl < 0`) →
+        **promoted to `LINK_DIR`**. Browsing into it triggers recursive HTML
+        directory listing on that page.
+    - **A known non-HTML type** (e.g. `application/octet-stream`, `image/png`,
+      `application/zip`):
+      - `Content-Length == 0 && CONFIG.zero_len_is_dir` → `LINK_DIR`.
+      - `Content-Length >= 0` → `LINK_FILE`.
+      - unknown size (`cl < 0`) → hidden (`LINK_INVALID`): a concrete non-HTML
+        type is trusted to be a file, not a listing, so it is never parsed, and
+        its unknown size means it cannot be presented as a file either.
+    - **No `Content-Type` (or an empty one):**
+      - `Content-Length >= 0` → `LINK_FILE` (as with non-HTML).
+      - unknown size (`cl < 0`) → tentatively `LINK_DIR`; parsed on first
+        browse, degrading to an empty folder if oversized, failed, or linkless.
 
-### Phase 3: Directory Download Guard
+### Phase 3: Oversized / Failed Directory → Empty Folder
 
-When `--html-is-directory` is active and HTTPDirFS downloads the HTML payload of
-a promoted directory (`write_download_full_callback`), streaming chunks are
-monitored. If the incoming payload exceeds `CONFIG.max_html_size`, the transfer
-is immediately aborted with `CURLE_WRITE_ERROR` to protect against unbounded
-memory allocation.
+A link classified as a directory is **never** turned into a file: a directory
+stays a directory for the lifetime of the mount. When `--html-is-directory`
+exposes a page as a directory (a promoted `text/html` page, or a page with no
+`Content-Type` and an unknown size), the listing is fetched in `LinkTable_new()`
+via `Link_download_full()`, which caps the body at `CONFIG.max_html_size`. If,
+on first browse, the listing could not be fetched (HTTP non-200 / empty body) or
+exceeds `max_html_size` (the capped download aborts once the cap is exceeded),
+the entry is left as an **empty folder** — a directory with no children — rather
+than being parsed as a partial listing or demoted to a file:
+
+- The capped/partial body is not parsed and not written to the container cache,
+  so the empty folder is re-fetched on a later refresh (once `--refresh-timeout`
+  expires) instead of persisting stale contents.
+- The same `max_html_size` gate is re-applied to a cached body, so a listing
+  cached under a larger limit is treated as an empty folder after the limit is
+  lowered (and the now-inconsistent container is deleted).
+- Real directories (URL path ends with `/`) and the root table are **exempt from
+  the cap**: their listing is unambiguously a directory listing and may
+  legitimately exceed `max_html_size`, so it is downloaded in full. A real
+  directory whose listing fails to download also degrades to an empty folder.
 
 ______________________________________________________________________
 
@@ -261,7 +294,11 @@ ______________________________________________________________________
   pointing to cross-origin servers. When disabled, all links pointing outside
   the mounted server origin are filtered out.
 - **`--max-html-size <size>`** (default: `2M`) Maximum size threshold for HTML
-  directory promotion. Supports standard unit suffixes (`K`, `M`, `G`).
+  directory promotion. Supports standard unit suffixes (`K`, `M`, `G`). A
+  known-size HTML page larger than this is exposed as a regular file. A
+  directory whose listing is larger than this (unknown-size pages promoted at
+  probe time) is downloaded with the body capped at this limit and, on first
+  browse, degrades to an empty folder — a directory is never turned into a file.
 - **`--ignore-anchors`** (default: disabled) Skips intra-page HTML fragment
   links starting with `#`.
 - **`--zero-len-is-dir`** (default: disabled) Treats any file with

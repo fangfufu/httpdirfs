@@ -74,6 +74,25 @@ size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
     return recv_size;
 }
 
+/*
+ * Body callback for capped full downloads: like write_memory_callback but
+ * stops the transfer as soon as the accumulated size exceeds ts->size_cap.
+ * Returning 0 makes libcurl fail with CURLE_WRITE_ERROR, capping the buffer
+ * at roughly size_cap instead of buffering an arbitrarily large body.
+ */
+size_t write_memory_capped_callback(void *recv_data, size_t size, size_t nmemb,
+                                    void *userp)
+{
+    TransferStruct *ts = (TransferStruct *)userp;
+    size_t recv_size = size * nmemb;
+    if (ts->size_cap > 0 && ts->curr_size + recv_size > ts->size_cap) {
+        ts->transferring = 0;
+        ts->cap_hit = 1;
+        return 0;
+    }
+    return write_memory_callback(recv_data, size, nmemb, userp);
+}
+
 static int is_same_origin(const char *link_url)
 {
     if (!ROOT_LINK_TBL || !ROOT_LINK_TBL->links || !ROOT_LINK_TBL->links[0]) {
@@ -369,7 +388,25 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
     }
 
     if (cl < 0) {
-        return LINK_INVALID;
+        /*
+         * Unknown size (chunked / no Content-Length): we cannot report a size
+         * without downloading the whole body, so decide purely on content
+         * type (both flag modes).
+         *   - A concrete non-HTML type (e.g. image/png, application/zip) is
+         *     trusted to be a plain file, not a listing, so parsing it is
+         *     pointless; and its size is unknown, so it cannot be presented
+         *     as a file either. Hide it.
+         *   - HTML, or no/empty content type, is a tentative directory that
+         *     may degrade to an empty folder on first browse. A missing
+         *     content type is common for on-the-fly generated directory
+         *     listings, which also lack a Content-Length.
+         */
+        int is_html = is_html_content_type(content_type);
+        int has_ct = content_type != NULL && *content_type != '\0';
+        if (has_ct && !is_html) {
+            return LINK_INVALID;
+        }
+        return LINK_DIR;
     }
     if (cl == 0 && CONFIG.zero_len_is_dir) {
         return LINK_DIR;
@@ -433,23 +470,6 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
     }
 }
 
-static size_t write_download_full_callback(void *recv_data, size_t size,
-                                           size_t nmemb, void *userp)
-{
-    TransferStruct *ts = (TransferStruct *)userp;
-    size_t recv_size = size * nmemb;
-    if (CONFIG.html_is_directory && CONFIG.max_html_size >= 0) {
-        if (ts->curr_size + recv_size > (size_t)CONFIG.max_html_size) {
-            lprintf(warning,
-                    "HTML directory page download exceeded max_html_size (%ld "
-                    "bytes), aborting transfer\n",
-                    (long)CONFIG.max_html_size);
-            return 0; /* Causes CURLE_WRITE_ERROR */
-        }
-    }
-    return write_memory_callback(recv_data, size, nmemb, userp);
-}
-
 TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
 {
     char *url = link->f_url;
@@ -459,6 +479,29 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     ts.type = DATA;
     ts.transferring = 1;
 
+    /*
+     * When --html-is-directory is active, cap the full-body download at
+     * max_html_size so an oversized *promoted* directory (a no-trailing-slash
+     * HTML page that we tentatively exposed as a directory) does not buffer
+     * its entire body in memory. The callback aborts the transfer once the
+     * cap is exceeded (CURLE_WRITE_ERROR) and the caller treats the result as
+     * an empty folder.
+     *
+     * Real directories (path ends with '/') are exempt: their listing is
+     * unambiguously a directory listing and may legitimately exceed
+     * max_html_size, so it is downloaded in full.
+     */
+    int capped = 0;
+    if (CONFIG.html_is_directory && CONFIG.max_html_size > 0) {
+        const char *qf = strpbrk(url, "?#");
+        size_t tlen = qf ? (size_t)(qf - url) : strlen(url);
+        int real_dir = (tlen > 0 && url[tlen - 1] == '/');
+        if (!real_dir) {
+            ts.size_cap = (size_t)CONFIG.max_html_size;
+            capped = 1;
+        }
+    }
+
     TransferStruct header_local = {0};
     TransferStruct *header_ptr = header_out ? header_out : &header_local;
     header_ptr->curr_size = 0;
@@ -466,7 +509,8 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     header_ptr->type = DATA;
 
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-                                    write_download_full_callback);
+                                    capped ? write_memory_capped_callback
+                                           : write_memory_callback);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
@@ -495,6 +539,7 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
         FREE(ts.data);
         ts.curr_size = 0;
         ts.transferring = 1;
+        ts.cap_hit = 0;
 
         FREE(header_ptr->data);
         header_ptr->curr_size = 0;
