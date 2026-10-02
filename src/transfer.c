@@ -277,7 +277,8 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
                     = (eff_url && eff_url[0]) ? eff_url : ts->link->f_url;
                 CacheContainer_write_head(
                     target_url, http_resp, (curl_off_t)ts->link->content_length,
-                    ts->link->time, ct ? ct : "", NULL, 0, ts->link->type);
+                    ts->link->time, ct ? ct : "", ts->data, ts->curr_size,
+                    ts->link->type);
 
                 if (eff_url && eff_url[0]
                     && strcmp(eff_url, ts->link->f_url) != 0) {
@@ -297,6 +298,7 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
         ts->link->type = LINK_INVALID;
     }
     curl_easy_cleanup(curl);
+    FREE(ts->data);
     FREE(ts);
 }
 
@@ -325,6 +327,14 @@ void Link_req_file_stat(Link *this_link)
     transfer->transferring = 1;
     transfer->on_complete = filestat_on_complete;
     ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, write_memory_callback);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+    }
+    ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)transfer);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
