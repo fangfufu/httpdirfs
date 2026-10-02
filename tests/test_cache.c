@@ -1144,6 +1144,100 @@ void test_container_redirect_pointer(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_container_head_and_html_expiration(void)
+{
+    const char *tmp_cache_dir = "./test_container_expire_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CacheSystem_init(tmp_cache_dir, 0);
+
+    const char *url = "https://example.com/expire-test.bin";
+    const char *headers = "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n";
+
+    /* Write HEAD container */
+    TEST_ASSERT_EQUAL_INT(
+        0, CacheContainer_write_head(url, 200, 100, 1700000000,
+                                     "application/octet-stream", headers,
+                                     strlen(headers), LINK_FILE));
+
+    /* Fresh read succeeds */
+    CacheStat cs;
+    TEST_ASSERT_EQUAL_INT(1, CacheContainer_read_head(url, &cs));
+    TEST_ASSERT_EQUAL_INT64(100, cs.content_length);
+
+    /* Tamper with cache_time to make it expired */
+    char *cache_key = string_to_cache_path(url);
+    TEST_ASSERT_NOT_NULL(cache_key);
+    char full_path[PATH_MAX];
+    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
+
+    FILE *f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    CacheHeader hdr;
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    /* Expired HEAD container returns 0 (not cached / expired) */
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_read_head(url, &cs));
+
+    /* Test HTML directory container expiration and
+     * CacheContainer_read_with_time */
+    const char *dir_url = "https://example.com/expire-dir/";
+    const char *html
+        = "<html><body><a href=\"file.txt\">file.txt</a></body></html>";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(dir_url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    char *out_payload = NULL;
+    size_t out_payload_len = 0;
+    char *out_headers = NULL;
+    size_t out_headers_len = 0;
+    time_t cache_time = 0;
+
+    /* Fresh read succeeds and returns cache_time */
+    TEST_ASSERT_EQUAL_INT(1, CacheContainer_read_with_time(
+                                 dir_url, &out_payload, &out_payload_len,
+                                 &out_headers, &out_headers_len, &cache_time));
+    TEST_ASSERT_NOT_NULL(out_payload);
+    TEST_ASSERT_TRUE(cache_time > 0);
+    FREE(out_payload);
+    FREE(out_headers);
+
+    /* Tamper with dir container cache_time */
+    char *dir_cache_key = string_to_cache_path(dir_url);
+    TEST_ASSERT_NOT_NULL(dir_cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir,
+             dir_cache_key);
+
+    f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    /* Expired dir container returns 0 */
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_read_with_time(
+                                 dir_url, &out_payload, &out_payload_len,
+                                 &out_headers, &out_headers_len, &cache_time));
+
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    FREE(cache_key);
+    FREE(dir_cache_key);
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1165,6 +1259,7 @@ int main(void)
     RUN_TEST(test_container_redirect_pointer);
     RUN_TEST(test_container_html_parse_on_the_fly);
     RUN_TEST(test_container_timestamps);
+    RUN_TEST(test_container_head_and_html_expiration);
     RUN_TEST(test_container_file_then_dir);
     RUN_TEST(test_cache_clear_host);
     return UNITY_END();

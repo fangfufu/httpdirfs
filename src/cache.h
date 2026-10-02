@@ -297,6 +297,29 @@ int CacheContainer_read(const char *url, char **out_payload,
                         size_t *out_http_header_len);
 
 /**
+ * \brief Read a cached container file for a URL, if it is still fresh, and
+ * return its creation cache_time.
+ * \details A container is fresh if it is well-formed (magic, version, URL
+ * and size checks) and
+ * `time(NULL) - cache_time <= CONFIG.refresh_timeout`.
+ * \param[in] url Resource URL.
+ * \param[out] out_payload malloc'ed payload buffer (set on success)
+ * \param[out] out_payload_len length of the payload
+ * \param[out] out_http_header malloc'ed raw HTTP headers (set on success)
+ * \param[out] out_http_header_len length of the raw HTTP headers
+ * \param[out] out_cache_time Optional pointer to receive container cache_time
+ * \return
+ *  -   1, loaded from the cache (caller frees the output buffers)
+ *  -   0, not cached, or expired (nothing is freed)
+ *  -   -1, the container was corrupt (it has been deleted)
+ */
+int CacheContainer_read_with_time(const char *url, char **out_payload,
+                                  size_t *out_payload_len,
+                                  char **out_http_header,
+                                  size_t *out_http_header_len,
+                                  time_t *out_cache_time);
+
+/**
  * \brief Write an HTTP HEAD response to the URL's container file.
  * \param[in] url Resource URL.
  * \param[in] http_resp HTTP response status code (e.g. 200).

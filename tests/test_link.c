@@ -635,6 +635,7 @@ void test_LinkTable_alloc(void)
     TEST_ASSERT_EQUAL_STRING("https://example.com/dir/",
                              table->links[0]->f_url);
     TEST_ASSERT_EQUAL_STRING("", table->links[0]->linkname);
+    TEST_ASSERT_TRUE(table->index_time > 0);
     LinkTable_free(table);
 }
 
@@ -1014,6 +1015,34 @@ void test_diagnostics_empty(void)
     TEST_ASSERT_NULL(dtbl->links[2]->virtual_content);
 
     LinkTable_free(tbl);
+}
+
+void test_LinkTable_expired_subdirectory(void)
+{
+    CONFIG.refresh_timeout = 10;
+    ROOT_LINK_TBL = LinkTable_alloc("http://localhost/");
+    TEST_ASSERT_NOT_NULL(ROOT_LINK_TBL);
+
+    Link *subdir = CALLOC(1, sizeof(Link));
+    strncpy(subdir->linkname, "sub", NAME_MAX);
+    subdir->type = LINK_DIR;
+    LinkTable *sub_tbl = LinkTable_alloc("http://localhost/sub/");
+    subdir->next_table = sub_tbl;
+    sub_tbl->parent_tbl = ROOT_LINK_TBL;
+    sub_tbl->parent_link = subdir;
+    ROOT_LINK_TBL->refcount++;
+    LinkTable_add(ROOT_LINK_TBL, subdir);
+
+    /* Set sub_tbl to be expired (older than CONFIG.refresh_timeout) */
+    sub_tbl->index_time = time(NULL) - 20;
+
+    /* When traversing into /sub/file, the expired table is retired/detached */
+    Link *link = path_to_Link("/sub/file");
+    TEST_ASSERT_NULL(link);
+    TEST_ASSERT_NULL(subdir->next_table);
+
+    LinkTable_free(ROOT_LINK_TBL);
+    ROOT_LINK_TBL = NULL;
 }
 
 /*
@@ -1690,6 +1719,7 @@ int main(void)
     RUN_TEST(test_diagnostics_path_lookup_and_read);
     RUN_TEST(test_diagnostics_subdirectory);
     RUN_TEST(test_diagnostics_empty);
+    RUN_TEST(test_LinkTable_expired_subdirectory);
 
     /* Phase 2: Advanced Parsing Mode */
     RUN_TEST(test_resolve_target_url);

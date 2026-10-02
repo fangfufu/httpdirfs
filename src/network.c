@@ -178,10 +178,11 @@ int curl_multi_perform_once(void)
     /*
      * Get curl multi interface to perform pending tasks
      */
-    int n_running_curl = 1;
+    int n_running_curl = 0;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
     if (mc) {
         lprintf(error, "%s\n", curl_multi_strerror(mc));
+        n_running_curl = 0;
     }
 
     if (n_running_curl) {
@@ -272,6 +273,7 @@ void transfer_blocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
+        ts->transferring = 0;
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",

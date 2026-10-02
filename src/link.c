@@ -534,7 +534,7 @@ LinkTable *LinkTable_alloc(const char *url)
 {
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
     linktbl->size = 0;
-    linktbl->index_time = 0;
+    linktbl->index_time = time(NULL);
     linktbl->links = NULL;
 
     /*
@@ -562,14 +562,16 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
         size_t payload_len = 0;
         char *http_header = NULL;
         size_t http_header_len = 0;
-        int loaded = CacheContainer_read(url, &payload, &payload_len,
-                                         &http_header, &http_header_len);
+        time_t cache_time = 0;
+        int loaded = CacheContainer_read_with_time(
+            url, &payload, &payload_len, &http_header, &http_header_len,
+            &cache_time);
         if (loaded == 1) {
             lprintf(info, "loaded cached directory listing for %s in < 1 ms\n",
                     url);
             linktbl = LinkTable_alloc(url);
             linktbl->parent_tbl = parent_tbl;
-            linktbl->index_time = time(NULL);
+            linktbl->index_time = cache_time ? cache_time : time(NULL);
             LinkTable_parse_html(linktbl, url, payload);
             LinkTable_fill(linktbl);
             LinkTable_add_diagnostics(linktbl, payload, payload_len,
@@ -635,6 +637,91 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
     return linktbl;
 }
 
+static int is_table_expired(LinkTable *tbl)
+{
+    if (!tbl || tbl->index_time <= 0 || CONFIG.refresh_timeout < 0) {
+        return 0;
+    }
+    if (tbl->parent_link && tbl->parent_link->is_virtual) {
+        return 0;
+    }
+    int64_t age = (int64_t)time(NULL) - tbl->index_time;
+    return age > CONFIG.refresh_timeout;
+}
+
+static void retire_expired_table(LinkTable *tbl)
+{
+    if (!tbl) {
+        return;
+    }
+    Link *parent_link = tbl->parent_link;
+    if (parent_link && parent_link->next_table == tbl) {
+        parent_link->next_table = NULL;
+    }
+    tbl->orphaned = 1;
+    tbl->refcount++;
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+    LinkTable_unref(tbl);
+    PTHREAD_MUTEX_LOCK(&link_lock);
+}
+
+static pthread_mutex_t root_refresh_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void check_and_refresh_root_table(void)
+{
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    if (!ROOT_LINK_TBL || ROOT_LINK_TBL->size == 0 || !ROOT_LINK_TBL->links
+        || !ROOT_LINK_TBL->links[0] || !is_table_expired(ROOT_LINK_TBL)) {
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
+        return;
+    }
+
+    char root_url[PATH_MAX];
+    strncpy(root_url, ROOT_LINK_TBL->links[0]->f_url, PATH_MAX);
+    root_url[PATH_MAX - 1] = '\0';
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+
+    PTHREAD_MUTEX_LOCK(&root_refresh_lock);
+
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    if (!ROOT_LINK_TBL || !is_table_expired(ROOT_LINK_TBL)) {
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
+        PTHREAD_MUTEX_UNLOCK(&root_refresh_lock);
+        return;
+    }
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+
+    LinkTable *new_root = NULL;
+    if (CONFIG.mode == NORMAL) {
+        new_root = LinkTable_new(root_url, NULL);
+    } else if (CONFIG.mode == SINGLE) {
+        new_root = single_LinkTable_new(root_url);
+    } else if (CONFIG.mode == SONIC) {
+        if (!CONFIG.sonic_id3) {
+            new_root = sonic_LinkTable_new_index("0");
+        } else {
+            new_root = sonic_LinkTable_new_id3(0, "0");
+        }
+    }
+
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    if (new_root) {
+        LinkTable *old_root = ROOT_LINK_TBL;
+        ROOT_LINK_TBL = new_root;
+        if (old_root) {
+            old_root->orphaned = 1;
+            if (old_root->refcount == 0) {
+                LinkTable_free(old_root);
+            }
+        }
+    } else if (ROOT_LINK_TBL) {
+        time_t delay = (CONFIG.http_wait_sec > 0) ? CONFIG.http_wait_sec : 5;
+        ROOT_LINK_TBL->index_time = time(NULL) - CONFIG.refresh_timeout + delay;
+    }
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+    PTHREAD_MUTEX_UNLOCK(&root_refresh_lock);
+}
+
 LinkTable *path_to_LinkTable(const char *path)
 {
     Link *link = NULL;
@@ -642,6 +729,7 @@ LinkTable *path_to_LinkTable(const char *path)
     LinkTable *next_table = NULL;
 
     if (!strcmp(path, "/")) {
+        check_and_refresh_root_table();
         next_table = ROOT_LINK_TBL;
         LinkTable_ref(next_table);
         return next_table;
@@ -655,8 +743,19 @@ LinkTable *path_to_LinkTable(const char *path)
         PTHREAD_MUTEX_LOCK(&link_lock);
         next_table = link->next_table;
         if (next_table) {
-            next_table->refcount++;
-            next_table->orphaned = 0;
+            if (is_table_expired(next_table)) {
+                if (link->parent_table) {
+                    link->parent_table->refcount++;
+                }
+                retire_expired_table(next_table);
+                if (link->parent_table) {
+                    link->parent_table->refcount--;
+                }
+                next_table = NULL;
+            } else {
+                next_table->refcount++;
+                next_table->orphaned = 0;
+            }
         }
         PTHREAD_MUTEX_UNLOCK(&link_lock);
     }
@@ -775,6 +874,12 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                  * The next sub-directory exists
                  */
                 LinkTable *next_table = linktbl->links[i]->next_table;
+                if (next_table && is_table_expired(next_table)) {
+                    linktbl->refcount++;
+                    retire_expired_table(next_table);
+                    linktbl->refcount--;
+                    next_table = NULL;
+                }
                 if (!next_table) {
                     linktbl->refcount++;
                     PTHREAD_MUTEX_UNLOCK(&link_lock);
@@ -836,6 +941,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 
 Link *path_to_Link(const char *path)
 {
+    check_and_refresh_root_table();
+
     lprintf(link_lock_debug, "thread %lx: locking link_lock;\n",
             (unsigned long)pthread_self());
 
