@@ -1085,7 +1085,10 @@ static int Cache_exist(const char *fn)
                         && (hdr.flags
                             & (CACHE_FLAG_IS_COMPLETE
                                | CACHE_FLAG_IS_SPARSE))) {
-                        res = 0;
+                        int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+                        if (age <= CONFIG.refresh_timeout) {
+                            res = 0;
+                        }
                     }
                 }
                 fclose(fp);
@@ -1978,12 +1981,16 @@ int CacheContainer_write(const char *url, const char *payload,
 static int CacheContainer_read_internal(const char *url, char **out_payload,
                                         size_t *out_payload_len,
                                         char **out_http_header,
-                                        size_t *out_http_header_len, int depth)
+                                        size_t *out_http_header_len,
+                                        time_t *out_cache_time, int depth)
 {
     *out_payload = NULL;
     *out_payload_len = 0;
     *out_http_header = NULL;
     *out_http_header_len = 0;
+    if (out_cache_time) {
+        *out_cache_time = 0;
+    }
 
     if (!CACHE_SYSTEM_INIT || !url || !url[0] || depth > 5) {
         return 0;
@@ -2001,7 +2008,7 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
     char *full_path = path_append(CACHE_DIR, fn);
     FILE *fp = fopen(full_path, "r");
     if (!fp) {
-        lprintf(info, "cache container not found for %s (%s)\n", url, fn);
+        lprintf(debug, "cache container not found for %s (%s)\n", url, fn);
         FREE(full_path);
         FREE(fn);
         FREE(canon_url);
@@ -2029,14 +2036,14 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
                 FREE(canon_url);
                 res = CacheContainer_read_internal(
                     target_url, out_payload, out_payload_len, out_http_header,
-                    out_http_header_len, depth + 1);
+                    out_http_header_len, out_cache_time, depth + 1);
                 FREE(target_url);
                 return res;
             }
             FREE(target_url);
         }
     } else if (hdr.flags & CACHE_FLAG_IS_HEAD) {
-        lprintf(info,
+        lprintf(debug,
                 "cache container %s contains HEAD metadata only, payload not "
                 "cached\n",
                 fn);
@@ -2095,6 +2102,9 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
                     } else {
                         *out_payload = payload;
                         *out_payload_len = (size_t)hdr.content_length;
+                        if (out_cache_time) {
+                            *out_cache_time = (time_t)hdr.cache_time;
+                        }
                         res = 1;
                     }
                 }
@@ -2120,13 +2130,24 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
     return res;
 }
 
+int CacheContainer_read_with_time(const char *url, char **out_payload,
+                                  size_t *out_payload_len,
+                                  char **out_http_header,
+                                  size_t *out_http_header_len,
+                                  time_t *out_cache_time)
+{
+    return CacheContainer_read_internal(url, out_payload, out_payload_len,
+                                        out_http_header, out_http_header_len,
+                                        out_cache_time, 0);
+}
+
 int CacheContainer_read(const char *url, char **out_payload,
                         size_t *out_payload_len, char **out_http_header,
                         size_t *out_http_header_len)
 {
-    return CacheContainer_read_internal(url, out_payload, out_payload_len,
-                                        out_http_header, out_http_header_len,
-                                        0);
+    return CacheContainer_read_with_time(url, out_payload, out_payload_len,
+                                         out_http_header, out_http_header_len,
+                                         NULL);
 }
 
 int CacheContainer_write_head(const char *url, long http_resp,
@@ -2252,7 +2273,7 @@ static int CacheContainer_read_head_internal(const char *url,
     char *full_path = path_append(CACHE_DIR, fn);
     FILE *fp = fopen(full_path, "r");
     if (!fp) {
-        lprintf(info, "cache head container not found for %s (%s)\n", url, fn);
+        lprintf(debug, "cache head container not found for %s (%s)\n", url, fn);
         FREE(full_path);
         FREE(fn);
         FREE(canon_url);

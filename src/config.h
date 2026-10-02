@@ -117,7 +117,7 @@ typedef struct {
     char *cafile;
     /** \brief Server certificate directory */
     char *capath;
-    /** \brief Refresh directory listing after refresh_timeout seconds */
+    /** \brief Refresh files and directories after refresh_timeout seconds */
     int refresh_timeout;
     /** \brief Try refreshing invalid links when reading a directory */
     int invalid_refresh;

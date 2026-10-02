@@ -88,8 +88,8 @@ HTTPDirFS options:
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
                             libcurl is allowed to make. (default: 6)
-        --refresh-timeout   The directories are refreshed after the specified
-                            time, in seconds (default: 3600)
+        --refresh-timeout   Files and directories are refreshed after the
+                            specified time, in seconds (default: 3600)
         --retry-wait        Set delay in seconds before retrying an HTTP request
                             after encountering an error. (default: 5)
         --invalid-refresh   Try refreshing invalid links when reading a directory.
@@ -315,8 +315,9 @@ ______________________________________________________________________
 
 #### `--refresh-timeout <seconds>`
 
-- **Description:** Sets the duration in seconds after which directory listings
-  are treated as stale and are refetched from the remote server when accessed.
+- **Description:** Sets the duration in seconds after which cached files and
+  directory listings are treated as stale and are refetched from the remote
+  server when accessed.
 - **Default:** `3600` (1 hour)
 
 #### `--retry-wait <seconds>`

@@ -667,7 +667,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
 
     size_t remaining = link->content_length - (size_t)offset;
     if (req_size > remaining) {
-        lprintf(info, "requested size larger than remaining size, req_size: \
+        lprintf(debug, "requested size larger than remaining size, req_size: \
 %zu, remaining: %zu\n",
                 req_size, remaining);
         req_size = remaining;
