@@ -1099,9 +1099,20 @@ static int Cache_exist(const char *fn)
                     && hdr.magic == CACHE_MAGIC && hdr.version == CACHE_VERSION
                     && (hdr.flags
                         & (CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_SPARSE))) {
-                    int64_t age = (int64_t)time(NULL) - hdr.cache_time;
-                    if (age <= CONFIG.refresh_timeout) {
+                    if (hdr.flags & CACHE_FLAG_IS_SPARSE) {
+                        /*
+                         * Sparse containers keep already-downloaded
+                         * segments: freshness is validated against the
+                         * live link in Container_read() (remote mtime +
+                         * content length), so the age check must not
+                         * discard them.
+                         */
                         res = 0;
+                    } else {
+                        int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+                        if (age <= CONFIG.refresh_timeout) {
+                            res = 0;
+                        }
                     }
                 }
             } else {
