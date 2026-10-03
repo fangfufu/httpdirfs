@@ -32,6 +32,7 @@
 #include "config.h"
 #include "link.h"
 #include "log.h"
+#include "transfer.h"
 
 /* clang-format off */
 #define BYPASS_FH ((uint64_t)-1)
@@ -71,7 +72,7 @@ static int fs_release(const char *path, struct fuse_file_info *fi)
 
 /** \brief return the attributes for a single file indicated by path */
 static int fs_getattr(const char *path, struct stat *stbuf,
-                      struct fuse_file_info *ffi_buf)
+                      const struct fuse_file_info *ffi_buf)
 {
     (void)ffi_buf;
     int res = 0;
@@ -244,14 +245,16 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     return 0;
 }
 
-static struct fuse_operations fs_oper = {.getattr = fs_getattr,
-                                         .opendir = fs_opendir,
-                                         .readdir = fs_readdir,
-                                         .releasedir = fs_releasedir,
-                                         .open = fs_open,
-                                         .read = fs_read,
-                                         .init = fs_init,
-                                         .release = fs_release};
+static struct fuse_operations fs_oper = {
+    .getattr
+    = (int (*)(const char *, struct stat *, struct fuse_file_info *))fs_getattr,
+    .opendir = fs_opendir,
+    .readdir = fs_readdir,
+    .releasedir = fs_releasedir,
+    .open = fs_open,
+    .read = fs_read,
+    .init = fs_init,
+    .release = fs_release};
 
 int fuse_local_init(int argc, char **argv)
 {

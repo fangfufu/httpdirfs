@@ -28,6 +28,7 @@
 
 #include "../src/config.h"
 #include "../src/link.h"
+#include "../src/transfer.h"
 #include "../src/util.h"
 
 #include <stdlib.h>

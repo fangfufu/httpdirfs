@@ -32,7 +32,9 @@
 #include <limits.h>
 #include <sys/types.h>
 
+#include "link_parser.h"
 #include "sonic.h"
+#include "url.h"
 
 typedef struct Cache Cache;
 typedef struct Link Link;
@@ -93,11 +95,6 @@ struct Link {
     /** \brief Whether this link is a virtual link (not backed by network) */
     int is_virtual;
 };
-
-/* Include sub-modules for URL parsing, HTML parsing, and transfer routines */
-#include "link_parser.h"
-#include "transfer.h"
-#include "url.h"
 
 /**
  * \brief root link table
