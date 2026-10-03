@@ -37,8 +37,9 @@ class RangeHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
                     prefix = test_f.read(128).lower()
                     if b"<!doctype html" in prefix or b"<html" in prefix:
                         return "text/html"
-            except Exception:
-                pass
+            except OSError as exc:
+                print(f"range_http_server: cannot sniff MIME type "
+                      f"for {path}: {exc}", file=sys.stderr)
         return ctype
 
     def list_directory(self, path):
