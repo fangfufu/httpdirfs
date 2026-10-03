@@ -32,6 +32,7 @@
 #include "util.h"
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 ConfigStruct CONFIG;
@@ -79,6 +80,10 @@ void Config_init(void)
 
     CONFIG.invalid_refresh = 0;
 
+    CONFIG.allow_external_origin = 0;
+
+    CONFIG.ignore_anchors = 0;
+
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 
@@ -97,6 +102,11 @@ void Config_init(void)
     CONFIG.sonic_id3 = 0;
 
     CONFIG.sonic_insecure = 0;
+
+    /*--------- Directory promotion & traversal related --------*/
+    CONFIG.html_is_directory = 0;
+    CONFIG.max_html_size = DEFAULT_MAX_HTML_SIZE;
+
     atexit(mem_cleanup);
 }
 

@@ -29,9 +29,8 @@
 #include "network.h"
 
 #include "config.h"
-#include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
 #include "util.h"
 
 #include <errno.h>
@@ -51,11 +50,11 @@ CURLSH *CURL_SHARE;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
 /** \brief  mutex for transfer functions */
-static pthread_mutex_t transfer_lock;
+static pthread_mutex_t transfer_lock = PTHREAD_MUTEX_INITIALIZER;
 /** \brief the lock array for cryptographic functions */
 static pthread_mutex_t *crypto_lockarray;
 /** \brief mutex for curl share interface itself */
-static pthread_mutex_t curl_lock;
+static pthread_mutex_t curl_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * -------------------- Functions --------------------------
@@ -154,32 +153,13 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
             lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
 
-        if (!curl_msg->data.result) {
-            /*
-             * Transfer successful, set the file size
-             */
-            if (ts->type == FILESTAT) {
-                Link_set_file_stat(ts->link, curl);
-            }
-        } else {
-            lprintf(error, "%d - %s <%s>\n", curl_msg->data.result,
-                    curl_easy_strerror(curl_msg->data.result), url);
-            /*
-             * If the transfer failed, and we are querying the file size,
-             * we must mark the link as invalid so that the link table
-             * fill function can proceed.
-             */
-            if (ts->type == FILESTAT) {
-                ts->link->type = LINK_INVALID;
-            }
-        }
+        CURLcode result = curl_msg->data.result;
         curl_multi_remove_handle(curl_multi, curl);
-        /*
-         * clean up the handle, if we are querying the file size
-         */
-        if (ts->type == FILESTAT) {
-            curl_easy_cleanup(curl);
-            FREE(ts);
+        if (ts->on_complete) {
+            ts->on_complete(ts, curl, result, url);
+        } else if (result) {
+            lprintf(error, "%d - %s <%s>\n", result, curl_easy_strerror(result),
+                    url ? url : "");
         }
     } else {
         lprintf(warning, "curl_msg->msg: %d\n", curl_msg->msg);
@@ -199,10 +179,11 @@ int curl_multi_perform_once(void)
     /*
      * Get curl multi interface to perform pending tasks
      */
-    int n_running_curl = 1;
+    int n_running_curl = 0;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
     if (mc) {
         lprintf(error, "%s\n", curl_multi_strerror(mc));
+        n_running_curl = 0;
     }
 
     if (n_running_curl) {
@@ -249,8 +230,6 @@ void NetworkSystem_init(void)
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 
-    PTHREAD_MUTEX_INIT(&curl_lock, NULL);
-
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
 
@@ -265,11 +244,6 @@ void NetworkSystem_init(void)
                       CONFIG.max_conns);
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_HOST_CONNECTIONS,
                       CONFIG.max_conns);
-
-    /*
-     * ------------ Initialise locks ---------
-     */
-    PTHREAD_MUTEX_INIT(&transfer_lock, NULL);
 
     /*
      * cryptographic lock functions were shamelessly copied from
@@ -293,6 +267,7 @@ void transfer_blocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
+        ts->transferring = 0;
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",

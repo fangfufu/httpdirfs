@@ -34,6 +34,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #ifdef __APPLE__
 typedef struct {
@@ -52,6 +54,14 @@ typedef sem_t sys_sem_t;
  * \note You need to free the char * after use.
  */
 char *path_append(const char *path, const char *filename);
+
+/**
+ * \brief Recursively create directories like mkdir -p
+ * \param path The directory path to create
+ * \param mode Permissions for created directories
+ * \return 0 on success, -1 on failure
+ */
+int mkdir_p(const char *path, mode_t mode);
 
 /**
  * \brief wrapper for pthread_mutex_init(), with error handling
@@ -266,6 +276,23 @@ void mem_cleanup(void);
  * \brief Convert a string to hex
  */
 char *str_to_hex(char *s);
+
+/**
+ * \brief Check if character sequence represents whitespace (including UTF-8
+ * non-breaking space).
+ * \param s Pointer to character string.
+ * \return 0 if not whitespace, or the byte length of the whitespace sequence
+ * (1 for ASCII space, 2 for UTF-8 U+00A0).
+ */
+int check_space(const char *s);
+
+/**
+ * \brief Parse a human-readable size string with optional suffix (K, M, G)
+ * \param str The input string (e.g. "2097152", "2M", "512K")
+ * \param opt_name The option name for error reporting, or NULL
+ * \return Parsed non-negative off_t on success, or -1 on invalid input
+ */
+off_t parse_size_with_suffix(const char *str, const char *opt_name);
 
 /**
  * \brief initialise the configuration data structure

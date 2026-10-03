@@ -61,7 +61,7 @@ static void *fs_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 /** \brief release an opened file */
 static int fs_release(const char *path, struct fuse_file_info *fi)
 {
-    lprintf(info, "%s\n", path);
+    lprintf(debug, "%s\n", path);
     (void)path;
     if (CACHE_SYSTEM_INIT && fi->fh && fi->fh != BYPASS_FH) {
         Cache_close((Cache *)fi->fh);
@@ -140,7 +140,7 @@ static int fs_read(const char *path, char *buf, size_t size, off_t offset,
 /** \brief open a file indicated by the path */
 static int fs_open(const char *path, struct fuse_file_info *fi)
 {
-    lprintf(info, "%s\n", path);
+    lprintf(debug, "%s\n", path);
     Link *link = path_to_Link(path);
     if (!link) {
         return -ENOENT;
@@ -148,6 +148,11 @@ static int fs_open(const char *path, struct fuse_file_info *fi)
     if ((fi->flags & O_RDWR) != O_RDONLY) {
         LinkTable_unref(link->parent_table);
         return -EROFS;
+    }
+    if (link->is_virtual) {
+        fi->fh = BYPASS_FH;
+        LinkTable_unref(link->parent_table);
+        return 0;
     }
     if (CACHE_SYSTEM_INIT) {
         if (link->content_length == 0) {
@@ -195,7 +200,10 @@ static int fs_releasedir(const char *path, struct fuse_file_info *fi)
 {
     LinkTable *linktbl = (LinkTable *)fi->fh;
     if (linktbl) {
-        if (strcmp(path, "/") != 0) {
+        int is_diag
+            = (linktbl->parent_link
+               && !strcmp(linktbl->parent_link->linkname, ".httpdirfs"));
+        if (strcmp(path, "/") != 0 && !is_diag) {
             LinkTable_mark_orphaned(linktbl);
         }
         LinkTable_unref(linktbl);

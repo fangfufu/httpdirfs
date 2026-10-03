@@ -26,12 +26,18 @@ different file segments in parallel.
 There is support for Airsonic / Subsonic server. This allows you to mount a
 remote music collection locally.
 
-If you enable the `--external-links` flag, HTTPDirFS will also parse the HTML
-directory listing of the mounted server and identify any `<a href>` tags
-pointing to absolute external (cross-origin) URLs. These external files and
-directories will appear alongside local files in the mountpoint. External URLs
-ending with a trailing slash (`/`) are treated as directories; navigating into
-them triggers a recursive layout discovery on the remote server.
+HTTPDirFS parses HTML directory listings using the Gumbo HTML5 parser. It
+extracts descriptive filenames from anchor text (`<a>`), resolves name
+collisions with progressive URL path escalation, and prevents navigation loops.
+
+By default, cross-origin links are discarded to confine filesystem traversal to
+the mounted server's origin. You can follow external origin links using
+`--allow-external-origin`.
+
+By default, resources whose URLs do not end with a trailing slash are treated as
+regular files. If you are mounting websites where subdirectories are represented
+by HTML pages without trailing slashes, you can enable `--html-is-directory` to
+dynamically inspect and promote linked HTML pages into browsable directories.
 
 If you only want to access a single file, there is also a simplified Single File
 Mode. This can be especially useful if the web server does not present a HTTP
@@ -238,8 +244,9 @@ This feature was implemented due to Github
 ## Permanent cache system
 
 You can cache the files you have accessed permanently on your hard drive by
-using the `--cache` flag. The file it caches persist across sessions, but can
-clear the cache using `--cache-clear`
+using the `--cache` flag. The files it caches persist across sessions. You can
+clear the entire cache using `--cache-clear`, or clear only a specific server
+using `--cache-clear-host <URL_OR_HOST>`.
 
 > [!WARNING]
 > If `--cache-location <dir>` appears before `--cache-clear`, the entire
@@ -247,15 +254,24 @@ clear the cache using `--cache-clear`
 > non-empty directories to be used as cache.
 
 By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
-`${HOME}/.cache/httpdirfs`, or the current working directory `./.cache`,
-whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs` is normally
-`${HOME}/.cache/httpdirfs`.
+`${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
+directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
+is normally `${HOME}/.cache/httpdirfs`.
 
-Each HTTP directory gets its own cache folder, they are named using the escaped
-URL of the HTTP directory.
+Please note that a custom directory supplied via `--cache-location` is used
+verbatim as the cache root of the mounted server: unlike the default location,
+no per-origin subdirectory is appended to it.
+
+Each HTTP server origin gets its own cache directory, named using the escaped
+server root URL. Within each origin, files are sharded into 256 subdirectories
+using the first two hex characters of their canonical URL's MD5 hash.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
-again. Subsequent reads are served offline at local storage speed.
+again as long as the server still reports the same `Last-Modified` timestamp and
+content length. Subsequent reads are served offline at local storage speed.
+Directory listings (and files whose remote metadata cannot be verified) are
+considered stale, and refetched from the server, once they are older than
+`--refresh-timeout` seconds (default: 3600).
 
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your local storage device will get heavy I/O
@@ -300,14 +316,40 @@ For \*sonic servers, rather than using the Gumbo parser, this program parses
 \*sonic servers' XML responses using
 [expat](https://github.com/libexpat/libexpat).
 
-The cache system stores the metadata and the downloaded file into two separate
-directories. It uses `uint8_t` arrays to record which segments of the file had
-been downloaded.
+The cache system uses a unified single-file container architecture. Each URL
+maps to exactly one container file storing its binary header, canonical URL, raw
+HTTP response headers, segment download bitmap, and payload data.
 
 Note that HTTPDirFS requires the server to support HTTP Range Request, some
 servers support this features, but does not present `"Accept-Ranges: bytes` in
 the header responses. HTTPDirFS by default checks for this header field. You can
 disable this check by using the `--no-range-check` flag.
+
+### Directory Detection and Name Collision Resolution
+
+HTTPDirFS uses a universal HTML parsing and collision resolution pipeline:
+
+- **Anchor text extraction:** Text inside `<a>` tags is extracted, whitespace is
+  normalized, and slashes (`/`) are converted to underscores (`_`). Leading dots
+  and spaces are trimmed so entries do not become hidden Unix files.
+- **Progressive collision escalation:** When multiple links share identical
+  anchor text, HTTPDirFS disambiguates names by combining anchor text with
+  backward URL path segments (e.g. `Title-filename.iso`,
+  `Title-subdir-filename.iso`). When anchor text matches the filename
+  case-insensitively, redundant prefixing is omitted.
+- **Deterministic directory detection:** Trailing slashes (`/`) denote
+  directories. When `--html-is-directory` is enabled, linked HTML resources
+  (within `--max-html-size`) are dynamically promoted to virtual subdirectories.
+
+For complete technical specifications, see
+[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
+
+### Diagnostics
+
+Every directory listing exposes a hidden virtual `.httpdirfs` directory,
+containing `CONTENT` (the raw HTML payload of the listing page) and `HEADER`
+(the raw HTTP response headers). This is useful for debugging how a web server
+presents a directory when HTTPDirFS appears to misparse a listing.
 
 ### Allowed characters in filenames
 

@@ -31,7 +31,7 @@
 #include "config.h"
 #include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
 #include "util.h"
 
 #include <assert.h>
@@ -391,7 +391,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     /*
      * start downloading the base URL
      */
-    TransferStruct xml = Link_download_full(linktbl->links[0]);
+    TransferStruct xml = Link_download_full(linktbl->links[0], NULL);
     if (xml.curr_size == 0) {
         LinkTable_free(linktbl);
         return NULL;

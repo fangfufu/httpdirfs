@@ -6,10 +6,6 @@ configuration and usage flags supported by HTTPDirFS.
 
 ### Command Syntax
 
-Below is the raw help output displaying all available flags, generated from Git
-commit SHA
-[`0855c0a`](https://github.com/fangfufu/httpdirfs/commit/0855c0a46a2fa8f8e2d4d084f51d5d124092d067):
-
 ```bash
 usage: httpdirfs [options] URL mountpoint
 
@@ -76,6 +72,11 @@ HTTPDirFS options:
         --cache-clear       Delete the cache directory or the custom location
                             specified with `--cache-location`, if the option is
                             seen first. Then exit in either case.
+        --cache-clear-host  Delete only the cache of a single server host,
+                            given as a full URL or a bare host (both the http
+                            and https origin directories are then removed).
+                            Only supported with the default cache location,
+                            not with --cache-location. Then exit.
         --cache-min-size    Set minimum file size threshold for caching, in bytes
                             (default: none)
         --cache-max-size    Set maximum file size threshold for caching, in bytes
@@ -88,19 +89,27 @@ HTTPDirFS options:
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
                             libcurl is allowed to make. (default: 6)
-        --refresh-timeout   The directories are refreshed after the specified
+        --refresh-timeout   Directory listings and files without verifiable
+                            remote metadata are refreshed after the specified
                             time, in seconds (default: 3600)
         --retry-wait        Set delay in seconds before retrying an HTTP request
                             after encountering an error. (default: 5)
         --invalid-refresh   Try refreshing invalid links when reading a directory.
-        --user-agent        Set user agent string (default: "HTTPDirFS-1.3.3")
+        --user-agent        Set user agent string (default: "HTTPDirFS-1.3.3") # x-release-please-version
         --no-range-check    Disable the built-in check for the server's support
                             for HTTP range requests
         --zero-len-is-dir   If a file has a zero length, treat it as a directory
         --insecure-tls      Disable libcurl TLS certificate verification by
                             setting CURLOPT_SSL_VERIFYHOST to 0
-        --external-links    Include external (cross-origin) links from
-                            directory listings (default: off)
+        --allow-external-origin
+                            Allow traversing links pointing to external
+                            servers (default: off)
+        --ignore-anchors    Ignore intra-page HTML anchor/fragment links
+                            starting with '#' (default: off)
+        --html-is-directory Promote resources with Content-Type text/html to
+                            directories (default: off)
+        --max-html-size     Set maximum HTML size for directory listing
+                            promotion (default: 2M)
         --single-file-mode  Single file mode - rather than mounting a whole
                             directory, present a single file inside a virtual
                             directory.
@@ -264,6 +273,10 @@ ______________________________________________________________________
   should be stored.
 - **Default:** `${XDG_CACHE_HOME}/httpdirfs` (usually resolves to
   `~/.cache/httpdirfs`).
+- **Note:** The custom directory is used **verbatim** as the cache root of the
+  mounted server. Unlike the default location, no per-origin subdirectory is
+  appended to it, so all cached data for that server is stored directly inside
+  it.
 
 #### `--cache-clear`
 
@@ -271,6 +284,17 @@ ______________________________________________________________________
   path if `--cache-location` is specified before this option) and immediately
   exits. Highly useful for cleaning up disk space or forcing a full directory
   recrawl.
+
+#### `--cache-clear-host <URL_OR_HOST>`
+
+- **Description:** Deletes only the cached data and metadata of a single server
+  host, provided as a full URL (e.g., `https://example.com/dir`) or a bare
+  hostname (e.g., `example.com`), clearing both the HTTP and HTTPS origin cache
+  directories, and immediately exits.
+- **Note:** Only supported with the default cache location. Per-origin
+  subdirectories do not exist when a custom location is set with
+  `--cache-location`, so combining the two options is rejected with an error;
+  use `--cache-clear` to remove a custom cache directory.
 
 #### `--dl-seg-size <size>`
 
@@ -315,8 +339,11 @@ ______________________________________________________________________
 
 #### `--refresh-timeout <seconds>`
 
-- **Description:** Sets the duration in seconds after which directory listings
-  are treated as stale and are refetched from the remote server when accessed.
+- **Description:** Sets the duration in seconds after which directory listings,
+  and cached files whose remote `Last-Modified` timestamp or content length
+  cannot be verified, are treated as stale and refetched from the remote server
+  when accessed. A cached file whose remote `Last-Modified` timestamp and
+  content length both match the server is reused regardless of its age.
 - **Default:** `3600` (1 hour)
 
 #### `--retry-wait <seconds>`
@@ -329,7 +356,7 @@ ______________________________________________________________________
 
 - **Description:** Customizes the HTTP `User-Agent` header sent with each
   request.
-- **Default:** `HTTPDirFS-1.3.3`
+- **Default:** `HTTPDirFS-1.3.3` <!-- x-release-please-version -->
 
 #### `--no-range-check`
 
@@ -363,29 +390,32 @@ ______________________________________________________________________
   URL as a single virtual file inside the mountpoint. This is highly useful for
   files hosted on servers that do not present any directory listings.
 
+#### `--ignore-anchors`
+
+- **Description:** Ignores intra-page HTML fragment links starting with `#`
+  (e.g., `#top` or `#section`), preventing them from appearing as entries in
+  directory listings.
+
 ______________________________________________________________________
 
-### External Links (`--external-links`)
+### External Origins (`--allow-external-origin`)
 
-When `--external-links` is enabled, HTTPDirFS parses the HTML directory listing
-of the mounted server and identifies any `<a href>` tags pointing to absolute
-external (cross-origin) URLs.
+By default, HTTPDirFS confines filesystem traversal strictly to the origin
+(scheme, host, port) of the URL specified at mount time. Any links pointing to
+external (cross-origin) servers are dropped during HTML parsing.
+
+Enabling `--allow-external-origin` allows HTTPDirFS to follow and mount links
+pointing to external origins.
 
 #### How It Works
 
 - **File and Directory Exposure:** External files and directories will appear
   alongside local files in the mountpoint. External URLs ending with a trailing
-  slash (`/`) are treated as directories; navigating into them triggers a
-  recursive layout discovery on the remote server.
-- **First-Wins Deduplication:** If multiple external links produce the same
-  filename after extraction, only the first encountered link is kept.
-- **Path Sanitization:** Filenames derived from external URLs are automatically
-  sanitized. URL-decoded slash characters (`%2F`) are unescaped and converted to
-  underscores (`_`) to prevent directory traversal or invalid FUSE entry
-  creations.
+  slash (`/`) are treated as directories; navigating into them triggers
+  recursive discovery on the remote server.
 - **Cache Compatibility:** Caching works seamlessly with external links. Cache
-  paths for external files are safely flattened and sanitized within the
-  metadata and data cache directory structures to avoid directory traversal.
+  paths are safely hashed and segregated into dedicated origin directories
+  within the unified container cache to avoid path traversal.
 
 #### Security & Credentials Scoping
 
@@ -398,6 +428,69 @@ external (cross-origin) URLs.
 - **Authentication Warnings:** External servers requiring authentication
   (returning HTTP 401 or 403) will log a warning indicating that credentials are
   restricted to the main server.
+
+______________________________________________________________________
+
+### Universal Link Parsing and Directory Detection
+
+HTTPDirFS parses HTML listing documents using the Gumbo HTML5 parser. It
+extracts descriptive filenames from anchor text, resolves name collisions, and
+identifies directories.
+
+#### Universal Parsing Mechanics
+
+- **Anchor Text Filename Extraction:** The text inside `<a>...</a>` tags is
+  extracted, sanitized, and used as the virtual file or directory name.
+  Whitespace is normalized, slashes (`/`) are converted to underscores (`_`),
+  and leading dots and spaces are stripped to avoid hidden Unix files.
+- **Progressive Collision Resolution:** If multiple links share identical anchor
+  text, HTTPDirFS disambiguates names by combining anchor text with URL path
+  segments (e.g., `Readme-readme.txt`, `Readme-38601-readme.txt`). If the anchor
+  text already matches the URL segment case-insensitively, redundant prefixing
+  is omitted. If all segments are exhausted and collisions persist, numeric
+  suffixes (`-1`, `-2`, ...) are appended.
+- **Early Duplicate Removal:** If the exact same target URL appears multiple
+  times on a page, only the first encountered link and anchor text are kept.
+- **Ancestor Loop Prevention:** Links pointing back to the current directory or
+  any of its parent directories are discarded to prevent infinite recursive
+  loops.
+
+#### `--html-is-directory`
+
+- **Description:** By default, resources whose URLs do not end with a trailing
+  slash (`/`) are treated as regular files. When `--html-is-directory` is
+  enabled, HTTPDirFS inspects the HTTP `Content-Type` response header of linked
+  resources during link initialization. Any resource returning
+  `Content-Type: text/html` (with a size within `--max-html-size`) is promoted
+  to a virtual directory, allowing you to browse into it as a subdirectory.
+  Non-HTML resources remain regular files.
+
+#### `--max-html-size <size>`
+
+- **Description:** Sets the maximum size of an HTML document eligible for
+  directory listing promotion (default: `2M`). HTML resources exceeding this
+  threshold are presented as regular files instead of directories to prevent
+  excessive memory usage. Suffixes like `K`, `M`, or `G` are supported (e.g.,
+  `--max-html-size 4M`).
+
+For the comprehensive architectural specification, see
+[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
+
+______________________________________________________________________
+
+### Diagnostics (`.httpdirfs` directory)
+
+Every directory listing in the mounted filesystem exposes a hidden virtual
+`.httpdirfs` directory. It contains:
+
+- **`CONTENT`**: The raw HTML payload of the directory listing page as served by
+  the web server.
+- **`HEADER`**: The raw HTTP response headers of the directory listing request.
+
+These virtual files are useful for debugging how a web server presents a
+directory, for example when HTTPDirFS appears to misparse a listing. The
+`.httpdirfs` directory is virtual only: it does not exist on the remote server
+and is never stored in the cache.
 
 ______________________________________________________________________
 

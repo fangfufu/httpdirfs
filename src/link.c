@@ -23,22 +23,23 @@
 
 /**
  * \file link.c
- * \brief Link structure and handling functions implementation
+ * \brief Link structure and tree handling functions implementation
  */
 
 #include "link.h"
 
 #include "cache.h"
 #include "config.h"
+#include "link_parser.h"
 #include "log.h"
-#include "memcache.h"
 #include "network.h"
+#include "transfer.h"
+#include "url.h"
 #include "util.h"
 
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
-#include <gumbo.h>
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
@@ -51,7 +52,6 @@
  * ---------------- External variables -----------------------
  */
 LinkTable *ROOT_LINK_TBL = NULL;
-int ROOT_LINK_OFFSET = 0;
 
 /**
  * \brief LinkTable generation priority lock
@@ -59,18 +59,25 @@ int ROOT_LINK_OFFSET = 0;
  * effectively gives LinkTable generation priority over file transfer.
  */
 static pthread_mutex_t link_lock = PTHREAD_MUTEX_INITIALIZER;
-static void make_link_relative(const char *page_url, char *link_url);
 
 /**
  * \brief create a new Link
  */
-static Link *Link_new(const char *linkname, LinkType type)
+Link *Link_new(const char *linkname, LinkType type)
 {
     Link *link = CALLOC(1, sizeof(Link));
 
     strncpy(link->linkname, linkname, NAME_MAX);
     strncpy(link->linkpath, linkname, NAME_MAX);
+
     link->type = type;
+    link->parent_table = NULL;
+    link->next_table = NULL;
+    link->cache_ptr = NULL;
+    link->time = 0;
+    link->content_length = 0;
+    link->is_virtual = 0;
+    link->virtual_content = NULL;
 
     /*
      * remove the '/' from linkname if it exists
@@ -86,201 +93,6 @@ static Link *Link_new(const char *linkname, LinkType type)
     return link;
 }
 
-static int is_same_origin(const char *link_url)
-{
-    return !CONFIG.external_links || !ROOT_LINK_TBL
-           || !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
-}
-
-static CURL *Link_to_curl(Link *link)
-{
-    CURL *curl = curl_easy_init();
-    if (!curl) {
-        lprintf(fatal, "curl_easy_init() failed!\n");
-    }
-    /*
-     * set up some basic curl stuff
-     */
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_USERAGENT, CONFIG.user_agent);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    /*
-     * for following directories without the '/'
-     */
-    ret = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_URL, link->f_url);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_PIPEWAIT, 1L);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    if (curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_3)) {
-        ret = curl_easy_setopt(curl, CURLOPT_HTTP_VERSION,
-                               CURL_HTTP_VERSION_2_0);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 15);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_SHARE, CURL_SHARE);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    if (CONFIG.cafile || CONFIG.capath) {
-        /*
-         * Having been given a certificate file or directory, disable any search
-         * paths built into libcurl, so that we exclusively use the explicitly
-         * given certificate(s).
-         */
-        ret = curl_easy_setopt(curl, CURLOPT_CAPATH, CONFIG.capath);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-
-        ret = curl_easy_setopt(curl, CURLOPT_CAINFO, CONFIG.cafile);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.insecure_tls) {
-        ret = curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.log_type & libcurl_debug) {
-        ret = curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.http_headers) {
-        if (is_same_origin(link->f_url)) {
-            ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER,
-                                   CONFIG.http_headers);
-            if (ret) {
-                lprintf(error, "%s\n", curl_easy_strerror(ret));
-            }
-        }
-    }
-
-    if (CONFIG.http_username) {
-        /*
-         * Only apply credentials to the mounted server. When
-         * --external-links is active, cross-origin links must NOT receive
-         * the user's credentials for the primary server.
-         */
-        if (is_same_origin(link->f_url)) {
-            ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
-                                   CONFIG.http_username);
-            if (ret) {
-                lprintf(error, "%s\n", curl_easy_strerror(ret));
-            }
-        }
-    }
-
-    if (CONFIG.http_password) {
-        if (is_same_origin(link->f_url)) {
-            ret = curl_easy_setopt(curl, CURLOPT_PASSWORD,
-                                   CONFIG.http_password);
-            if (ret) {
-                lprintf(error, "%s\n", curl_easy_strerror(ret));
-            }
-        }
-    }
-
-    if (CONFIG.proxy) {
-        ret = curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.proxy_username) {
-        ret = curl_easy_setopt(curl, CURLOPT_PROXYUSERNAME,
-                               CONFIG.proxy_username);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.proxy_password) {
-        ret = curl_easy_setopt(curl, CURLOPT_PROXYPASSWORD,
-                               CONFIG.proxy_password);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.proxy_cafile || CONFIG.proxy_capath) {
-        /* See CONFIG.cafile above */
-        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAPATH, CONFIG.proxy_capath);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-
-        ret = curl_easy_setopt(curl, CURLOPT_PROXY_CAINFO, CONFIG.proxy_cafile);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    return curl;
-}
-
-static void Link_req_file_stat(Link *this_link)
-{
-    CURL *curl = Link_to_curl(this_link);
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_FILETIME, 1L);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-
-    /*
-     * We need to put the variable on the heap, because otherwise the
-     * variable gets popped from the stack as the function returns.
-     *
-     * It gets freed in curl_process_msgs();
-     */
-    TransferStruct *transfer = CALLOC(1, sizeof(TransferStruct));
-
-    transfer->link = this_link;
-    transfer->type = FILESTAT;
-    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, transfer);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-
-    transfer_nonblocking(curl);
-}
 
 /**
  * \brief Fill in the uninitialised entries in a link table
@@ -294,6 +106,25 @@ static void LinkTable_uninitialised_fill(LinkTable *linktbl)
     }
     int u;
     char s[STATUS_LEN];
+
+    /*
+     * Cache-first HEAD/stat resolution: resolve stats from disk container
+     * without sending network requests if already cached.
+     */
+    if (CACHE_SYSTEM_INIT) {
+        for (int i = 0; i < linktbl->size; i++) {
+            Link *this_link = linktbl->links[i];
+            if (this_link->type == LINK_UNINITIALISED_FILE
+                || this_link->type == LINK_UNINITIALISED_DIR) {
+                CacheStat cs;
+                if (CacheContainer_read_head(this_link->f_url, &cs) == 1) {
+                    this_link->time = cs.remote_mtime;
+                    this_link->content_length = (size_t)cs.content_length;
+                    this_link->type = cs.link_type;
+                }
+            }
+        }
+    }
 
     /*
      * Start all uninitialized requests once
@@ -375,22 +206,13 @@ static LinkTable *single_LinkTable_new(const char *url)
     }
     LinkTable_add(linktbl, link);
     LinkTable_uninitialised_fill(linktbl);
+    LinkTable_add_diagnostics(linktbl, NULL, 0, NULL, 0);
     LinkTable_print(linktbl);
     return linktbl;
 }
 
 LinkTable *LinkSystem_init(const char *url)
 {
-    size_t len = strnlen(url, PATH_MAX);
-    /*
-     * --------- Set the length of the root link -----------
-     */
-    /*
-     * This is where the '/' should be
-     */
-    ROOT_LINK_OFFSET
-        = (len > 0 && url[len - 1] == '/') ? (int)len - 1 : (int)len;
-
     /*
      * --------------------- Enable cache system --------------------
      */
@@ -406,7 +228,7 @@ LinkTable *LinkSystem_init(const char *url)
      * ----------- Create the root link table --------------
      */
     if (CONFIG.mode == NORMAL) {
-        ROOT_LINK_TBL = LinkTable_new(url);
+        ROOT_LINK_TBL = LinkTable_new(url, NULL);
     } else if (CONFIG.mode == SINGLE) {
         ROOT_LINK_TBL = single_LinkTable_new(url);
     } else if (CONFIG.mode == SONIC) {
@@ -431,617 +253,103 @@ void LinkTable_add(LinkTable *linktbl, Link *link)
     linktbl->size++;
 }
 
-static LinkType linkname_to_LinkType(const char *linkname)
+void LinkTable_add_diagnostics(LinkTable *linktbl, const char *content,
+                               size_t content_len, const char *header,
+                               size_t header_len)
 {
-    if (linkname[0] == '\0' || linkname[0] == '/') {
-        return LINK_INVALID;
-    }
-
-    /* Now allow all printable characters */
-    for (int i = 0; linkname[i] != '\0'; i++) {
-        char c = linkname[i];
-        if (!isprint(c)) {
-            return LINK_INVALID;
-        }
-    }
-
-    /* The linkname must not contain '/' in the middle. */
-    const char *slash = strchr(linkname, '/');
-    if (slash) {
-        int linkname_len = strnlen(linkname, NAME_MAX) - 1;
-        if (slash - linkname != linkname_len) {
-            return LINK_INVALID;
-        }
-    }
-
-    /* '/' must be at the end to be a valid directory name */
-    if (linkname[strnlen(linkname, NAME_MAX) - 1] == '/') {
-        return LINK_UNINITIALISED_DIR;
-    }
-
-    return LINK_UNINITIALISED_FILE;
-}
-
-int link_linknames_equal(const char *str_a, const char *str_b)
-{
-    if (!str_a || !str_b) {
-        return 0;
-    }
-    size_t len_a = strnlen(str_a, NAME_MAX);
-    size_t len_b = strnlen(str_b, NAME_MAX);
-    size_t max_len = MAX(len_a, len_b);
-    size_t comp_len = MIN(len_a, len_b);
-    int identical = 0;
-
-    /* The length of the strings differ by more than 1 character. */
-    if (max_len - comp_len > 1) {
-        goto end;
-    }
-
-    /* Assuming that the shorter string has a non-zero length */
-    if (comp_len) {
-        /* Assuming that the common parts of the strings are the same */
-        if (!strncmp(str_a, str_b, comp_len)) {
-            /* If the lengths are equal, they are identical */
-            if (len_a == len_b) {
-                identical = 1;
-            } else {
-                /* Otherwise the last character of the longer string should be
-                 * '/' */
-                const char *longer_str = len_a > len_b ? str_a : str_b;
-                identical = (longer_str[comp_len] == '/');
-            }
-        }
-    }
-
-end:
-    return identical;
-}
-
-struct LinkHashSet {
-    const char **buckets;
-    int capacity;
-    int size;
-};
-
-unsigned int link_hash_str(const char *str)
-{
-    unsigned int hash = 5381;
-    int c;
-    size_t len = strnlen(str, NAME_MAX);
-
-    /* Strip all trailing slashes */
-    while (len > 0 && str[len - 1] == '/') {
-        len--;
-    }
-
-    for (size_t i = 0; i < len; i++) {
-        c = (unsigned char)str[i];
-        hash = ((hash << 5) + hash) + c;
-    }
-    return hash;
-}
-
-LinkHashSet *LinkHashSet_new(int capacity)
-{
-    if (capacity <= 0) {
-        capacity = 16;
-    } else {
-        int power = 1;
-        while (power < capacity && power < (1 << 30)) {
-            power <<= 1;
-        }
-        capacity = power;
-    }
-    LinkHashSet *set = (LinkHashSet *)CALLOC(1, sizeof(LinkHashSet));
-    set->capacity = capacity;
-    set->buckets = (const char **)CALLOC(capacity, sizeof(const char *));
-    return set;
-}
-
-static void LinkHashSet_resize(LinkHashSet *set)
-{
-    if (set->capacity <= 0) {
+    if (!linktbl) {
         return;
     }
-    int old_capacity = set->capacity;
-    const char **old_buckets = set->buckets;
-    if (set->capacity > INT_MAX / 2) {
-        lprintf(fatal, "LinkHashSet capacity overflow\n");
-    }
-    set->capacity *= 2;
-    set->buckets = (const char **)CALLOC(set->capacity, sizeof(const char *));
 
-    for (int i = 0; i < old_capacity; i++) {
-        if (old_buckets[i]) {
-            unsigned int hash = link_hash_str(old_buckets[i]);
-            int bucket = hash & (set->capacity - 1);
-            while (set->buckets[bucket] != NULL) {
-                bucket = (bucket + 1) & (set->capacity - 1);
-            }
-            set->buckets[bucket] = old_buckets[i];
+    /* Check if .httpdirfs already exists */
+    for (int i = 1; i < linktbl->size; i++) {
+        if (!strcmp(linktbl->links[i]->linkname, ".httpdirfs")) {
+            return;
         }
     }
-    FREE(old_buckets);
+
+    Link *diag_dir = Link_new(".httpdirfs", LINK_DIR);
+    diag_dir->is_virtual = 1;
+    diag_dir->time = linktbl->index_time;
+    if (linktbl->size > 0 && linktbl->links && linktbl->links[0]) {
+        snprintf(diag_dir->f_url, sizeof(diag_dir->f_url), "%s",
+                 linktbl->links[0]->f_url);
+    }
+
+    LinkTable *diag_tbl = CALLOC(1, sizeof(LinkTable));
+    diag_tbl->size = 0;
+    diag_tbl->index_time = linktbl->index_time;
+    diag_tbl->refcount = 1;
+    diag_tbl->parent_tbl = linktbl;
+    diag_tbl->parent_link = diag_dir;
+
+    Link *diag_head = Link_new(".httpdirfs", LINK_HEAD);
+    diag_head->is_virtual = 1;
+    diag_head->time = linktbl->index_time;
+    if (linktbl->size > 0 && linktbl->links && linktbl->links[0]) {
+        snprintf(diag_head->f_url, sizeof(diag_head->f_url), "%s",
+                 linktbl->links[0]->f_url);
+    }
+    LinkTable_add(diag_tbl, diag_head);
+
+    Link *content_link = Link_new("CONTENT", LINK_FILE);
+    content_link->is_virtual = 1;
+    content_link->time = linktbl->index_time;
+    content_link->content_length = content_len;
+    if (content && content_len > 0) {
+        content_link->virtual_content = CALLOC(1, content_len + 1);
+        memcpy(content_link->virtual_content, content, content_len);
+        content_link->virtual_content[content_len] = '\0';
+    }
+    LinkTable_add(diag_tbl, content_link);
+
+    Link *header_link = Link_new("HEADER", LINK_FILE);
+    header_link->is_virtual = 1;
+    header_link->time = linktbl->index_time;
+    header_link->content_length = header_len;
+    if (header && header_len > 0) {
+        header_link->virtual_content = CALLOC(1, header_len + 1);
+        memcpy(header_link->virtual_content, header, header_len);
+        header_link->virtual_content[header_len] = '\0';
+    }
+    LinkTable_add(diag_tbl, header_link);
+
+    diag_dir->next_table = diag_tbl;
+    LinkTable_add(linktbl, diag_dir);
 }
 
-int LinkHashSet_add(LinkHashSet *set, const char *linkname)
+int is_ancestor_head_link(const LinkTable *linktbl, const char *target_url)
 {
-    if (!set || !linkname || set->capacity <= 0) {
+    if (!linktbl || !target_url || target_url[0] == '\0') {
         return 0;
     }
-    if (set->size >= set->capacity / 2) {
-        LinkHashSet_resize(set);
-    }
-    unsigned int hash = link_hash_str(linkname);
-    int bucket = hash & (set->capacity - 1);
-    while (set->buckets[bucket] != NULL) {
-        if (link_linknames_equal(set->buckets[bucket], linkname)) {
-            return 0;
-        }
-        bucket = (bucket + 1) & (set->capacity - 1);
-    }
-    set->buckets[bucket] = STRDUP(linkname);
-    set->size++;
-    return 1;
-}
 
-void LinkHashSet_free(LinkHashSet *set)
-{
-    if (!set) {
-        return;
-    }
-    for (int i = 0; i < set->capacity; i++) {
-        if (set->buckets[i]) {
-            FREE(set->buckets[i]);
-        }
-    }
-    FREE(set->buckets);
-    FREE(set);
-}
-
-/**
- * \brief Check if a URL is an external (absolute) URL.
- * \return 1 if the URL starts with http:// or https://, 0 otherwise
- */
-int is_external_url(const char *url)
-{
-    if (!url) {
-        return 0;
-    }
-    return (strncasecmp(url, "http://", 7) == 0
-            || strncasecmp(url, "https://", 8) == 0);
-}
-
-static int parse_origin(const char *url, size_t origin_len, char *scheme,
-                        size_t scheme_max, char *host, size_t host_max,
-                        int *port)
-{
-    if (!url || origin_len == 0) {
-        return -1;
-    }
-
-    // Find "://" within origin_len
-    const char *scheme_end = NULL;
-    for (size_t i = 0; i + 2 < origin_len; i++) {
-        if (url[i] == ':' && url[i + 1] == '/' && url[i + 2] == '/') {
-            scheme_end = url + i;
-            break;
+    /* Check current folder's head link (prevent self-loops) */
+    if (linktbl->links && linktbl->size > 0 && linktbl->links[0]) {
+        if (url_matches_head_link(target_url, linktbl->links[0]->f_url)) {
+            return 1;
         }
     }
 
-    if (!scheme_end) {
-        return -1; // malformed origin
-    }
-
-    size_t scheme_len = (size_t)(scheme_end - url);
-    if (scheme_len >= scheme_max) {
-        return -1;
-    }
-    strncpy(scheme, url, scheme_len);
-    scheme[scheme_len] = '\0';
-    // Lowercase scheme
-    for (size_t i = 0; i < scheme_len; i++) {
-        if (scheme[i] >= 'A' && scheme[i] <= 'Z') {
-            scheme[i] += 32;
-        }
-    }
-
-    const char *host_start = scheme_end + 3;
-    const char *origin_end = url + origin_len;
-    if (host_start >= origin_end) {
-        return -1;
-    }
-
-    size_t host_part_len = (size_t)(origin_end - host_start);
-
-    // Check for IPv6 bracketed host
-    const char *bracket_close = NULL;
-    if (*host_start == '[') {
-        for (const char *p = host_start; p < origin_end; p++) {
-            if (*p == ']') {
-                bracket_close = p;
-                break;
+    /* Check ancestor tables in parent_tbl chain */
+    for (const LinkTable *cur = linktbl->parent_tbl; cur != NULL;
+         cur = cur->parent_tbl) {
+        if (cur->links && cur->size > 0 && cur->links[0]) {
+            if (url_matches_head_link(target_url, cur->links[0]->f_url)) {
+                return 1;
             }
         }
     }
 
-    const char *port_colon = NULL;
-    if (bracket_close) {
-        // Look for colon after the closing bracket
-        for (const char *p = bracket_close + 1; p < origin_end; p++) {
-            if (*p == ':') {
-                port_colon = p;
-                break;
-            }
-        }
-    } else {
-        // Look for colon in the host part (there should be at most one colon if
-        // no brackets)
-        for (const char *p = host_start; p < origin_end; p++) {
-            if (*p == ':') {
-                port_colon = p;
-                break;
-            }
-        }
-    }
-
-    size_t host_len;
-    if (port_colon) {
-        host_len = (size_t)(port_colon - host_start);
-        // Parse port
-        int p_val = 0;
-        for (const char *p = port_colon + 1; p < origin_end; p++) {
-            if (*p >= '0' && *p <= '9') {
-                p_val = p_val * 10 + (*p - '0');
-            } else {
-                return -1; // invalid character in port
-            }
-        }
-        *port = p_val;
-    } else {
-        host_len = host_part_len;
-        // Default port based on scheme
-        if (strcmp(scheme, "http") == 0) {
-            *port = 80;
-        } else if (strcmp(scheme, "https") == 0) {
-            *port = 443;
-        } else {
-            *port = 0; // unknown scheme default port
-        }
-    }
-
-    if (host_len >= host_max) {
-        return -1;
-    }
-    strncpy(host, host_start, host_len);
-    host[host_len] = '\0';
-    // Lowercase host
-    for (size_t i = 0; i < host_len; i++) {
-        if (host[i] >= 'A' && host[i] <= 'Z') {
-            host[i] += 32;
+    /* Check ROOT_LINK_TBL explicitly as safety fallback */
+    if (ROOT_LINK_TBL && ROOT_LINK_TBL != linktbl && ROOT_LINK_TBL->links
+        && ROOT_LINK_TBL->size > 0 && ROOT_LINK_TBL->links[0]) {
+        if (url_matches_head_link(target_url, ROOT_LINK_TBL->links[0]->f_url)) {
+            return 1;
         }
     }
 
     return 0;
-}
-
-/**
- * \brief Check if link_url has a different origin than page_url.
- * \details Compares scheme + host + port by finding the path component
- *          (the third '/') of each URL and doing a prefix comparison.
- * \return 1 if cross-origin, 0 if same origin
- */
-int is_cross_origin(const char *page_url, const char *link_url)
-{
-    if (!page_url || !link_url) {
-        return 1;
-    }
-    /*
-     * Walk past "scheme://host:port" in both URLs and compare the
-     * prefix up to (but not including) the first path slash.
-     * If either URL has fewer than 3 slashes, check if it is a valid
-     * absolute URL to determine the origin length.
-     */
-    int slashes = 0;
-    const char *p = page_url;
-    while (*p && slashes < 3 && *p != '?' && *p != '#') {
-        if (*p == '/') {
-            slashes++;
-        }
-        p++;
-    }
-    size_t page_origin_len;
-    if (slashes < 3) {
-        if (is_external_url(page_url)) {
-            const char *q = strpbrk(page_url, "?#");
-            page_origin_len = q ? (size_t)(q - page_url) : strlen(page_url);
-        } else {
-            return 1; /* malformed page_url */
-        }
-    } else {
-        page_origin_len = (size_t)(p - page_url) - 1;
-    }
-
-    slashes = 0;
-    const char *l = link_url;
-    while (*l && slashes < 3 && *l != '?' && *l != '#') {
-        if (*l == '/') {
-            slashes++;
-        }
-        l++;
-    }
-    size_t link_origin_len;
-    if (slashes < 3) {
-        if (is_external_url(link_url)) {
-            const char *q = strpbrk(link_url, "?#");
-            link_origin_len = q ? (size_t)(q - link_url) : strlen(link_url);
-        } else {
-            return 1; /* malformed link_url */
-        }
-    } else {
-        link_origin_len = (size_t)(l - link_url) - 1;
-    }
-
-    char page_scheme[32];
-    char page_host[PATH_MAX];
-    int page_port = 0;
-    if (parse_origin(page_url, page_origin_len, page_scheme,
-                     sizeof(page_scheme), page_host, sizeof(page_host),
-                     &page_port)
-        != 0) {
-        return 1;
-    }
-
-    char link_scheme[32];
-    char link_host[PATH_MAX];
-    int link_port = 0;
-    if (parse_origin(link_url, link_origin_len, link_scheme,
-                     sizeof(link_scheme), link_host, sizeof(link_host),
-                     &link_port)
-        != 0) {
-        return 1;
-    }
-
-    if (strcmp(page_scheme, link_scheme) != 0) {
-        return 1;
-    }
-    if (strcmp(page_host, link_host) != 0) {
-        return 1;
-    }
-    if (page_port != link_port) {
-        return 1;
-    }
-
-    return 0;
-}
-
-
-/**
- * \brief Extract the filename component from an external URL.
- * \details For "http://example.com/path/file.iso" returns "file.iso".
- *          For "http://example.com/path/dir/" returns "dir".
- *          Query strings ("?") are stripped.
- *          Returns empty string for a root-only URL.
- * \note The caller must free the returned string with FREE().
- */
-char *external_url_to_filename(const char *url)
-{
-    if (!url) {
-        return STRDUP("");
-    }
-    /*
-     * Skip the scheme://host:port/ prefix — walk past the third slash.
-     */
-    int slashes = 0;
-    const char *p = url;
-    while (*p && slashes < 3) {
-        if (*p == '/') {
-            slashes++;
-        }
-        p++;
-    }
-    /* p now points to the first character of the path (after the
-     * trailing slash of the origin, e.g. "path/file.iso"). */
-
-    if (*p == '\0') {
-        /* Root-only URL — no filename to extract. */
-        return STRDUP("");
-    }
-
-    size_t path_len = strlen(p);
-    char *path_copy = STRNDUP(p, path_len);
-
-    /* Strip query string and fragment identifier if present (must be done
-     * before trailing slash check).
-     */
-    char *q = strpbrk(path_copy, "?#");
-    if (q) {
-        *q = '\0';
-    }
-
-    /* Strip trailing slash if present. */
-    path_len = strlen(path_copy);
-    if (path_len > 0 && path_copy[path_len - 1] == '/') {
-        path_copy[path_len - 1] = '\0';
-    }
-
-    /* Find the last '/' and take everything after it. */
-    char *last_slash = strrchr(path_copy, '/');
-    char *filename;
-    if (last_slash) {
-        filename = STRDUP(last_slash + 1);
-    } else {
-        filename = STRDUP(path_copy);
-    }
-    FREE(path_copy);
-
-    /* URL-decode the filename so it can be used as a filesystem name. */
-    char *decoded = curl_easy_unescape(NULL, filename, 0, NULL);
-    if (!decoded) {
-        return filename;
-    }
-    char *result = STRDUP(decoded);
-    curl_free(decoded);
-    FREE(filename);
-    for (char *ptr = result; *ptr; ptr++) {
-        if (*ptr == '/') {
-            *ptr = '_';
-        }
-    }
-    return result;
-}
-
-/**
- * Shamelessly copied and pasted from:
- * https://github.com/google/gumbo-parser/blob/master/examples/find_links.cc
- */
-static void HTML_to_LinkTable(const char *url, GumboNode *node,
-                              LinkTable *linktbl, LinkHashSet *set)
-{
-    if (node->type != GUMBO_NODE_ELEMENT) {
-        return;
-    }
-    GumboAttribute *href;
-    href = gumbo_get_attribute(&node->v.element.attributes, "href");
-    if (node->v.element.tag == GUMBO_TAG_A && href) {
-        const char *raw_href = href->value;
-
-        if (CONFIG.external_links && is_external_url(raw_href)
-            && is_cross_origin(url, raw_href)) {
-            /*
-             * -------- External (cross-origin) link handling --------
-             * Extract the filename from the external URL and create a
-             * Link with f_url already pointing to the external server.
-             * LinkTable_fill() will skip URL-construction for these.
-             */
-            char *filename = external_url_to_filename(raw_href);
-            if (filename && filename[0] != '\0' && strcmp(filename, ".") != 0
-                && strcmp(filename, "..") != 0) {
-                /* Determine type: directory if URL (ignoring query/fragment)
-                 * ends with '/' */
-                const char *qf = strpbrk(raw_href, "?#");
-                size_t href_len
-                    = qf ? (size_t)(qf - raw_href) : strlen(raw_href);
-                LinkType type = (href_len > 0 && raw_href[href_len - 1] == '/')
-                                    ? LINK_UNINITIALISED_DIR
-                                    : LINK_UNINITIALISED_FILE;
-
-                /* First-wins: skip if a link with this name already exists */
-                if (LinkHashSet_add(set, filename)) {
-                    Link *link = Link_new(filename, type);
-                    snprintf(link->f_url, sizeof(link->f_url), "%s", raw_href);
-                    LinkTable_add(linktbl, link);
-                }
-            }
-            FREE(filename);
-        } else {
-            /*
-             * -------- Same-origin / relative link handling (unchanged)
-             * --------
-             */
-            char *relative_url = STRNDUP(raw_href, PATH_MAX);
-            make_link_relative(url, relative_url);
-
-            /* Truncate at the first slash to support links to subdirectories */
-            char *slash = strchr(relative_url, '/');
-            if (slash && slash != relative_url) {
-                /* Don't truncate full URIs like http://... */
-                if (*(slash - 1) != ':' && slash[1] != '/') {
-                    slash[1] = '\0';
-                }
-            }
-
-            /* if it is valid, copy the link onto the heap */
-            LinkType type = linkname_to_LinkType(relative_url);
-
-            /* Check if the new link is a duplicate */
-            if ((type == LINK_UNINITIALISED_DIR)
-                || (type == LINK_UNINITIALISED_FILE)) {
-                if (LinkHashSet_add(set, relative_url)) {
-                    LinkTable_add(linktbl, Link_new(relative_url, type));
-                }
-            }
-            FREE(relative_url);
-        }
-    }
-
-    /* Note the recursive call */
-    GumboVector *children = &node->v.element.children;
-    for (size_t i = 0; i < children->length; ++i) {
-        HTML_to_LinkTable(url, (GumboNode *)children->data[i], linktbl, set);
-    }
-}
-
-void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
-{
-    if (!linktbl || !url || !html) {
-        return;
-    }
-    GumboOutput *output = gumbo_parse(html);
-    if (!output) {
-        return;
-    }
-    LinkHashSet *set = LinkHashSet_new(4096);
-    if (output->root) {
-        HTML_to_LinkTable(url, output->root, linktbl, set);
-    }
-    LinkHashSet_free(set);
-    gumbo_destroy_output(&kGumboDefaultOptions, output);
-}
-void Link_set_file_stat(Link *this_link, CURL *curl)
-{
-    long http_resp;
-    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    if (http_resp == HTTP_OK) {
-        curl_off_t cl = 0;
-        ret = curl_easy_getinfo(curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-        ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(this_link->time));
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-
-        if (this_link->type == LINK_UNINITIALISED_FILE) {
-            if (cl < 0) {
-                this_link->type = LINK_INVALID;
-            } else if (cl == 0 && CONFIG.zero_len_is_dir) {
-                this_link->type = LINK_DIR;
-            } else {
-                this_link->type = LINK_FILE;
-                this_link->content_length = cl;
-            }
-        } else if (this_link->type == LINK_UNINITIALISED_DIR) {
-            this_link->type = LINK_DIR;
-        }
-
-    } else {
-        lprintf(warning, "%s: HTTP %ld\n", this_link->f_url, http_resp);
-        /*
-         * Emit a targeted warning if an external link needs authentication
-         * that we are not providing.
-         */
-        if (CONFIG.external_links && (http_resp == 401 || http_resp == 403)
-            && ROOT_LINK_TBL
-            && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url,
-                               this_link->f_url)) {
-            lprintf(warning,
-                    "External link %s requires authentication (HTTP %ld). "
-                    "Credentials are only applied to the mounted "
-                    "server.\n",
-                    this_link->f_url, http_resp);
-        }
-        if (HTTP_temp_failure(http_resp) || CONFIG.invalid_refresh) {
-            lprintf(warning, ", retrying later.\n");
-        } else {
-            this_link->type = LINK_INVALID;
-        }
-    }
 }
 
 static void LinkTable_fill(LinkTable *linktbl)
@@ -1136,7 +444,7 @@ void LinkTable_unref(LinkTable *tbl)
     if (tbl->refcount == 0 && tbl->orphaned) {
         LinkTable *parent = tbl->parent_tbl;
         Link *parent_link = tbl->parent_link;
-        if (parent_link) {
+        if (parent_link && parent_link->next_table == tbl) {
             parent_link->next_table = NULL;
         }
         PTHREAD_MUTEX_UNLOCK(&link_lock);
@@ -1160,6 +468,7 @@ void LinkTable_free(LinkTable *linktbl)
                 continue;
             }
             LinkTable_free(entry->next_table);
+            FREE(entry->virtual_content);
             FREE(entry);
         }
         FREE(linktbl->links);
@@ -1195,9 +504,8 @@ LinkTable *LinkTable_alloc(const char *url)
 {
     LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
     linktbl->size = 0;
-    linktbl->index_time = 0;
+    linktbl->index_time = time(NULL);
     linktbl->links = NULL;
-
 
     /*
      * populate the base URL
@@ -1209,81 +517,86 @@ LinkTable *LinkTable_alloc(const char *url)
     return linktbl;
 }
 
-char *url_to_cache_path(const char *url)
+LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
 {
-    if (!url) {
-        return NULL;
-    }
-    char *unescaped_path;
-    /*
-     * When --external-links is active a directory link from an external
-     * server may be navigated. Its URL won't share the root server's
-     * origin, so applying ROOT_LINK_OFFSET would produce garbage. Detect
-     * this case by checking whether url is cross-origin from root.
-     */
-    if (ROOT_LINK_TBL && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, url)) {
-        /* External URL: use the full URL as the cache key path. */
-        char *temp = curl_easy_unescape(NULL, url, 0, NULL);
-        unescaped_path = temp ? STRDUP(temp) : STRDUP(url);
-        if (temp) {
-            curl_free(temp);
-        }
-        /* Sanitize unescaped_path to prevent path traversal via ".." */
-        char *p = unescaped_path;
-        while ((p = strstr(p, ".."))) {
-            p[0] = '_';
-            p[1] = '_';
-            p += 2;
-        }
-        /* Sanitize unescaped_path to prevent path traversal and invalid
-         * directory structures */
-        for (char *sp = unescaped_path; *sp; sp++) {
-            if (*sp == '/' || *sp == ':') {
-                *sp = '_';
-            }
-        }
-    } else {
-        size_t url_len = strlen(url);
-        const char *offset_url = (url_len >= (size_t)ROOT_LINK_OFFSET)
-                                     ? url + ROOT_LINK_OFFSET
-                                     : url;
-        char *temp = curl_easy_unescape(NULL, offset_url, 0, NULL);
-        unescaped_path = temp ? STRDUP(temp) : STRDUP(offset_url);
-        if (temp) {
-            curl_free(temp);
-        }
-    }
-    return unescaped_path;
-}
-
-LinkTable *LinkTable_new(const char *url)
-{
-    char *unescaped_path = url_to_cache_path(url);
     LinkTable *linktbl = NULL;
 
     /*
-     * Attempt to load the LinkTable from the disk.
+     * Attempt to load the LinkTable from the disk. The unified single-file
+     * cache stores the raw HTTP response (response headers + HTML payload)
+     * of the directory listing; the LinkTable is regenerated in memory
+     * on-the-fly with LinkTable_parse_html(), in well under a millisecond.
      */
     if (CACHE_SYSTEM_INIT) {
-        CacheDir_create(unescaped_path);
-        LinkTable *disk_linktbl;
-
-        disk_linktbl = LinkTable_disk_open(unescaped_path);
-        if (disk_linktbl) {
+        char *payload = NULL;
+        size_t payload_len = 0;
+        char *http_header = NULL;
+        size_t http_header_len = 0;
+        time_t cache_time = 0;
+        char *resolved_url = NULL;
+        int loaded = CacheContainer_read_with_time(
+            url, &payload, &payload_len, &http_header, &http_header_len,
+            &cache_time, &resolved_url);
+        if (loaded == 1) {
             /*
-             * Check if the LinkTable needs to be refreshed based on timeout.
+             * Relative links in the cached listing must resolve against the
+             * effective URL the listing was actually served from, not the
+             * originally requested URL (a redirect /dir -> /dir/ changes the
+             * base path).
              */
-            time_t time_now = time(NULL);
-            if (time_now - disk_linktbl->index_time > CONFIG.refresh_timeout) {
-                lprintf(info, "time_now: %ld, index_time: %ld\n",
-                        (long)time_now, (long)disk_linktbl->index_time);
-                lprintf(info, "diff: %ld, limit: %d\n",
-                        (long)(time_now - disk_linktbl->index_time),
-                        CONFIG.refresh_timeout);
-                LinkTable_free(disk_linktbl);
-            } else {
-                linktbl = disk_linktbl;
+            const char *eff_url
+                = (resolved_url && resolved_url[0]) ? resolved_url : url;
+            /*
+             * Re-apply the max_html_size gate to a cached body. A cached
+             * listing for a promoted (no-trailing-slash) directory that now
+             * exceeds max_html_size (e.g. the limit was lowered after it was
+             * cached) is treated as an empty folder, not parsed. Real
+             * directories (trailing slash) are exempt, as at download time.
+             */
+            const char *qf = strpbrk(eff_url, "?#");
+            size_t tlen = qf ? (size_t)(qf - eff_url) : strlen(eff_url);
+            int real_dir = (tlen > 0 && eff_url[tlen - 1] == '/');
+            if (!real_dir && CONFIG.html_is_directory
+                && CONFIG.max_html_size > 0
+                && (off_t)payload_len > CONFIG.max_html_size) {
+                lprintf(warning,
+                        "cached listing for %s is %zu bytes, exceeding "
+                        "max_html_size (%ld bytes); leaving it as an empty "
+                        "folder\n",
+                        url, payload_len, (long)CONFIG.max_html_size);
+                FREE(payload);
+                FREE(http_header);
+                linktbl = LinkTable_alloc(url);
+                linktbl->parent_tbl = parent_tbl;
+                linktbl->index_time = time(NULL);
+                CacheContainer_delete(url);
+                if (strcmp(eff_url, url) != 0) {
+                    CacheContainer_delete(eff_url);
+                }
+                FREE(resolved_url);
+                return linktbl;
             }
+            lprintf(info, "loaded cached directory listing for %s in < 1 ms\n",
+                    url);
+            linktbl = LinkTable_alloc(url);
+            linktbl->parent_tbl = parent_tbl;
+            linktbl->index_time = cache_time ? cache_time : time(NULL);
+            LinkTable_parse_html(linktbl, eff_url, payload);
+            LinkTable_fill(linktbl);
+            LinkTable_add_diagnostics(linktbl, payload, payload_len,
+                                      http_header, http_header_len);
+            FREE(payload);
+            FREE(http_header);
+            FREE(resolved_url);
+        } else if (loaded == -1) {
+            lprintf(error,
+                    "Failed to read the cached directory listing "
+                    "for %s!\n",
+                    url);
+            FREE(resolved_url);
+        } else {
+            lprintf(info, "cached directory listing not found for %s\n", url);
+            FREE(resolved_url);
         }
     }
 
@@ -1293,189 +606,196 @@ LinkTable *LinkTable_new(const char *url)
      */
     if (!linktbl) {
         linktbl = LinkTable_alloc(url);
+        linktbl->parent_tbl = parent_tbl;
         linktbl->index_time = time(NULL);
 
         /*
          * start downloading the base URL
          */
-        TransferStruct ts = Link_download_full(linktbl->links[0]);
-        if (ts.curr_size == 0) {
-            LinkTable_free(linktbl);
-            return NULL;
+        TransferStruct header_ts = {0};
+        TransferStruct ts = Link_download_full(linktbl->links[0], &header_ts);
+
+        if (ts.failed) {
+            /*
+             * The listing could not be fetched at all (non-200, non-temporary
+             * response). Mark the table as failed (index_time == 0) so the
+             * callers do not cache it or attach it to the link; the next
+             * access retries the download instead of serving a stale-looking
+             * empty folder for the whole refresh interval.
+             */
+            lprintf(warning,
+                    "failed to download directory listing for %s; "
+                    "will retry on next access\n",
+                    url);
+            FREE(ts.data);
+            FREE(header_ts.data);
+            FREE(ts.eff_url);
+            linktbl->index_time = 0;
+            return linktbl;
         }
+
+        /*
+         * A directory is never turned into a file. If the listing arrived as
+         * an empty body or exceeded max_html_size (the capped download
+         * aborted), keep the freshly allocated table as an empty folder (head
+         * link only, no children) rather than parsing a partial body. The
+         * caller attaches it to the link, so the entry stays a directory.
+         */
+        if (ts.curr_size == 0 || ts.cap_hit) {
+            lprintf(warning,
+                    ts.cap_hit
+                        ? "directory listing for %s exceeds max_html_size "
+                          "(%ld bytes); leaving it as an empty folder\n"
+                        : "failed to download directory listing for %s; "
+                          "leaving it as an empty folder\n",
+                    url, (long)CONFIG.max_html_size);
+            FREE(ts.data);
+            FREE(header_ts.data);
+            FREE(ts.eff_url);
+            return linktbl;
+        }
+
+        /*
+         * Relative links must resolve against the effective URL the listing
+         * was served from, not the originally requested URL.
+         */
+        const char *parse_url
+            = (ts.eff_url && ts.eff_url[0]) ? ts.eff_url : url;
 
         /*
          * Otherwise parsed the received data
          */
-        LinkTable_parse_html(linktbl, url, ts.data);
-        FREE(ts.data);
-
+        LinkTable_parse_html(linktbl, parse_url, ts.data);
 
         LinkTable_fill(linktbl);
 
+        LinkTable_add_diagnostics(linktbl, ts.data, ts.curr_size,
+                                  header_ts.data, header_ts.curr_size);
+
         /*
-         * Save the link table
+         * Save the raw HTTP response (headers + HTML payload) to the
+         * unified single-file container cache, keyed by the effective URL.
+         * The redirect container written by Link_download_full() then maps
+         * the requested URL to this payload on cache reads.
          */
-        if (CACHE_SYSTEM_INIT && LinkTable_disk_save(linktbl, unescaped_path)) {
-            lprintf(error, "Failed to save the LinkTable!\n");
+        if (CACHE_SYSTEM_INIT
+            && CacheContainer_write(parse_url, ts.data, ts.curr_size,
+                                    header_ts.data, header_ts.curr_size)) {
+            lprintf(error, "Failed to save the directory listing container "
+                           "file!\n");
         }
+
+        FREE(ts.data);
+        FREE(header_ts.data);
+        FREE(ts.eff_url);
     }
 
-    FREE(unescaped_path);
     LinkTable_print(linktbl);
     return linktbl;
 }
 
-static void LinkTable_disk_delete(const char *dirn)
+static int is_table_expired(LinkTable *tbl)
 {
-    char *metadirn = path_append(META_DIR, dirn);
-    char *path = path_append(metadirn, ".LinkTable");
-    if (unlink(path)) {
-        lprintf(error, "unlink(%s): %s\n", path, strerror(errno));
+    if (!tbl || tbl->index_time <= 0 || CONFIG.refresh_timeout < 0) {
+        return 0;
     }
-    FREE(path);
-    FREE(metadirn);
+    if (tbl->parent_link && tbl->parent_link->is_virtual) {
+        return 0;
+    }
+    int64_t age = (int64_t)time(NULL) - tbl->index_time;
+    return age > CONFIG.refresh_timeout;
 }
 
-/* This is necessary to get the compiler on some platforms to stop
-   complaining about the fact that we're not using the return value of
-   fread, when we know we aren't and that's fine. */
-static inline void ignore_value(int i)
+static void retire_expired_table(LinkTable *tbl)
 {
-    (void)i;
+    if (!tbl) {
+        return;
+    }
+    Link *parent_link = tbl->parent_link;
+    if (parent_link && parent_link->next_table == tbl) {
+        parent_link->next_table = NULL;
+    }
+    /*
+     * Detached: never touch the parent link's slot again, otherwise a later
+     * LinkTable_unref() on the retired table could detach a replacement
+     * table that the parent has meanwhile attached.
+     */
+    tbl->parent_link = NULL;
+    tbl->orphaned = 1;
+    tbl->refcount++;
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+    LinkTable_unref(tbl);
+    PTHREAD_MUTEX_LOCK(&link_lock);
 }
 
-int LinkTable_disk_save(LinkTable *linktbl, const char *dirn)
+static pthread_mutex_t root_refresh_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static void check_and_refresh_root_table(void)
 {
-    char *metadirn = path_append(META_DIR, dirn);
-    char *path = path_append(metadirn, ".LinkTable");
-    FILE *fp = fopen(path, "w");
-    FREE(metadirn);
-
-    if (!fp) {
-        lprintf(error, "fopen(%s): %s\n", path, strerror(errno));
-        FREE(path);
-        return -1;
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    if (!ROOT_LINK_TBL || ROOT_LINK_TBL->size == 0 || !ROOT_LINK_TBL->links
+        || !ROOT_LINK_TBL->links[0] || !is_table_expired(ROOT_LINK_TBL)) {
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
+        return;
     }
 
-    if (fwrite(&linktbl->size, sizeof(int), 1, fp) != 1
-        || fwrite(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
-        lprintf(error, "Failed to save the header of %s!\n", path);
+    char root_url[PATH_MAX];
+    strncpy(root_url, ROOT_LINK_TBL->links[0]->f_url, PATH_MAX);
+    root_url[PATH_MAX - 1] = '\0';
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+
+    PTHREAD_MUTEX_LOCK(&root_refresh_lock);
+
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    if (!ROOT_LINK_TBL || !is_table_expired(ROOT_LINK_TBL)) {
+        PTHREAD_MUTEX_UNLOCK(&link_lock);
+        PTHREAD_MUTEX_UNLOCK(&root_refresh_lock);
+        return;
     }
-    FREE(path);
-    for (int i = 0; i < linktbl->size; i++) {
-        ignore_value(
-            fwrite(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp));
-        ignore_value(
-            fwrite(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp));
-        ignore_value(fwrite(&linktbl->links[i]->type, sizeof(LinkType), 1, fp));
-        ignore_value(
-            fwrite(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp));
-        ignore_value(fwrite(&linktbl->links[i]->time, sizeof(long), 1, fp));
-    }
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
 
-    int res = 0;
-
-    if (ferror(fp)) {
-        lprintf(error, "encountered ferror!\n");
-        res = -1;
-    }
-
-    if (fclose(fp)) {
-        lprintf(error, "cannot close the file pointer, %s\n", strerror(errno));
-        res = -1;
-    }
-
-    return res;
-}
-
-LinkTable *LinkTable_disk_open(const char *dirn)
-{
-    char *metadirn = path_append(META_DIR, dirn);
-    char *path = path_append(metadirn, ".LinkTable");
-    FILE *fp = fopen(path, "r");
-    FREE(metadirn);
-
-    if (!fp) {
-        FREE(path);
-        return NULL;
-    }
-
-    LinkTable *linktbl = CALLOC(1, sizeof(LinkTable));
-    int sz = 0;
-    if (fread(&sz, sizeof(int), 1, fp) != 1
-        || fread(&linktbl->index_time, sizeof(time_t), 1, fp) != 1) {
-        lprintf(error, "Failed to read the header of %s!\n", path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        return NULL;
-    }
-
-    long entry_size = (long)(NAME_MAX + PATH_MAX + sizeof(LinkType)
-                             + sizeof(size_t) + sizeof(long));
-    if (fseek(fp, 0, SEEK_END) != 0) {
-        lprintf(error, "Failed to seek %s!\n", path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        return NULL;
-    }
-    long file_size = ftell(fp);
-    if (file_size < 0
-        || fseek(fp, (long)(sizeof(int) + sizeof(time_t)), SEEK_SET) != 0) {
-        lprintf(error, "Failed to inspect %s!\n", path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        return NULL;
-    }
-
-    long max_entries
-        = (file_size - (long)(sizeof(int) + sizeof(time_t))) / entry_size;
-
-    if (sz < 1 || max_entries < sz) {
-        lprintf(error, "Invalid link table size: %d in %s!\n", sz, path);
-        fclose(fp);
-        LinkTable_free(linktbl);
-        LinkTable_disk_delete(dirn);
-        FREE(path);
-        return NULL;
-    }
-
-    linktbl->size = sz;
-    linktbl->links
-        = (Link **)CALLOC( // NOLINT(clang-analyzer-optin.taint.TaintedAlloc)
-            sz, sizeof(Link *));
-
-    for (int i = 0; i < sz; i++) {
-        linktbl->links[i] = CALLOC(1, sizeof(Link));
-        linktbl->links[i]->parent_table = linktbl;
-        if (fread(linktbl->links[i]->linkname, sizeof(char), NAME_MAX, fp)
-                != NAME_MAX
-            || fread(linktbl->links[i]->f_url, sizeof(char), PATH_MAX, fp)
-                   != PATH_MAX
-            || fread(&linktbl->links[i]->type, sizeof(LinkType), 1, fp) != 1
-            || fread(&linktbl->links[i]->content_length, sizeof(size_t), 1, fp)
-                   != 1
-            || fread(&linktbl->links[i]->time, sizeof(long), 1, fp) != 1) {
-            lprintf(error, "Corrupted LinkTable at index %d!\n", i);
-            fclose(fp);
-            LinkTable_free(linktbl);
-            LinkTable_disk_delete(dirn);
-            FREE(path);
-            return NULL;
+    LinkTable *new_root = NULL;
+    if (CONFIG.mode == NORMAL) {
+        new_root = LinkTable_new(root_url, NULL);
+    } else if (CONFIG.mode == SINGLE) {
+        new_root = single_LinkTable_new(root_url);
+    } else if (CONFIG.mode == SONIC) {
+        if (!CONFIG.sonic_id3) {
+            new_root = sonic_LinkTable_new_index("0");
+        } else {
+            new_root = sonic_LinkTable_new_id3(0, "0");
         }
     }
-    if (fclose(fp)) {
-        lprintf(error, "cannot close the file pointer, %s\n", strerror(errno));
+
+    if (new_root && new_root->index_time <= 0) {
+        /*
+         * The root refresh failed; keep the previous root table so the
+         * namespace is not hidden for the whole refresh interval.
+         */
+        lprintf(warning,
+                "failed to refresh root listing for %s; keeping "
+                "the previous table\n",
+                root_url);
+        LinkTable_free(new_root);
+        new_root = NULL;
     }
 
-    FREE(path);
-    return linktbl;
+    PTHREAD_MUTEX_LOCK(&link_lock);
+    if (new_root) {
+        LinkTable *old_root = ROOT_LINK_TBL;
+        ROOT_LINK_TBL = new_root;
+        if (old_root) {
+            old_root->orphaned = 1;
+            if (old_root->refcount == 0) {
+                LinkTable_free(old_root);
+            }
+        }
+    } else if (ROOT_LINK_TBL) {
+        time_t delay = (CONFIG.http_wait_sec > 0) ? CONFIG.http_wait_sec : 5;
+        ROOT_LINK_TBL->index_time = time(NULL) - CONFIG.refresh_timeout + delay;
+    }
+    PTHREAD_MUTEX_UNLOCK(&link_lock);
+    PTHREAD_MUTEX_UNLOCK(&root_refresh_lock);
 }
 
 LinkTable *path_to_LinkTable(const char *path)
@@ -1485,6 +805,7 @@ LinkTable *path_to_LinkTable(const char *path)
     LinkTable *next_table = NULL;
 
     if (!strcmp(path, "/")) {
+        check_and_refresh_root_table();
         next_table = ROOT_LINK_TBL;
         LinkTable_ref(next_table);
         return next_table;
@@ -1498,8 +819,19 @@ LinkTable *path_to_LinkTable(const char *path)
         PTHREAD_MUTEX_LOCK(&link_lock);
         next_table = link->next_table;
         if (next_table) {
-            next_table->refcount++;
-            next_table->orphaned = 0;
+            if (is_table_expired(next_table)) {
+                if (link->parent_table) {
+                    link->parent_table->refcount++;
+                }
+                retire_expired_table(next_table);
+                if (link->parent_table) {
+                    link->parent_table->refcount--;
+                }
+                next_table = NULL;
+            } else {
+                next_table->refcount++;
+                next_table->orphaned = 0;
+            }
         }
         PTHREAD_MUTEX_UNLOCK(&link_lock);
     }
@@ -1507,7 +839,7 @@ LinkTable *path_to_LinkTable(const char *path)
     if (!next_table) {
         LinkTable *new_table = NULL;
         if (CONFIG.mode == NORMAL) {
-            new_table = LinkTable_new(tmp_link->f_url);
+            new_table = LinkTable_new(tmp_link->f_url, tmp_link->parent_table);
         } else if (CONFIG.mode == SINGLE) {
             new_table = single_LinkTable_new(tmp_link->f_url);
         } else if (CONFIG.mode == SONIC) {
@@ -1523,8 +855,24 @@ LinkTable *path_to_LinkTable(const char *path)
 
         if (!new_table) {
             if (link) {
+                link->type = LINK_INVALID;
                 LinkTable_unref(link->parent_table);
             }
+            return NULL;
+        }
+
+        if (new_table->index_time <= 0) {
+            /*
+             * The listing download failed; do not attach the failed table.
+             * The entry stays without a table, so the next access retries
+             * the download.
+             */
+            lprintf(warning,
+                    "failed to load directory listing for %s; "
+                    "will retry on next access\n",
+                    tmp_link->f_url);
+            LinkTable_free(new_table);
+            LinkTable_unref(link->parent_table);
             return NULL;
         }
 
@@ -1617,12 +965,19 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                  * The next sub-directory exists
                  */
                 LinkTable *next_table = linktbl->links[i]->next_table;
+                if (next_table && is_table_expired(next_table)) {
+                    linktbl->refcount++;
+                    retire_expired_table(next_table);
+                    linktbl->refcount--;
+                    next_table = NULL;
+                }
                 if (!next_table) {
                     linktbl->refcount++;
                     PTHREAD_MUTEX_UNLOCK(&link_lock);
                     LinkTable *new_table = NULL;
                     if (CONFIG.mode == NORMAL) {
-                        new_table = LinkTable_new(linktbl->links[i]->f_url);
+                        new_table
+                            = LinkTable_new(linktbl->links[i]->f_url, linktbl);
                     } else if (CONFIG.mode == SONIC) {
                         if (!CONFIG.sonic_id3) {
                             new_table = sonic_LinkTable_new_index(
@@ -1642,7 +997,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                         if (linktbl->refcount == 0 && linktbl->orphaned) {
                             LinkTable *parent = linktbl->parent_tbl;
                             Link *parent_link = linktbl->parent_link;
-                            if (parent_link) {
+                            if (parent_link
+                                && parent_link->next_table == linktbl) {
                                 parent_link->next_table = NULL;
                             }
                             PTHREAD_MUTEX_UNLOCK(&link_lock);
@@ -1652,6 +1008,19 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                             }
                             PTHREAD_MUTEX_LOCK(&link_lock);
                         }
+                        return NULL;
+                    }
+
+                    if (new_table->index_time <= 0) {
+                        /*
+                         * The listing download failed; do not attach the
+                         * failed table, so the next access retries the
+                         * download.
+                         */
+                        PTHREAD_MUTEX_LOCK(&link_lock);
+                        linktbl->refcount--;
+                        PTHREAD_MUTEX_UNLOCK(&link_lock);
+                        LinkTable_free(new_table);
                         return NULL;
                     }
 
@@ -1677,6 +1046,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
 
 Link *path_to_Link(const char *path)
 {
+    check_and_refresh_root_table();
+
     lprintf(link_lock_debug, "thread %lx: locking link_lock;\n",
             (unsigned long)pthread_self());
 
@@ -1696,339 +1067,4 @@ Link *path_to_Link(const char *path)
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&link_lock);
     return link;
-}
-
-TransferStruct Link_download_full(Link *link)
-{
-    char *url = link->f_url;
-    CURL *curl = Link_to_curl(link);
-
-    TransferStruct ts = {0};
-    ts.type = DATA;
-    ts.transferring = 1;
-
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&ts);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)&ts);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-
-    /*
-     * If we get temporary HTTP failure, wait for 5 seconds before retry
-     */
-    long http_resp = 0;
-    do {
-        /*
-         * Reset the transfer struct for each attempt to avoid accumulating
-         * data from failed/partial attempts.
-         */
-        FREE(ts.data);
-        ts.curr_size = 0;
-        ts.transferring = 1;
-
-        transfer_blocking(curl);
-        ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-        if (HTTP_temp_failure(http_resp)) {
-            lprintf(warning, "URL: %s, HTTP %ld, retrying later.\n", url,
-                    http_resp);
-            sleep(CONFIG.http_wait_sec);
-        } else if (http_resp != HTTP_OK) {
-            lprintf(warning, "cannot retrieve URL: %s, HTTP %ld\n", url,
-                    http_resp);
-            ts.curr_size = 0;
-            free(ts.data); /* not FREE(); can be NULL on error path! */
-            curl_easy_cleanup(curl);
-            return ts;
-        }
-    } while (HTTP_temp_failure(http_resp));
-
-    ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    curl_easy_cleanup(curl);
-    return ts;
-}
-
-static CURL *Link_download_curl_setup(Link *link, size_t req_size, off_t offset,
-                                      TransferStruct *header,
-                                      TransferStruct *ts)
-{
-    if (!link) {
-        lprintf(fatal, "Invalid supplied\n");
-    }
-
-    size_t start = offset;
-    size_t end = start + req_size - 1;
-
-    char range_str[64];
-    snprintf(range_str, sizeof(range_str), "%lu-%lu", start, end);
-    CURL *curl = Link_to_curl(link);
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)ts);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)ts);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    ret = curl_easy_setopt(curl, CURLOPT_RANGE, range_str);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-
-    return curl;
-}
-
-static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
-{
-    /*
-     * Check for range seek support
-     */
-    if (!CONFIG.no_range_check) {
-        if (!strcasestr((header->data), "Accept-Ranges: bytes")
-            && !strcasestr((header->data), "Content-Range: bytes")) {
-            fprintf(stderr, "This web server does not support HTTP range \
-requests. If you do not believe that is the case, and if you plan to file a \
-bug report, please include the following HTTP header information:\n%s\n",
-                    header->data);
-            exit(EXIT_FAILURE);
-        }
-    }
-
-    FREE(header->data);
-
-    long http_resp;
-    CURLcode ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
-    if (ret) {
-        lprintf(error, "%s\n", curl_easy_strerror(ret));
-    }
-    curl_off_t recv = -1;
-    if ((http_resp == HTTP_OK) || (http_resp == HTTP_PARTIAL_CONTENT)
-        || (http_resp == HTTP_RANGE_NOT_SATISFIABLE)) {
-        ret = curl_easy_getinfo(curl, CURLINFO_SIZE_DOWNLOAD_T, &recv);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    } else {
-        char *url;
-        curl_easy_getinfo(curl, CURLINFO_EFFECTIVE_URL, &url);
-        lprintf(warning, "Could not download %s, HTTP %ld\n", url, http_resp);
-        if (HTTP_temp_failure(http_resp)) {
-            recv = -EAGAIN;
-        } else {
-            recv = -ENOENT;
-        }
-    }
-
-    curl_easy_cleanup(curl);
-
-    return recv;
-}
-
-static void Link_download_finish_transfer(Cache *cf, off_t offset,
-                                          TransferStruct *ts)
-{
-    if (!cf) {
-        ts->transferring = 0;
-        return;
-    }
-
-    PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-    ts->transferring = 0;
-    ActiveDownload *ad = ActiveDownload_find(cf, offset);
-    if (ad && ad->ts == ts) {
-        ad->ts = NULL;
-    }
-    if (ts->ad_ptr) {
-        ActiveDownload_unref(ts->ad_ptr);
-        ts->ad_ptr = NULL;
-    }
-    PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-}
-
-long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
-                   Cache *cf)
-{
-    if (req_size == 0 || link->content_length == 0 || offset < 0
-        || (size_t)offset >= link->content_length) {
-        return 0;
-    }
-
-    TransferStruct ts = {0};
-    TransferStruct header = {0};
-    curl_off_t recv_sz;
-
-    size_t remaining = link->content_length - (size_t)offset;
-    if (req_size > remaining) {
-        lprintf(info, "requested size larger than remaining size, req_size: \
-%zu, remaining: %zu\n",
-                req_size, remaining);
-        req_size = remaining;
-    }
-
-    do {
-        ts.curr_size = 0;
-        ts.data = NULL;
-        ts.type = DATA;
-        ts.transferring = 1;
-        ts.cache_ptr = cf;
-        ts.ad_ptr = NULL;
-
-        if (cf) {
-            PTHREAD_MUTEX_LOCK(&cf->dl_lock);
-            ActiveDownload *ad = ActiveDownload_find(cf, offset);
-            if (ad) {
-                ad->ts = &ts;
-                ts.ad_ptr = ad;
-                ad->refcount++;
-                PTHREAD_COND_BROADCAST(&ad->cond);
-            }
-            PTHREAD_MUTEX_UNLOCK(&cf->dl_lock);
-        }
-
-        header.curr_size = 0;
-        header.data = NULL;
-        header.cache_ptr = NULL;
-
-        CURL *curl
-            = Link_download_curl_setup(link, req_size, offset, &header, &ts);
-
-        transfer_blocking(curl);
-
-        recv_sz = Link_download_cleanup(curl, &header);
-
-        if (recv_sz < 0) {
-            Link_download_finish_transfer(cf, offset, &ts);
-            FREE(ts.data);
-            if (recv_sz == -EAGAIN) {
-                lprintf(warning, "HTTP temporary failure, retrying...\n");
-                sleep(CONFIG.http_wait_sec);
-                continue;
-            }
-            return recv_sz;
-        }
-
-        if (recv_sz != (long int)req_size) {
-            lprintf(error,
-                    "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
-                    req_size, recv_sz);
-            Link_download_finish_transfer(cf, offset, &ts);
-            FREE(ts.data);
-            sleep(CONFIG.http_wait_sec);
-            continue;
-        }
-
-        /* success */
-        break;
-    } while (1);
-
-    Link_download_finish_transfer(cf, offset, &ts);
-
-    memmove(output_buf, ts.data, recv_sz);
-    FREE(ts.data);
-
-    return recv_sz;
-}
-
-long path_download(const char *path, char *output_buf, size_t req_size,
-                   off_t offset)
-{
-    if (!path) {
-        lprintf(fatal, "NULL path supplied\n");
-    }
-
-    Link *link;
-    link = path_to_Link(path);
-    if (!link) {
-        return -ENOENT;
-    }
-
-    long res = Link_download(link, output_buf, req_size, offset, NULL);
-    LinkTable_unref(link->parent_table);
-    return res;
-}
-
-static void make_link_relative(const char *page_url, char *link_url)
-{
-    /*
-      Some servers make the links to subdirectories absolute (in URI terms:
-      path-absolute), but our code expects them to be relative (in URI terms:
-      path-noscheme), so change the contents of link_url as needed to
-      accommodate that.
-
-      Also, some servers serve their links as `./name`. This is helpful to
-      them because it is the only way to express relative references when the
-      first new path segment of the target contains an unescaped colon (`:`),
-      eg in `./6:1-balun.png`. While stripping the ./ strictly speaking
-      reintroduces that ambiguity, it is of little practical concern in this
-      implementation, as full URI link targets are filtered by their number of
-      slashes anyway. In URI terms, this converts path-noscheme with a leading
-      `.` segment into path-noscheme or path-rootless without that segment.
-    */
-
-    if (link_url[0] == '.' && link_url[1] == '/') {
-        memmove(link_url, link_url + 2, strlen(link_url) - 1);
-        return;
-    }
-
-    if (link_url[0] != '/') {
-        /* Already relative, nothing to do here!
-
-          (Full URIs, eg. `http://example.com/path`, pass through here
-          unmodified, but those are classified in different LinkTypes later
-          anyway).
-         */
-        return;
-    }
-
-    /* Find the slash after the host name. */
-    int slashes_left_to_find = 3;
-    while (*page_url) {
-        if (*page_url == '/' && !--slashes_left_to_find) {
-            break;
-        }
-        /* N.B. This is here, rather than doing `while (*page_url++)`, because
-           when we're done we want the pointer to point at the final slash. */
-        page_url++;
-    }
-    if (slashes_left_to_find) {
-        if (slashes_left_to_find == 1 && !*page_url) {
-            /* We're at the top level of the web site and the user entered the
-               URL without a trailing slash. */
-            page_url = "/";
-        } else {
-            /* Well, that's odd. Let's return rather than trying to dig
-               ourselves deeper into whatever hole we're in. */
-            return;
-        }
-    }
-    /* The page URL is no longer the full page_url, it's just the part after
-       the host name. */
-    /* The link URL should start with the page URL. */
-    if (strstr(link_url, page_url) != link_url) {
-        return;
-    }
-    int skip_len = strlen(page_url);
-    if (page_url[skip_len - 1] != '/') {
-        if (page_url[skip_len] != '/') {
-            /* Um, I'm not sure what to do here, so give up. */
-            return;
-        }
-        skip_len++;
-    }
-    /* Move the part of the link URL after the parent page's pat to
-       the beginning of the link URL string, discarding what came
-       before it. */
-    memmove(link_url, link_url + skip_len, strlen(link_url) - skip_len + 1);
 }
