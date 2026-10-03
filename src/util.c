@@ -26,6 +26,8 @@
  * \brief Utility functions and memory allocation wrappers implementation
  */
 
+#include <fcntl.h>
+
 #include "util.h"
 
 #include "config.h"
@@ -109,13 +111,24 @@ char *path_append(const char *path, const char *filename)
     return str;
 }
 
+static int is_existing_dir(const char *path)
+{
+    int fd = open(path, O_RDONLY | O_DIRECTORY);
+    if (fd == -1) {
+        return 0;
+    }
+    struct stat st;
+    int ok = fstat(fd, &st) == 0 && S_ISDIR(st.st_mode);
+    close(fd);
+    return ok;
+}
+
 int mkdir_p(const char *path, mode_t mode)
 {
     if (!path) {
         return -1;
     }
     char tmp[PATH_MAX];
-    char *p = NULL;
     size_t len = strnlen(path, PATH_MAX);
 
     if (len == 0 || len >= PATH_MAX) {
@@ -131,15 +144,14 @@ int mkdir_p(const char *path, mode_t mode)
         return 0;
     }
 
-    for (p = tmp + 1; *p; p++) {
+    for (char *p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
             if (p > tmp && *(p - 1) != '\0') {
                 if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
                     return -1;
                 }
-                struct stat st;
-                if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+                if (!is_existing_dir(tmp)) {
                     return -1;
                 }
             }
@@ -149,8 +161,7 @@ int mkdir_p(const char *path, mode_t mode)
     if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
         return -1;
     }
-    struct stat st;
-    if (stat(tmp, &st) != 0 || !S_ISDIR(st.st_mode)) {
+    if (!is_existing_dir(tmp)) {
         return -1;
     }
     return 0;

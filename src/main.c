@@ -566,42 +566,59 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string)
 static void print_long_help(void)
 {
     /* FUSE prints its help to stderr */
-    fprintf(stderr, "\n\
-general options:\n\
-        --config            Specify a configuration file \n\
-    -o opt,[opt...]         Mount options\n\
-    -h  --help              Print help\n\
-    -V  --version           Print version\n\
-    -f                      Foreground operation\n\
-    -s                      Disable multi-threaded operation\n\
-    -d  --debug             Enable debug output (implies -f)\n\
-\n\
-HTTPDirFS options:\n\
-    -u  --username          HTTP authentication username\n\
-    -p  --password          HTTP authentication password\n\
-    -P  --proxy             Proxy for libcurl, for more details refer to\n\
-                            https://curl.haxx.se/libcurl/c/CURLOPT_PROXY.html\n\
-        --proxy-username    Username for the proxy\n\
-        --proxy-password    Password for the proxy\n\
-        --proxy-cacert      Certificate authority for the proxy\n\
-        --proxy-capath      Certificate authority directory for the proxy\n\
-        --cache             Enable cache (default: off)\n\
-        --cache-location    Set a custom cache location\n\
-                            (default: \"${XDG_CACHE_HOME}/httpdirfs\")\n\
-        --cache-clear       Delete the cache directory or the custom location\n\
-                            specified with `--cache-location`, if the option is\n\
-                            seen first. Then exit in either case.\n\
-        --cache-clear-host  Delete only the cache of a single server host,\n\
-                            given as a full URL or a bare host (both the http\n\
-                            and https origin directories are then removed).\n\
-                            Only supported with the default cache location,\n\
-                            not with --cache-location. Then exit.\n\
-        --cache-min-size    Set minimum file size threshold for caching, in bytes\n\
-                            (default: none)\n\
-        --cache-max-size    Set maximum file size threshold for caching, in bytes\n\
-                            (default: none)\n\
-        --cacert            Certificate authority for the server\n\
-        --capath            Certificate authority directory for the server\n");
+    fprintf(stderr,
+            "\n"
+            "general options:\n"
+            "        --config            Specify a configuration file \n"
+            "    -o opt,[opt...]         Mount options\n"
+            "    -h  --help              Print help\n"
+            "    -V  --version           Print version\n"
+            "    -f                      Foreground operation\n"
+            "    -s                      Disable multi-threaded operation\n"
+            "    -d  --debug             Enable debug output (implies -f)\n"
+            "\n"
+            "HTTPDirFS options:\n"
+            "    -u  --username          HTTP authentication username\n"
+            "    -p  --password          HTTP authentication password\n"
+            "    -P  --proxy             Proxy for libcurl, for more details "
+            "refer to\n"
+            "                            https://curl.haxx.se/libcurl/c/"
+            "CURLOPT_PROXY.html\n"
+            "        --proxy-username    Username for the proxy\n"
+            "        --proxy-password    Password for the proxy\n"
+            "        --proxy-cacert      Certificate authority for the proxy\n"
+            "        --proxy-capath      Certificate authority directory for "
+            "the proxy\n"
+            "        --cache             Enable cache (default: off)\n"
+            "        --cache-location    Set a custom cache location\n"
+            "                            (default: "
+            "\"${XDG_CACHE_HOME}/httpdirfs\")\n"
+            "        --cache-clear       Delete the cache directory or the "
+            "custom location\n"
+            "                            specified with `--cache-location`, "
+            "if the option is\n"
+            "                            seen first. Then exit in either "
+            "case.\n"
+            "        --cache-clear-host  Delete only the cache of a single "
+            "server host,\n"
+            "                            given as a full URL or a bare host "
+            "(both the http\n"
+            "                            and https origin directories are "
+            "then removed).\n"
+            "                            Only supported with the default "
+            "cache location,\n"
+            "                            not with --cache-location. Then "
+            "exit.\n"
+            "        --cache-min-size    Set minimum file size threshold for "
+            "caching, in bytes\n"
+            "                            (default: none)\n"
+            "        --cache-max-size    Set maximum file size threshold for "
+            "caching, in bytes\n"
+            "                            (default: none)\n"
+            "        --cacert            Certificate authority for the "
+            "server\n"
+            "        --capath            Certificate authority directory for "
+            "the server\n");
     fprintf(stderr, "\
         --dl-seg-size       Set cache download segment size, in MB (default: " XSTR(
                         DEFAULT_DATA_BLKSZ_MB) ")\n\
@@ -634,14 +651,19 @@ HTTPDirFS options:\n\
         --single-file-mode  Single file mode - rather than mounting a whole\n\
                             directory, present a single file inside a virtual\n\
                             directory.\n\n");
-    fprintf(stderr, "\
-    For mounting a Airsonic / Subsonic server:\n\
-        --sonic-username    The username for your Airsonic / Subsonic server\n\
-        --sonic-password    The password for your Airsonic / Subsonic server\n\
-        --sonic-id3         Enable ID3 mode - this present the server content in\n\
-                            Artist/Album/Song layout \n\
-        --sonic-insecure    Authenticate against your Airsonic / Subsonic server\n\
-                            using the insecure username / hex encoded password\n\
-                            scheme\n\
-\n");
+    fprintf(stderr,
+            "    For mounting a Airsonic / Subsonic server:\n"
+            "        --sonic-username    The username for your Airsonic / "
+            "Subsonic server\n"
+            "        --sonic-password    The password for your Airsonic / "
+            "Subsonic server\n"
+            "        --sonic-id3         Enable ID3 mode - this present the "
+            "server content in\n"
+            "                            Artist/Album/Song layout \n"
+            "        --sonic-insecure    Authenticate against your Airsonic / "
+            "Subsonic server\n"
+            "                            using the insecure username / hex "
+            "encoded password\n"
+            "                            scheme\n"
+            "\n");
 }
