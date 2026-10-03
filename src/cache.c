@@ -164,7 +164,7 @@ char *CacheSystem_calc_dir(const char *url)
         && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
-    char *cache_dir_root = path_append(cache_home, "/httpdirfs/");
+    const char *cache_dir_root = path_append(cache_home, "/httpdirfs/");
     if (mkdir(cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
         && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
@@ -475,25 +475,20 @@ static int Container_create(Cache *cf)
     int existing_fd = open(full_path, O_RDONLY);
     if (existing_fd != -1) {
         CacheHeader ex_hdr;
-        if (read(existing_fd, &ex_hdr, CACHE_HEADER_SIZE)
-            == CACHE_HEADER_SIZE) {
-            if (ex_hdr.magic == CACHE_MAGIC && ex_hdr.version == CACHE_VERSION
-                && (ex_hdr.flags & CACHE_FLAG_IS_HEAD)) {
-                if (ex_hdr.http_header_len > 0) {
-                    off_t hdr_off
-                        = (off_t)(CACHE_HEADER_SIZE + ex_hdr.url_len + 1);
-                    if (lseek(existing_fd, hdr_off, SEEK_SET) == hdr_off) {
-                        saved_http_hdr = CALLOC((size_t)ex_hdr.http_header_len,
-                                                sizeof(char));
-                        if (read(existing_fd, saved_http_hdr,
-                                 ex_hdr.http_header_len)
-                            == (ssize_t)ex_hdr.http_header_len) {
-                            saved_http_hdr_len = (size_t)ex_hdr.http_header_len;
-                        } else {
-                            FREE(saved_http_hdr);
-                            saved_http_hdr = NULL;
-                        }
-                    }
+        if (read(existing_fd, &ex_hdr, CACHE_HEADER_SIZE) == CACHE_HEADER_SIZE
+            && ex_hdr.magic == CACHE_MAGIC && ex_hdr.version == CACHE_VERSION
+            && (ex_hdr.flags & CACHE_FLAG_IS_HEAD)
+            && ex_hdr.http_header_len > 0) {
+            off_t hdr_off = (off_t)(CACHE_HEADER_SIZE + ex_hdr.url_len + 1);
+            if (lseek(existing_fd, hdr_off, SEEK_SET) == hdr_off) {
+                saved_http_hdr
+                    = CALLOC((size_t)ex_hdr.http_header_len, sizeof(char));
+                if (read(existing_fd, saved_http_hdr, ex_hdr.http_header_len)
+                    == (ssize_t)ex_hdr.http_header_len) {
+                    saved_http_hdr_len = (size_t)ex_hdr.http_header_len;
+                } else {
+                    FREE(saved_http_hdr);
+                    saved_http_hdr = NULL;
                 }
             }
         }
@@ -730,7 +725,7 @@ static int Container_read(Cache *cf)
      */
     cf->header_size = (off_t)hdr.header_size;
     cf->http_header_offset = (off_t)(CACHE_HEADER_SIZE + hdr.url_len + 1);
-    cf->bitmap_offset = (off_t)(cf->http_header_offset + hdr.http_header_len);
+    cf->bitmap_offset = cf->http_header_offset + hdr.http_header_len;
 
     if (fseeko(fp, cf->bitmap_offset, SEEK_SET) != 0) {
         lprintf(error, "fseeko(): %s\n", strerror(errno));
@@ -1100,15 +1095,13 @@ static int Cache_exist(const char *fn)
             if (st.st_size >= CACHE_HEADER_SIZE) {
                 CacheHeader hdr;
                 if (pread(fd, &hdr, CACHE_HEADER_SIZE, 0)
-                    == (ssize_t)CACHE_HEADER_SIZE) {
-                    if (hdr.magic == CACHE_MAGIC && hdr.version == CACHE_VERSION
-                        && (hdr.flags
-                            & (CACHE_FLAG_IS_COMPLETE
-                               | CACHE_FLAG_IS_SPARSE))) {
-                        int64_t age = (int64_t)time(NULL) - hdr.cache_time;
-                        if (age <= CONFIG.refresh_timeout) {
-                            res = 0;
-                        }
+                        == (ssize_t)CACHE_HEADER_SIZE
+                    && hdr.magic == CACHE_MAGIC && hdr.version == CACHE_VERSION
+                    && (hdr.flags
+                        & (CACHE_FLAG_IS_COMPLETE | CACHE_FLAG_IS_SPARSE))) {
+                    int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+                    if (age <= CONFIG.refresh_timeout) {
+                        res = 0;
                     }
                 }
             } else {
@@ -1962,9 +1955,10 @@ int CacheContainer_write(const char *url, const char *payload,
      * The payload is complete: every segment is present.
      */
     const Seg seg_full = 1;
-    for (size_t i = 0; i < segbc && ok; i++) {
+    for (size_t i = 0; i < segbc; i++) {
         if (fwrite(&seg_full, sizeof(Seg), 1, fp) != 1) {
             ok = 0;
+            break;
         }
     }
     if (ok && fseeko(fp, header_size - 1, SEEK_SET) != 0) {
@@ -2383,13 +2377,13 @@ static int CacheContainer_read_head_internal(const char *url,
                         = CALLOC((size_t)hdr.http_header_len + 1, sizeof(char));
                     if (fread(raw, 1, hdr.http_header_len, fp)
                         == hdr.http_header_len) {
-                        char *ct_line = strcasestr(raw, "Content-Type:");
+                        const char *ct_line = strcasestr(raw, "Content-Type:");
                         if (ct_line) {
                             ct_line += 13;
                             while (*ct_line == ' ') {
                                 ct_line++;
                             }
-                            char *ct_end = strpbrk(ct_line, "\r\n;");
+                            const char *ct_end = strpbrk(ct_line, "\r\n;");
                             size_t ct_len = ct_end ? (size_t)(ct_end - ct_line)
                                                    : strlen(ct_line);
                             if (ct_len >= sizeof(stat_out->content_type)) {

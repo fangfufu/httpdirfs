@@ -58,19 +58,17 @@ int link_linknames_equal(const char *str_a, const char *str_b)
         goto end;
     }
 
-    /* Assuming that the shorter string has a non-zero length */
-    if (comp_len) {
-        /* Assuming that the common parts of the strings are the same */
-        if (!strncmp(str_a, str_b, comp_len)) {
-            /* If the lengths are equal, they are identical */
-            if (len_a == len_b) {
-                identical = 1;
-            } else {
-                /* Otherwise the last character of the longer string should be
-                 * '/' */
-                const char *longer_str = len_a > len_b ? str_a : str_b;
-                identical = (longer_str[comp_len] == '/');
-            }
+    /* Assuming that the shorter string has a non-zero length and that the
+     * common parts of the strings are the same */
+    if (comp_len && !strncmp(str_a, str_b, comp_len)) {
+        /* If the lengths are equal, they are identical */
+        if (len_a == len_b) {
+            identical = 1;
+        } else {
+            /* Otherwise the last character of the longer string should be
+             * '/' */
+            const char *longer_str = len_a > len_b ? str_a : str_b;
+            identical = (longer_str[comp_len] == '/');
         }
     }
 
@@ -365,11 +363,9 @@ char *generate_collision_free_name(LinkHashSet *set, const char *anchor,
         for (int j = num_segments - i; j < num_segments; j++) {
             const char *seg = segments[j];
             size_t seg_len = strlen(seg);
-            if (cur_len > 0) {
-                if (cur_len + 1 < sizeof(path_part)) {
-                    path_part[cur_len++] = '-';
-                    path_part[cur_len] = '\0';
-                }
+            if (cur_len > 0 && cur_len + 1 < sizeof(path_part)) {
+                path_part[cur_len++] = '-';
+                path_part[cur_len] = '\0';
             }
             if (cur_len + seg_len < sizeof(path_part)) {
                 memcpy(path_part + cur_len, seg, seg_len);

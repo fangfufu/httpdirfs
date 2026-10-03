@@ -252,12 +252,16 @@ const char *get_url_path_from_server_root(const char *url)
 }
 
 
+/*
+ * Note: `url` is intentionally non-const; the path is normalized in place.
+ * (The SonarCloud S995 finding on this parameter is a false positive.)
+ */
 static void normalize_url_path(char *url)
 {
     if (!url) {
         return;
     }
-    char *scheme_sep = strstr(url, "://");
+    const char *scheme_sep = strstr(url, "://");
     if (!scheme_sep) {
         return;
     }
@@ -382,7 +386,7 @@ int resolve_target_url(const char *page_url, const char *raw_href,
         resolved[href_len] = '\0';
         resolved_len = href_len;
     } else if (href_len >= 2 && raw_href[0] == '/' && raw_href[1] == '/') {
-        /* 2. Scheme-relative URL (//...) */
+        /* 2. Scheme-relative URL (leading double slash) */
         const char *colon = strchr(page_url, ':');
         if (!colon) {
             return 0;
@@ -661,7 +665,7 @@ static void normalize_percent_encoding(char *str)
     if (!str) {
         return;
     }
-    char *src = str;
+    const char *src = str;
     char *dst = str;
     while (*src) {
         if (*src == '%' && isxdigit((unsigned char)src[1])
@@ -691,7 +695,7 @@ static void collapse_duplicate_slashes(char *path)
     if (!path) {
         return;
     }
-    char *src = path;
+    const char *src = path;
     char *dst = path;
     int prev_slash = 0;
     while (*src) {

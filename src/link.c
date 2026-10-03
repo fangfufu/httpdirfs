@@ -325,28 +325,25 @@ int is_ancestor_head_link(const LinkTable *linktbl, const char *target_url)
     }
 
     /* Check current folder's head link (prevent self-loops) */
-    if (linktbl->links && linktbl->size > 0 && linktbl->links[0]) {
-        if (url_matches_head_link(target_url, linktbl->links[0]->f_url)) {
-            return 1;
-        }
+    if (linktbl->links && linktbl->size > 0 && linktbl->links[0]
+        && url_matches_head_link(target_url, linktbl->links[0]->f_url)) {
+        return 1;
     }
 
     /* Check ancestor tables in parent_tbl chain */
     for (const LinkTable *cur = linktbl->parent_tbl; cur != NULL;
          cur = cur->parent_tbl) {
-        if (cur->links && cur->size > 0 && cur->links[0]) {
-            if (url_matches_head_link(target_url, cur->links[0]->f_url)) {
-                return 1;
-            }
+        if (cur->links && cur->size > 0 && cur->links[0]
+            && url_matches_head_link(target_url, cur->links[0]->f_url)) {
+            return 1;
         }
     }
 
     /* Check ROOT_LINK_TBL explicitly as safety fallback */
     if (ROOT_LINK_TBL && ROOT_LINK_TBL != linktbl && ROOT_LINK_TBL->links
-        && ROOT_LINK_TBL->size > 0 && ROOT_LINK_TBL->links[0]) {
-        if (url_matches_head_link(target_url, ROOT_LINK_TBL->links[0]->f_url)) {
-            return 1;
-        }
+        && ROOT_LINK_TBL->size > 0 && ROOT_LINK_TBL->links[0]
+        && url_matches_head_link(target_url, ROOT_LINK_TBL->links[0]->f_url)) {
+        return 1;
     }
 
     return 0;
@@ -694,7 +691,7 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
     return linktbl;
 }
 
-static int is_table_expired(LinkTable *tbl)
+static int is_table_expired(const LinkTable *tbl)
 {
     if (!tbl || tbl->index_time <= 0 || CONFIG.refresh_timeout < 0) {
         return 0;

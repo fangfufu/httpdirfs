@@ -190,13 +190,10 @@ CURL *Link_to_curl(Link *link)
         }
     }
 
-    if (CONFIG.http_headers) {
-        if (is_same_origin(link->f_url)) {
-            ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER,
-                                   CONFIG.http_headers);
-            if (ret) {
-                lprintf(error, "%s\n", curl_easy_strerror(ret));
-            }
+    if (CONFIG.http_headers && is_same_origin(link->f_url)) {
+        ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, CONFIG.http_headers);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
     }
 
@@ -206,22 +203,16 @@ CURL *Link_to_curl(Link *link)
          * --allow-external-origin is active, cross-origin links must NOT
          * receive the user's credentials for the primary server.
          */
-        if (is_same_origin(link->f_url)) {
-            ret = curl_easy_setopt(curl, CURLOPT_USERNAME,
-                                   CONFIG.http_username);
-            if (ret) {
-                lprintf(error, "%s\n", curl_easy_strerror(ret));
-            }
+        ret = curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
     }
 
     if (CONFIG.http_password) {
-        if (is_same_origin(link->f_url)) {
-            ret = curl_easy_setopt(curl, CURLOPT_PASSWORD,
-                                   CONFIG.http_password);
-            if (ret) {
-                lprintf(error, "%s\n", curl_easy_strerror(ret));
-            }
+        ret = curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
+        if (ret) {
+            lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
     }
 
@@ -630,17 +621,16 @@ static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
     /*
      * Check for range seek support
      */
-    if (!CONFIG.no_range_check) {
-        if (!strcasestr((header->data), "Accept-Ranges: bytes")
-            && !strcasestr((header->data), "Content-Range: bytes")) {
-            fprintf(stderr,
-                    "This web server does not support HTTP range requests. "
-                    "If you do not believe that is the case, and if you plan "
-                    "to file a bug report, please include the following HTTP "
-                    "header information:\n%s\n",
-                    header->data);
-            exit(EXIT_FAILURE);
-        }
+    if (!CONFIG.no_range_check
+        && !strcasestr((header->data), "Accept-Ranges: bytes")
+        && !strcasestr((header->data), "Content-Range: bytes")) {
+        fprintf(stderr,
+                "This web server does not support HTTP range requests. "
+                "If you do not believe that is the case, and if you plan "
+                "to file a bug report, please include the following HTTP "
+                "header information:\n%s\n",
+                header->data);
+        exit(EXIT_FAILURE);
     }
 
     FREE(header->data);

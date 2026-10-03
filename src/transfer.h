@@ -33,6 +33,8 @@
 #include <stddef.h>
 #include <sys/types.h>
 
+#include "link.h"
+
 typedef struct Link Link;
 typedef struct Cache Cache;
 typedef struct ActiveDownload ActiveDownload;
@@ -80,8 +82,6 @@ struct TransferStruct {
      *  \note You MUST free the eff_url field in TransferStruct after use! */
     char *eff_url;
 };
-
-#include "link.h"
 
 /**
  * \brief Callback function for file transfer
