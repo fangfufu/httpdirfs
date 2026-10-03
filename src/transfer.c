@@ -197,7 +197,7 @@ CURL *Link_to_curl(Link *link)
         }
     }
 
-    if (CONFIG.http_username) {
+    if (CONFIG.http_username && is_same_origin(link->f_url)) {
         /*
          * Only apply credentials to the mounted server. When
          * --allow-external-origin is active, cross-origin links must NOT
@@ -209,7 +209,7 @@ CURL *Link_to_curl(Link *link)
         }
     }
 
-    if (CONFIG.http_password) {
+    if (CONFIG.http_password && is_same_origin(link->f_url)) {
         ret = curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
         if (ret) {
             lprintf(error, "%s\n", curl_easy_strerror(ret));

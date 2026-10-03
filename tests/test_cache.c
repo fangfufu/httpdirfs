@@ -802,11 +802,47 @@ void test_container_timestamps(void)
     fclose(f);
 
     /*
-     * Deterministic timestamp invalidation: the expired container must be
+     * Aged container whose remote metadata still matches the live link:
+     * the container must be KEPT (its downloaded segments are still
+     * valid), not truncated and re-downloaded.
+     */
+    Cache *cf = Cache_open("test-item");
+    TEST_ASSERT_NOT_NULL(cf);
+    Cache_close(cf);
+
+    f = fopen(full_path, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+    TEST_ASSERT_TRUE((int64_t)time(NULL) - hdr.cache_time
+                     > CONFIG.refresh_timeout);
+    TEST_ASSERT_EQUAL_INT64(1000000, hdr.remote_mtime);
+
+    /*
+     * Deterministic timestamp invalidation: when the remote metadata is
+     * unknown (remote_mtime not recorded), the expired container must be
      * detected via cache_time (not filesystem timestamps) and a fresh
      * container with a current cache_time must be created.
      */
-    Cache *cf = Cache_open("test-item");
+    f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    hdr.remote_mtime = 0;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    cf = Cache_open("test-item");
     TEST_ASSERT_NOT_NULL(cf);
     Cache_close(cf);
 

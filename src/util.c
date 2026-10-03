@@ -113,14 +113,14 @@ char *path_append(const char *path, const char *filename)
 
 static int is_existing_dir(const char *path)
 {
-    int fd = open(path, O_RDONLY | O_DIRECTORY);
-    if (fd == -1) {
-        return 0;
-    }
+    /*
+     * Metadata-only check: opening the directory with O_RDONLY |
+     * O_DIRECTORY would require read permission on it, while stat()
+     * only needs search permission on the parent. stat() follows
+     * symlinks, matching the previous behavior.
+     */
     struct stat st;
-    int ok = fstat(fd, &st) == 0 && S_ISDIR(st.st_mode);
-    close(fd);
-    return ok;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
 int mkdir_p(const char *path, mode_t mode)
