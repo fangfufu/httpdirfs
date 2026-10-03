@@ -153,13 +153,14 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
             lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
 
-        if (ts->on_complete) {
-            ts->on_complete(ts, curl, curl_msg->data.result, url);
-        } else if (curl_msg->data.result) {
-            lprintf(error, "%d - %s <%s>\n", curl_msg->data.result,
-                    curl_easy_strerror(curl_msg->data.result), url ? url : "");
-        }
+        CURLcode result = curl_msg->data.result;
         curl_multi_remove_handle(curl_multi, curl);
+        if (ts->on_complete) {
+            ts->on_complete(ts, curl, result, url);
+        } else if (result) {
+            lprintf(error, "%d - %s <%s>\n", result, curl_easy_strerror(result),
+                    url ? url : "");
+        }
     } else {
         lprintf(warning, "curl_msg->msg: %d\n", curl_msg->msg);
     }
