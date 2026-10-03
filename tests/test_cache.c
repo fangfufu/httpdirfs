@@ -541,8 +541,11 @@ void test_container_file_create_open(void)
     char full_path[512];
     snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
 
+    int fd = open(full_path, O_RDONLY);
+    TEST_ASSERT_TRUE(fd >= 0);
+
     struct stat st;
-    TEST_ASSERT_EQUAL_INT(0, stat(full_path, &st));
+    TEST_ASSERT_EQUAL_INT(0, fstat(fd, &st));
     TEST_ASSERT_EQUAL_INT((int)(CACHE_PAGE_SIZE + ((off_t)1 << 20)),
                           (int)st.st_size);
     /*
@@ -558,8 +561,6 @@ void test_container_file_create_open(void)
     TEST_ASSERT_TRUE((uintmax_t)st.st_blocks * 512 < (uintmax_t)st.st_size);
 #endif
 
-    int fd = open(full_path, O_RDONLY);
-    TEST_ASSERT_TRUE(fd >= 0);
     FILE *f = fdopen(fd, "r");
     if (f == NULL) {
         close(fd);
