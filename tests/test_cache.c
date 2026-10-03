@@ -1215,9 +1215,10 @@ void test_container_head_and_html_expiration(void)
     time_t cache_time = 0;
 
     /* Fresh read succeeds and returns cache_time */
-    TEST_ASSERT_EQUAL_INT(1, CacheContainer_read_with_time(
-                                 dir_url, &out_payload, &out_payload_len,
-                                 &out_headers, &out_headers_len, &cache_time));
+    TEST_ASSERT_EQUAL_INT(
+        1, CacheContainer_read_with_time(dir_url, &out_payload,
+                                         &out_payload_len, &out_headers,
+                                         &out_headers_len, &cache_time, NULL));
     TEST_ASSERT_NOT_NULL(out_payload);
     TEST_ASSERT_TRUE(cache_time > 0);
     FREE(out_payload);
@@ -1240,9 +1241,10 @@ void test_container_head_and_html_expiration(void)
     fclose(f);
 
     /* Expired dir container returns 0 */
-    TEST_ASSERT_EQUAL_INT(0, CacheContainer_read_with_time(
-                                 dir_url, &out_payload, &out_payload_len,
-                                 &out_headers, &out_headers_len, &cache_time));
+    TEST_ASSERT_EQUAL_INT(
+        0, CacheContainer_read_with_time(dir_url, &out_payload,
+                                         &out_payload_len, &out_headers,
+                                         &out_headers_len, &cache_time, NULL));
 
     CacheSystem_cleanup();
     CONFIG.cache_dir = old_cache_dir;

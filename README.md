@@ -267,9 +267,11 @@ server root URL. Within each origin, files are sharded into 256 subdirectories
 using the first two hex characters of their canonical URL's MD5 hash.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
-again. Subsequent reads are served offline at local storage speed. Both files
-and directories are considered stale, and refetched from the server, once they
-are older than `--refresh-timeout` seconds (default: 3600).
+again as long as the server still reports the same `Last-Modified` timestamp and
+content length. Subsequent reads are served offline at local storage speed.
+Directory listings (and files whose remote metadata cannot be verified) are
+considered stale, and refetched from the server, once they are older than
+`--refresh-timeout` seconds (default: 3600).
 
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your local storage device will get heavy I/O

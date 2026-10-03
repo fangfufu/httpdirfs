@@ -956,21 +956,38 @@ log_info "External HTTP server stopped."
     # --- Test 7d: cache clear options ---
     log_info "Subgroup: Cache clear options (--cache-clear-host and --cache-clear)"
 
-    rm -rf "${CACHE_DIR:?}"
-    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fexample.com/ab"
-    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fother.com/cd"
-    touch "${CACHE_DIR}/https%3A%2F%2Fexample.com/ab/deadbeef"
-    touch "${CACHE_DIR}/https%3A%2F%2Fother.com/cd/cafebabe"
+    # --cache-clear-host targets the default cache layout
+    # (<XDG_CACHE_HOME>/httpdirfs/<escaped origin>/...), the only layout that
+    # contains per-origin subdirectories. Use XDG_CACHE_HOME and no
+    # --cache-location so the test mirrors production.
+    CACHE_HOST_XDG="${WORK_DIR}/cache_host_xdg"
+    rm -rf "${CACHE_HOST_XDG}"
+    mkdir -p "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com/ab"
+    mkdir -p "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com/ab/deadbeef"
+    touch "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fother.com/cd/cafebabe"
 
     # Test --cache-clear-host
-    "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear-host "example.com"
-    if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fexample.com" && -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
+    XDG_CACHE_HOME="${CACHE_HOST_XDG}" "${HTTPDIRFS_BIN}" --cache-clear-host "example.com"
+    if [[ ! -d "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com" && -d "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fother.com" ]]; then
         pass "cache-clear-host: deleted target host cache directory (correct)"
     else
         fail "cache-clear-host: failed to delete target host or deleted unexpected host"
     fi
 
+    # Test that --cache-clear-host is rejected with --cache-location
+    if out=$(XDG_CACHE_HOME="${CACHE_HOST_XDG}" "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear-host "example.com" 2>&1); then
+        fail "cache-clear-host + cache-location: expected rejection"
+    elif [[ "${out}" == *"not supported together with --cache-location"* ]]; then
+        pass "cache-clear-host + cache-location: rejected with clear error (correct)"
+    else
+        fail "cache-clear-host + cache-location: unexpected output: ${out}"
+    fi
+
     # Test --cache-clear
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_DIR}/https%3A%2F%2Fother.com/cd/cafebabe"
     "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear
     if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
         pass "cache-clear: cleared custom cache directory (correct)"

@@ -594,7 +594,8 @@ HTTPDirFS options:\n\
         --cache-clear-host  Delete only the cache of a single server host,\n\
                             given as a full URL or a bare host (both the http\n\
                             and https origin directories are then removed).\n\
-                            Then exit.\n\
+                            Only supported with the default cache location,\n\
+                            not with --cache-location. Then exit.\n\
         --cache-min-size    Set minimum file size threshold for caching, in bytes\n\
                             (default: none)\n\
         --cache-max-size    Set maximum file size threshold for caching, in bytes\n\
@@ -609,8 +610,9 @@ HTTPDirFS options:\n\
         --http-header       Set one or more HTTP headers\n\
         --max-conns         Set maximum number of network connections that\n\
                             libcurl is allowed to make. (default: " XSTR(DEFAULT_NETWORK_MAX_CONNS) ")\n\
-        --refresh-timeout   Files and directories are refreshed after the\n\
-                            specified time, in seconds (default: " XSTR(DEFAULT_REFRESH_TIMEOUT) ")\n\
+        --refresh-timeout   Directory listings and files without verifiable\n\
+                            remote metadata are refreshed after the specified\n\
+                            time, in seconds (default: " XSTR(DEFAULT_REFRESH_TIMEOUT) ")\n\
         --retry-wait        Set delay in seconds before retrying an HTTP request\n\
                             after encountering an error. (default: " XSTR(DEFAULT_HTTP_WAIT_SEC) ")\n\
         --invalid-refresh   Try refreshing invalid links when reading a directory.\n\
