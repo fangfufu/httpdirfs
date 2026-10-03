@@ -1092,15 +1092,15 @@ static void Cache_free(Cache *cf)
 static int Cache_exist(const char *fn)
 {
     char *full_path = path_append(CACHE_DIR, fn);
-    struct stat st;
     int res = -1;
-    if (stat(full_path, &st) == 0) {
-        if (st.st_size >= CACHE_HEADER_SIZE) {
-            FILE *fp = fopen(full_path, "r");
-            if (fp) {
+    int fd = open(full_path, O_RDONLY);
+    if (fd != -1) {
+        struct stat st;
+        if (fstat(fd, &st) == 0) {
+            if (st.st_size >= CACHE_HEADER_SIZE) {
                 CacheHeader hdr;
-                if (fread(&hdr, 1, CACHE_HEADER_SIZE, fp)
-                    == CACHE_HEADER_SIZE) {
+                if (pread(fd, &hdr, CACHE_HEADER_SIZE, 0)
+                    == (ssize_t)CACHE_HEADER_SIZE) {
                     if (hdr.magic == CACHE_MAGIC && hdr.version == CACHE_VERSION
                         && (hdr.flags
                             & (CACHE_FLAG_IS_COMPLETE
@@ -1111,15 +1111,15 @@ static int Cache_exist(const char *fn)
                         }
                     }
                 }
-                fclose(fp);
-            }
-        } else {
-            lprintf(warning,
-                    "Cache file partially missing or invalid (zero-length).\n");
-            if (unlink(full_path) && errno != ENOENT) {
-                lprintf(fatal, "unlink(): %s\n", strerror(errno));
+            } else {
+                lprintf(warning, "Cache file partially missing or invalid "
+                                 "(zero-length).\n");
+                if (unlink(full_path) && errno != ENOENT) {
+                    lprintf(fatal, "unlink(): %s\n", strerror(errno));
+                }
             }
         }
+        close(fd);
     }
     FREE(full_path);
     return res;
@@ -2111,10 +2111,14 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
         lprintf(error, "truncated container file %s\n", fn);
     } else {
         char *disk_url = CALLOC((size_t)hdr.url_len + 1, sizeof(char));
-        if (fread(disk_url, 1, (size_t)hdr.url_len + 1, fp)
-                != (size_t)hdr.url_len + 1
-            || ferror(fp) || strncmp(key_url, disk_url, hdr.url_len) != 0
-            || key_url[hdr.url_len] != '\0') {
+        int key_match = fread(disk_url, 1, (size_t)hdr.url_len + 1, fp)
+                            == (size_t)hdr.url_len + 1
+                        && !ferror(fp);
+        if (key_match) {
+            disk_url[hdr.url_len] = '\0';
+            key_match = strcmp(key_url, disk_url) == 0;
+        }
+        if (!key_match) {
             lprintf(error, "cache key mismatch in %s\n", fn);
             FREE(disk_url);
         } else {

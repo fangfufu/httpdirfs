@@ -241,7 +241,9 @@ void test_Cache_invalid_zero_length_disk_files(void)
 
     // Verify that the recreated container file now has a valid header
     struct stat st;
-    TEST_ASSERT_EQUAL_INT(0, fstat(fileno(cf->fp), &st));
+    int fd = fileno(cf->fp);
+    TEST_ASSERT_TRUE(fd >= 0);
+    TEST_ASSERT_EQUAL_INT(0, fstat(fd, &st));
     TEST_ASSERT_TRUE(st.st_size > CACHE_HEADER_SIZE);
 
     // Close the cache
@@ -268,7 +270,9 @@ void test_Cache_invalid_zero_length_disk_files(void)
 
     // Verify it was again invalidated, recreated, and now has a valid
     // non-zero size
-    TEST_ASSERT_EQUAL_INT(0, fstat(fileno(cf->fp), &st));
+    fd = fileno(cf->fp);
+    TEST_ASSERT_TRUE(fd >= 0);
+    TEST_ASSERT_EQUAL_INT(0, fstat(fd, &st));
     TEST_ASSERT_TRUE(st.st_size > CACHE_HEADER_SIZE);
 
     Cache_close(cf);
