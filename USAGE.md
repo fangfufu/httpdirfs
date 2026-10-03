@@ -474,7 +474,7 @@ identifies directories.
   `--max-html-size 4M`).
 
 For the comprehensive architectural specification, see
-\[docs/specs/directory_detection_and_naming.md\](file:///home/fangfufu/projects/httpdirfs/docs/specs/directory_detection_and_naming.md).
+[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
 
 ______________________________________________________________________
 

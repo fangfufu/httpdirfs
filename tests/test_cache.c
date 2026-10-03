@@ -554,7 +554,7 @@ void test_container_file_create_open(void)
      * macOS (APFS) reports the logical size in st_blocks. Only assert
      * where the filesystem accounts sparse regions (Linux).
      */
-#ifndef __APPLE__
+#ifdef __linux__
     TEST_ASSERT_TRUE((uintmax_t)st.st_blocks * 512 < (uintmax_t)st.st_size);
 #endif
 

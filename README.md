@@ -342,7 +342,7 @@ HTTPDirFS uses a universal HTML parsing and collision resolution pipeline:
   (within `--max-html-size`) are dynamically promoted to virtual subdirectories.
 
 For complete technical specifications, see
-\[docs/specs/directory_detection_and_naming.md\](file:///home/fangfufu/projects/httpdirfs/docs/specs/directory_detection_and_naming.md).
+[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
 
 ### Diagnostics
 
