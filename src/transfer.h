@@ -73,6 +73,12 @@ struct TransferStruct {
     size_t size_cap;
     /** \brief Set to 1 by the capped callback if the transfer was aborted */
     int cap_hit;
+    /** \brief Set to 1 if the transfer ended in a non-200, non-temporary
+     *  HTTP response (the resource could not be retrieved) */
+    int failed;
+    /** \brief Effective URL after redirects (malloc'd, may be NULL)
+     *  \note You MUST free the eff_url field in TransferStruct after use! */
+    char *eff_url;
 };
 
 #include "link.h"

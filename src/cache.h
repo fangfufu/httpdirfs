@@ -318,6 +318,9 @@ int CacheContainer_read(const char *url, char **out_payload,
  * \param[out] out_http_header malloc'ed raw HTTP headers (set on success)
  * \param[out] out_http_header_len length of the raw HTTP headers
  * \param[out] out_cache_time Optional pointer to receive container cache_time
+ * \param[out] out_resolved_url Optional pointer to receive the effective URL
+ * the payload was cached under (after following any redirect container),
+ * malloc'ed; NULL if unset or on failure
  * \return
  *  -   1, loaded from the cache (caller frees the output buffers)
  *  -   0, not cached, or expired (nothing is freed)
@@ -327,7 +330,8 @@ int CacheContainer_read_with_time(const char *url, char **out_payload,
                                   size_t *out_payload_len,
                                   char **out_http_header,
                                   size_t *out_http_header_len,
-                                  time_t *out_cache_time);
+                                  time_t *out_cache_time,
+                                  char **out_resolved_url);
 
 /**
  * \brief Write an HTTP HEAD response to the URL's container file.

@@ -255,6 +255,15 @@ int CacheSystem_delete_host(const char *arg)
         return -1;
     }
 
+    if (CONFIG.cache_dir) {
+        lprintf(error,
+                "--cache-clear-host is not supported together with "
+                "--cache-location: per-origin subdirectories only exist in "
+                "the default cache location. Use --cache-clear to remove "
+                "the custom cache directory instead.\n");
+        return -1;
+    }
+
     static const char *schemes[2] = {"https", "http"};
     int found = 0;
 
@@ -299,8 +308,8 @@ int CacheSystem_delete_host(const char *arg)
 
 void CacheSystem_clear_host(const char *arg)
 {
-    (void)CacheSystem_delete_host(arg);
-    exit(EXIT_SUCCESS);
+    int rc = CacheSystem_delete_host(arg);
+    exit(rc < 0 ? EXIT_FAILURE : EXIT_SUCCESS);
 }
 
 static void ensure_parent_dir(const char *filepath);
@@ -663,16 +672,27 @@ static int Container_read(Cache *cf)
     FREE(disk_url);
 
     /*
-     * Deterministic timestamp invalidation: the container is stale if it was
-     * downloaded more than CONFIG.refresh_timeout seconds ago. This is
-     * immune to filesystem timestamp quirks (progressive writes updating
-     * st_mtime, cp resetting timestamps, ...).
+     * A file payload whose remote Last-Modified timestamp and content length
+     * both match the live link has not changed on the server, so it stays
+     * valid regardless of its age: once a segment of the file has been
+     * downloaded, it is not downloaded again. Only when the remote metadata
+     * is unknown do we fall back to the deterministic age-based
+     * invalidation, which is immune to filesystem timestamp quirks
+     * (progressive writes updating st_mtime, cp resetting timestamps, ...).
+     * HEAD metadata and directory listings have their own expiry handling.
      */
-    int64_t age = (int64_t)time(NULL) - hdr.cache_time;
-    if (age > CONFIG.refresh_timeout) {
-        lprintf(warning, "outdated cache file: %s (age: %jd, limit: %d)\n",
-                cf->path, (intmax_t)age, CONFIG.refresh_timeout);
-        return EBADMSG;
+    int remote_unchanged = hdr.remote_mtime > 0 && cf->link->time > 0
+                           && hdr.remote_mtime == (int64_t)cf->link->time
+                           && (uintmax_t)hdr.content_length
+                                  == (uintmax_t)cf->link->content_length;
+
+    if (!remote_unchanged) {
+        int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+        if (age > CONFIG.refresh_timeout) {
+            lprintf(warning, "outdated cache file: %s (age: %jd, limit: %d)\n",
+                    cf->path, (intmax_t)age, CONFIG.refresh_timeout);
+            return EBADMSG;
+        }
     }
 
     /*
@@ -2009,7 +2029,8 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
                                         size_t *out_payload_len,
                                         char **out_http_header,
                                         size_t *out_http_header_len,
-                                        time_t *out_cache_time, int depth)
+                                        time_t *out_cache_time,
+                                        char **out_resolved_url, int depth)
 {
     *out_payload = NULL;
     *out_payload_len = 0;
@@ -2017,6 +2038,9 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
     *out_http_header_len = 0;
     if (out_cache_time) {
         *out_cache_time = 0;
+    }
+    if (out_resolved_url) {
+        *out_resolved_url = NULL;
     }
 
     if (!CACHE_SYSTEM_INIT || !url || !url[0] || depth > 5) {
@@ -2063,7 +2087,8 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
                 FREE(canon_url);
                 res = CacheContainer_read_internal(
                     target_url, out_payload, out_payload_len, out_http_header,
-                    out_http_header_len, out_cache_time, depth + 1);
+                    out_http_header_len, out_cache_time, out_resolved_url,
+                    depth + 1);
                 FREE(target_url);
                 return res;
             }
@@ -2093,6 +2118,9 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
             lprintf(error, "cache key mismatch in %s\n", fn);
             FREE(disk_url);
         } else {
+            if (out_resolved_url) {
+                *out_resolved_url = STRDUP(disk_url);
+            }
             FREE(disk_url);
             int64_t age = (int64_t)time(NULL) - hdr.cache_time;
             if (age > CONFIG.refresh_timeout) {
@@ -2161,11 +2189,12 @@ int CacheContainer_read_with_time(const char *url, char **out_payload,
                                   size_t *out_payload_len,
                                   char **out_http_header,
                                   size_t *out_http_header_len,
-                                  time_t *out_cache_time)
+                                  time_t *out_cache_time,
+                                  char **out_resolved_url)
 {
     return CacheContainer_read_internal(url, out_payload, out_payload_len,
                                         out_http_header, out_http_header_len,
-                                        out_cache_time, 0);
+                                        out_cache_time, out_resolved_url, 0);
 }
 
 int CacheContainer_read(const char *url, char **out_payload,
@@ -2174,7 +2203,7 @@ int CacheContainer_read(const char *url, char **out_payload,
 {
     return CacheContainer_read_with_time(url, out_payload, out_payload_len,
                                          out_http_header, out_http_header_len,
-                                         NULL);
+                                         NULL, NULL);
 }
 
 int CacheContainer_write_head(const char *url, long http_resp,

@@ -75,7 +75,8 @@ HTTPDirFS options:
         --cache-clear-host  Delete only the cache of a single server host,
                             given as a full URL or a bare host (both the http
                             and https origin directories are then removed).
-                            Then exit.
+                            Only supported with the default cache location,
+                            not with --cache-location. Then exit.
         --cache-min-size    Set minimum file size threshold for caching, in bytes
                             (default: none)
         --cache-max-size    Set maximum file size threshold for caching, in bytes
@@ -88,8 +89,9 @@ HTTPDirFS options:
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
                             libcurl is allowed to make. (default: 6)
-        --refresh-timeout   Files and directories are refreshed after the
-                            specified time, in seconds (default: 3600)
+        --refresh-timeout   Directory listings and files without verifiable
+                            remote metadata are refreshed after the specified
+                            time, in seconds (default: 3600)
         --retry-wait        Set delay in seconds before retrying an HTTP request
                             after encountering an error. (default: 5)
         --invalid-refresh   Try refreshing invalid links when reading a directory.
@@ -289,6 +291,10 @@ ______________________________________________________________________
   host, provided as a full URL (e.g., `https://example.com/dir`) or a bare
   hostname (e.g., `example.com`), clearing both the HTTP and HTTPS origin cache
   directories, and immediately exits.
+- **Note:** Only supported with the default cache location. Per-origin
+  subdirectories do not exist when a custom location is set with
+  `--cache-location`, so combining the two options is rejected with an error;
+  use `--cache-clear` to remove a custom cache directory.
 
 #### `--dl-seg-size <size>`
 
@@ -333,9 +339,11 @@ ______________________________________________________________________
 
 #### `--refresh-timeout <seconds>`
 
-- **Description:** Sets the duration in seconds after which cached files and
-  directory listings are treated as stale and are refetched from the remote
-  server when accessed.
+- **Description:** Sets the duration in seconds after which directory listings,
+  and cached files whose remote `Last-Modified` timestamp or content length
+  cannot be verified, are treated as stale and refetched from the remote server
+  when accessed. A cached file whose remote `Last-Modified` timestamp and
+  content length both match the server is reused regardless of its age.
 - **Default:** `3600` (1 hour)
 
 #### `--retry-wait <seconds>`

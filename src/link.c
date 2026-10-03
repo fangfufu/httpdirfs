@@ -444,7 +444,7 @@ void LinkTable_unref(LinkTable *tbl)
     if (tbl->refcount == 0 && tbl->orphaned) {
         LinkTable *parent = tbl->parent_tbl;
         Link *parent_link = tbl->parent_link;
-        if (parent_link) {
+        if (parent_link && parent_link->next_table == tbl) {
             parent_link->next_table = NULL;
         }
         PTHREAD_MUTEX_UNLOCK(&link_lock);
@@ -533,10 +533,19 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
         char *http_header = NULL;
         size_t http_header_len = 0;
         time_t cache_time = 0;
+        char *resolved_url = NULL;
         int loaded = CacheContainer_read_with_time(
             url, &payload, &payload_len, &http_header, &http_header_len,
-            &cache_time);
+            &cache_time, &resolved_url);
         if (loaded == 1) {
+            /*
+             * Relative links in the cached listing must resolve against the
+             * effective URL the listing was actually served from, not the
+             * originally requested URL (a redirect /dir -> /dir/ changes the
+             * base path).
+             */
+            const char *eff_url
+                = (resolved_url && resolved_url[0]) ? resolved_url : url;
             /*
              * Re-apply the max_html_size gate to a cached body. A cached
              * listing for a promoted (no-trailing-slash) directory that now
@@ -544,9 +553,9 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
              * cached) is treated as an empty folder, not parsed. Real
              * directories (trailing slash) are exempt, as at download time.
              */
-            const char *qf = strpbrk(url, "?#");
-            size_t tlen = qf ? (size_t)(qf - url) : strlen(url);
-            int real_dir = (tlen > 0 && url[tlen - 1] == '/');
+            const char *qf = strpbrk(eff_url, "?#");
+            size_t tlen = qf ? (size_t)(qf - eff_url) : strlen(eff_url);
+            int real_dir = (tlen > 0 && eff_url[tlen - 1] == '/');
             if (!real_dir && CONFIG.html_is_directory
                 && CONFIG.max_html_size > 0
                 && (off_t)payload_len > CONFIG.max_html_size) {
@@ -561,6 +570,10 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
                 linktbl->parent_tbl = parent_tbl;
                 linktbl->index_time = time(NULL);
                 CacheContainer_delete(url);
+                if (strcmp(eff_url, url) != 0) {
+                    CacheContainer_delete(eff_url);
+                }
+                FREE(resolved_url);
                 return linktbl;
             }
             lprintf(info, "loaded cached directory listing for %s in < 1 ms\n",
@@ -568,19 +581,22 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
             linktbl = LinkTable_alloc(url);
             linktbl->parent_tbl = parent_tbl;
             linktbl->index_time = cache_time ? cache_time : time(NULL);
-            LinkTable_parse_html(linktbl, url, payload);
+            LinkTable_parse_html(linktbl, eff_url, payload);
             LinkTable_fill(linktbl);
             LinkTable_add_diagnostics(linktbl, payload, payload_len,
                                       http_header, http_header_len);
             FREE(payload);
             FREE(http_header);
+            FREE(resolved_url);
         } else if (loaded == -1) {
             lprintf(error,
                     "Failed to read the cached directory listing "
                     "for %s!\n",
                     url);
+            FREE(resolved_url);
         } else {
             lprintf(info, "cached directory listing not found for %s\n", url);
+            FREE(resolved_url);
         }
     }
 
@@ -599,13 +615,31 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
         TransferStruct header_ts = {0};
         TransferStruct ts = Link_download_full(linktbl->links[0], &header_ts);
 
+        if (ts.failed) {
+            /*
+             * The listing could not be fetched at all (non-200, non-temporary
+             * response). Mark the table as failed (index_time == 0) so the
+             * callers do not cache it or attach it to the link; the next
+             * access retries the download instead of serving a stale-looking
+             * empty folder for the whole refresh interval.
+             */
+            lprintf(warning,
+                    "failed to download directory listing for %s; "
+                    "will retry on next access\n",
+                    url);
+            FREE(ts.data);
+            FREE(header_ts.data);
+            FREE(ts.eff_url);
+            linktbl->index_time = 0;
+            return linktbl;
+        }
+
         /*
-         * A directory is never turned into a file. If the listing could not be
-         * fetched (non-200 / empty body) or exceeded max_html_size (the capped
-         * download aborted), keep the freshly allocated table as an empty
-         * folder (head link only, no children) rather than parsing a partial
-         * body. The caller attaches it to the link, so the entry stays a
-         * directory.
+         * A directory is never turned into a file. If the listing arrived as
+         * an empty body or exceeded max_html_size (the capped download
+         * aborted), keep the freshly allocated table as an empty folder (head
+         * link only, no children) rather than parsing a partial body. The
+         * caller attaches it to the link, so the entry stays a directory.
          */
         if (ts.curr_size == 0 || ts.cap_hit) {
             lprintf(warning,
@@ -617,13 +651,21 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
                     url, (long)CONFIG.max_html_size);
             FREE(ts.data);
             FREE(header_ts.data);
+            FREE(ts.eff_url);
             return linktbl;
         }
 
         /*
+         * Relative links must resolve against the effective URL the listing
+         * was served from, not the originally requested URL.
+         */
+        const char *parse_url
+            = (ts.eff_url && ts.eff_url[0]) ? ts.eff_url : url;
+
+        /*
          * Otherwise parsed the received data
          */
-        LinkTable_parse_html(linktbl, url, ts.data);
+        LinkTable_parse_html(linktbl, parse_url, ts.data);
 
         LinkTable_fill(linktbl);
 
@@ -632,17 +674,20 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
 
         /*
          * Save the raw HTTP response (headers + HTML payload) to the
-         * unified single-file container cache.
+         * unified single-file container cache, keyed by the effective URL.
+         * The redirect container written by Link_download_full() then maps
+         * the requested URL to this payload on cache reads.
          */
         if (CACHE_SYSTEM_INIT
-            && CacheContainer_write(url, ts.data, ts.curr_size, header_ts.data,
-                                    header_ts.curr_size)) {
+            && CacheContainer_write(parse_url, ts.data, ts.curr_size,
+                                    header_ts.data, header_ts.curr_size)) {
             lprintf(error, "Failed to save the directory listing container "
                            "file!\n");
         }
 
         FREE(ts.data);
         FREE(header_ts.data);
+        FREE(ts.eff_url);
     }
 
     LinkTable_print(linktbl);
@@ -670,6 +715,12 @@ static void retire_expired_table(LinkTable *tbl)
     if (parent_link && parent_link->next_table == tbl) {
         parent_link->next_table = NULL;
     }
+    /*
+     * Detached: never touch the parent link's slot again, otherwise a later
+     * LinkTable_unref() on the retired table could detach a replacement
+     * table that the parent has meanwhile attached.
+     */
+    tbl->parent_link = NULL;
     tbl->orphaned = 1;
     tbl->refcount++;
     PTHREAD_MUTEX_UNLOCK(&link_lock);
@@ -714,6 +765,19 @@ static void check_and_refresh_root_table(void)
         } else {
             new_root = sonic_LinkTable_new_id3(0, "0");
         }
+    }
+
+    if (new_root && new_root->index_time <= 0) {
+        /*
+         * The root refresh failed; keep the previous root table so the
+         * namespace is not hidden for the whole refresh interval.
+         */
+        lprintf(warning,
+                "failed to refresh root listing for %s; keeping "
+                "the previous table\n",
+                root_url);
+        LinkTable_free(new_root);
+        new_root = NULL;
     }
 
     PTHREAD_MUTEX_LOCK(&link_lock);
@@ -794,6 +858,21 @@ LinkTable *path_to_LinkTable(const char *path)
                 link->type = LINK_INVALID;
                 LinkTable_unref(link->parent_table);
             }
+            return NULL;
+        }
+
+        if (new_table->index_time <= 0) {
+            /*
+             * The listing download failed; do not attach the failed table.
+             * The entry stays without a table, so the next access retries
+             * the download.
+             */
+            lprintf(warning,
+                    "failed to load directory listing for %s; "
+                    "will retry on next access\n",
+                    tmp_link->f_url);
+            LinkTable_free(new_table);
+            LinkTable_unref(link->parent_table);
             return NULL;
         }
 
@@ -918,7 +997,8 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                         if (linktbl->refcount == 0 && linktbl->orphaned) {
                             LinkTable *parent = linktbl->parent_tbl;
                             Link *parent_link = linktbl->parent_link;
-                            if (parent_link) {
+                            if (parent_link
+                                && parent_link->next_table == linktbl) {
                                 parent_link->next_table = NULL;
                             }
                             PTHREAD_MUTEX_UNLOCK(&link_lock);
@@ -928,6 +1008,19 @@ static Link *path_to_Link_recursive(char *path, LinkTable *linktbl)
                             }
                             PTHREAD_MUTEX_LOCK(&link_lock);
                         }
+                        return NULL;
+                    }
+
+                    if (new_table->index_time <= 0) {
+                        /*
+                         * The listing download failed; do not attach the
+                         * failed table, so the next access retries the
+                         * download.
+                         */
+                        PTHREAD_MUTEX_LOCK(&link_lock);
+                        linktbl->refcount--;
+                        PTHREAD_MUTEX_UNLOCK(&link_lock);
+                        LinkTable_free(new_table);
                         return NULL;
                     }
 

@@ -558,6 +558,7 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
         } else if (http_resp != HTTP_OK) {
             lprintf(warning, "cannot retrieve URL: %s, HTTP %ld\n", url,
                     http_resp);
+            ts.failed = 1;
             ts.curr_size = 0;
             free(ts.data); /* not FREE(); can be NULL on error path! */
             ts.data = NULL;
@@ -579,6 +580,9 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     if (CACHE_SYSTEM_INIT && eff_url && eff_url[0]
         && strcmp(eff_url, url) != 0) {
         CacheContainer_write_redirect(url, eff_url, http_resp);
+    }
+    if (eff_url && eff_url[0]) {
+        ts.eff_url = STRDUP(eff_url);
     }
     if (!header_out) {
         FREE(header_local.data);

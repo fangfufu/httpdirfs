@@ -875,13 +875,14 @@ void test_LinkTable_expired_subdirectory(void)
     /*
      * When traversing into /sub/file, the expired table is retired/detached
      * and a fresh table is reloaded. With no server available the reload
-     * yields an empty folder (a directory never becomes a file or vanishes),
-     * so the link keeps a non-NULL (empty) next_table, and /sub/file is not
-     * found within it.
+     * fails; a failed listing must not be attached as a fresh empty table
+     * (that would hide the error until refresh_timeout expires). The link
+     * therefore keeps a NULL next_table and the download is retried on the
+     * next access; /sub/file is not found.
      */
     Link *link = path_to_Link("/sub/file");
     TEST_ASSERT_NULL(link);
-    TEST_ASSERT_NOT_NULL(subdir->next_table);
+    TEST_ASSERT_NULL(subdir->next_table);
 
     LinkTable_free(ROOT_LINK_TBL);
     ROOT_LINK_TBL = NULL;
