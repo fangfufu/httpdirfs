@@ -280,7 +280,9 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
             char *ct = NULL;
             curl_easy_getinfo(curl, CURLINFO_CONTENT_TYPE, &ct);
 
-            int bypass = 0;
+            int bypass = (http_resp != HTTP_OK)
+                         || (ts->link->type != LINK_FILE
+                             && ts->link->type != LINK_DIR);
             if (ts->link->type == LINK_FILE) {
                 off_t file_size = (off_t)ts->link->content_length;
                 if ((CONFIG.cache_min_size >= 0
@@ -558,8 +560,10 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
                     http_resp);
             ts.curr_size = 0;
             free(ts.data); /* not FREE(); can be NULL on error path! */
+            ts.data = NULL;
             if (!header_out) {
                 free(header_ptr->data);
+                header_ptr->data = NULL;
             }
             curl_easy_cleanup(curl);
             return ts;
