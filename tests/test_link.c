@@ -723,7 +723,7 @@ void test_diagnostics_add(void)
     TEST_ASSERT_NOT_NULL(diag->next_table);
 
     /* Inside .httpdirfs: head link + CONTENT + HEADER */
-    LinkTable *dtbl = diag->next_table;
+    const LinkTable *dtbl = diag->next_table;
     TEST_ASSERT_EQUAL_INT(3, dtbl->size);
 
     Link *content = dtbl->links[1];
@@ -843,7 +843,7 @@ void test_diagnostics_empty(void)
 
     LinkTable_add_diagnostics(tbl, NULL, 0, NULL, 0);
     TEST_ASSERT_EQUAL_INT(2, tbl->size);
-    LinkTable *dtbl = tbl->links[1]->next_table;
+    const LinkTable *dtbl = tbl->links[1]->next_table;
     TEST_ASSERT_EQUAL_INT(3, dtbl->size);
     TEST_ASSERT_EQUAL_INT(0, (int)dtbl->links[1]->content_length);
     TEST_ASSERT_NULL(dtbl->links[1]->virtual_content);
@@ -1376,7 +1376,7 @@ void test_unified_parsing_HTML_to_LinkTable(void)
     TEST_ASSERT_EQUAL_STRING("https://example.com/browse/38600/sub",
                              tbl->links[1]->f_url);
 
-    // Link 2: "Readme-readme.txt"
+    // Link 2: anchor text is exactly Readme-readme.txt
     TEST_ASSERT_EQUAL_STRING("Readme-readme.txt", tbl->links[2]->linkname);
     TEST_ASSERT_EQUAL_STRING("https://example.com/file/38600/readme.txt",
                              tbl->links[2]->f_url);

@@ -155,6 +155,11 @@ void test_Cache_read_null_link(void)
 static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
                    struct FTW *ftwbuf)
 {
+    /*
+     * ftwbuf is intentionally non-const: glibc's nftw() callback type
+     * (__nftw_func_t) requires a non-const 4th argument, so the S995
+     * pointer-to-const suggestion cannot be applied here.
+     */
     (void)sb;
     (void)typeflag;
     (void)ftwbuf;
@@ -204,11 +209,11 @@ static void setup_temp_cache_dir(const char *tmp_cache_dir)
 
 void test_Cache_invalid_zero_length_disk_files(void)
 {
-    const char *tmp_cache_dir = "./test_cache_invalidation_dir";
+    char tmp_cache_dir[] = "./test_cache_invalidation_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     LinkTable *table = setup_mock_link_table("file.bin");
 
@@ -230,6 +235,9 @@ void test_Cache_invalid_zero_length_disk_files(void)
     // but the header was never written)
     FILE *f = fopen(container_filepath, "w");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     fclose(f);
 
     // Cache_open should detect this invalid container, delete it,
@@ -243,6 +251,9 @@ void test_Cache_invalid_zero_length_disk_files(void)
     struct stat st;
     int fd = fileno(cf->fp);
     TEST_ASSERT_TRUE(fd >= 0);
+    if (fd < 0) {
+        return;
+    }
     TEST_ASSERT_EQUAL_INT(0, fstat(fd, &st));
     TEST_ASSERT_TRUE(st.st_size > CACHE_HEADER_SIZE);
 
@@ -253,6 +264,9 @@ void test_Cache_invalid_zero_length_disk_files(void)
     // zero-length content_length / segbc fields
     f = fopen(container_filepath, "w");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     CacheHeader bad_hdr;
     memset(&bad_hdr, 0, sizeof(bad_hdr));
     bad_hdr.magic = CACHE_MAGIC;
@@ -272,6 +286,9 @@ void test_Cache_invalid_zero_length_disk_files(void)
     // non-zero size
     fd = fileno(cf->fp);
     TEST_ASSERT_TRUE(fd >= 0);
+    if (fd < 0) {
+        return;
+    }
     TEST_ASSERT_EQUAL_INT(0, fstat(fd, &st));
     TEST_ASSERT_TRUE(st.st_size > CACHE_HEADER_SIZE);
 
@@ -291,11 +308,11 @@ void test_Cache_alloc_num_bg_workers(void)
     // Mock the external global CONFIG
     int old_max_conns = CONFIG.max_conns;
 
-    const char *tmp_cache_dir = "./test_cache_bg_workers_dir";
+    char tmp_cache_dir[] = "./test_cache_bg_workers_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     LinkTable *table = setup_mock_link_table("dummy.bin");
 
@@ -328,11 +345,11 @@ void test_Cache_alloc_num_bg_workers(void)
 
 void test_Cache_free_active_downloads(void)
 {
-    const char *tmp_cache_dir = "./test_cache_free_ad_dir";
+    char tmp_cache_dir[] = "./test_cache_free_ad_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     LinkTable *table = setup_mock_link_table("dummy.bin");
 
@@ -401,11 +418,11 @@ static void *waiter_thread_func(void *arg)
 
 void test_Cache_free_active_downloads_with_waiters(void)
 {
-    const char *tmp_cache_dir = "./test_cache_free_ad_wait_dir";
+    char tmp_cache_dir[] = "./test_cache_free_ad_wait_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     LinkTable *table = setup_mock_link_table("dummy.bin");
 
@@ -518,11 +535,11 @@ void test_cache_path_derivation(void)
 
 void test_container_file_create_open(void)
 {
-    const char *tmp_cache_dir = "./test_container_create_open_dir";
+    char tmp_cache_dir[] = "./test_container_create_open_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     LinkTable *table = LinkTable_alloc("https://example.com/");
     Link *link = CALLOC(1, sizeof(Link));
@@ -547,6 +564,9 @@ void test_container_file_create_open(void)
 
     int fd = open(full_path, O_RDONLY);
     TEST_ASSERT_TRUE(fd >= 0);
+    if (fd < 0) {
+        return;
+    }
 
     struct stat st;
     TEST_ASSERT_EQUAL_INT(0, fstat(fd, &st));
@@ -566,10 +586,11 @@ void test_container_file_create_open(void)
 #endif
 
     FILE *f = fdopen(fd, "r");
+    TEST_ASSERT_NOT_NULL(f);
     if (f == NULL) {
         close(fd);
+        return;
     }
-    TEST_ASSERT_NOT_NULL(f);
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
@@ -627,11 +648,11 @@ void test_container_file_create_open(void)
 
 void test_container_html_parse_on_the_fly(void)
 {
-    const char *tmp_cache_dir = "./test_container_html_dir";
+    char tmp_cache_dir[] = "./test_container_html_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     const char *url = "https://example.com/test-item";
     const char *html = "<html><body>\n"
@@ -658,6 +679,9 @@ void test_container_html_parse_on_the_fly(void)
 
     FILE *f = fopen(full_path, "r");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
@@ -738,11 +762,11 @@ void test_container_html_parse_on_the_fly(void)
 
 void test_container_timestamps(void)
 {
-    const char *tmp_cache_dir = "./test_container_ts_dir";
+    char tmp_cache_dir[] = "./test_container_ts_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     LinkTable *table = setup_mock_link_table("test-item");
     Link *link = table->links[1];
@@ -765,6 +789,9 @@ void test_container_timestamps(void)
 
     FILE *f = fopen(full_path, "r+");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
@@ -785,6 +812,9 @@ void test_container_timestamps(void)
 
     f = fopen(full_path, "r");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
     fclose(f);
@@ -804,6 +834,9 @@ void test_container_timestamps(void)
 
     f = fopen(full_path, "r");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
     fclose(f);
@@ -820,11 +853,11 @@ void test_container_timestamps(void)
 
 void test_container_file_then_dir(void)
 {
-    const char *tmp_cache_dir = "./test_container_file_then_dir_dir";
+    char tmp_cache_dir[] = "./test_container_file_then_dir_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
 
     /*
      * The resource "https://example.com/test-item" was first cached as a
@@ -936,6 +969,9 @@ void test_cache_clear_host(void)
     snprintf(example_file, sizeof(example_file), "%s/deadbeef", file_dir);
     FILE *efile = fopen(example_file, "w");
     TEST_ASSERT_NOT_NULL(efile);
+    if (efile == NULL) {
+        return;
+    }
     fclose(efile);
     snprintf(file_dir, sizeof(file_dir), "%s/ab", other_dir);
     TEST_ASSERT_EQUAL_INT(0, mkdir_p(file_dir, S_IRWXU));
@@ -943,6 +979,9 @@ void test_cache_clear_host(void)
     snprintf(other_file, sizeof(other_file), "%s/cafebabe", file_dir);
     FILE *ofile = fopen(other_file, "w");
     TEST_ASSERT_NOT_NULL(ofile);
+    if (ofile == NULL) {
+        return;
+    }
     fclose(ofile);
 
     /*
@@ -960,6 +999,9 @@ void test_cache_clear_host(void)
     TEST_ASSERT_EQUAL_INT(0, mkdir_p(file_dir, S_IRWXU));
     efile = fopen(example_file, "w");
     TEST_ASSERT_NOT_NULL(efile);
+    if (efile == NULL) {
+        return;
+    }
     fclose(efile);
     TEST_ASSERT_EQUAL_INT(
         1, CacheSystem_delete_host("https://example.com/test-item"));
@@ -984,11 +1026,11 @@ void test_cache_clear_host(void)
 
 void test_container_head_write_read(void)
 {
-    const char *tmp_cache_dir = "./test_container_head_dir";
+    char tmp_cache_dir[] = "./test_container_head_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
     CacheSystem_init(tmp_cache_dir, 0);
 
     const char *url = "https://example.com/test-head.bin";
@@ -1041,11 +1083,11 @@ void test_container_head_write_read(void)
 
 void test_container_head_to_data_promotion(void)
 {
-    const char *tmp_cache_dir = "./test_container_promo_dir";
+    char tmp_cache_dir[] = "./test_container_promo_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
     CacheSystem_init(tmp_cache_dir, 0);
 
     LinkTable *old_root = ROOT_LINK_TBL;
@@ -1082,12 +1124,15 @@ void test_container_head_to_data_promotion(void)
     snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
     struct stat st;
     TEST_ASSERT_EQUAL_INT(0, stat(full_path, &st));
-    TEST_ASSERT_EQUAL_INT64(
-        (off_t)cf->header_size + (off_t)link->content_length, st.st_size);
+    TEST_ASSERT_EQUAL_INT64(cf->header_size + (off_t)link->content_length,
+                            st.st_size);
 
     /* Read header to verify preserved flags and header len */
     FILE *f = fopen(full_path, "r");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
@@ -1107,11 +1152,11 @@ void test_container_head_to_data_promotion(void)
 
 void test_container_redirect_pointer(void)
 {
-    const char *tmp_cache_dir = "./test_container_redirect_dir";
+    char tmp_cache_dir[] = "./test_container_redirect_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
     CacheSystem_init(tmp_cache_dir, 0);
 
     const char *source_url = "https://example.com/folder";
@@ -1164,11 +1209,11 @@ void test_container_redirect_pointer(void)
 
 void test_container_head_and_html_expiration(void)
 {
-    const char *tmp_cache_dir = "./test_container_expire_dir";
+    char tmp_cache_dir[] = "./test_container_expire_dir";
     setup_temp_cache_dir(tmp_cache_dir);
 
     char *old_cache_dir = CONFIG.cache_dir;
-    CONFIG.cache_dir = (char *)tmp_cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
     CacheSystem_init(tmp_cache_dir, 0);
 
     const char *url = "https://example.com/expire-test.bin";
@@ -1193,6 +1238,9 @@ void test_container_head_and_html_expiration(void)
 
     FILE *f = fopen(full_path, "r+");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
@@ -1237,6 +1285,9 @@ void test_container_head_and_html_expiration(void)
 
     f = fopen(full_path, "r+");
     TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
     hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
