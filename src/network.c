@@ -128,6 +128,89 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
     PTHREAD_MUTEX_UNLOCK(&curl_lock);
 }
 
+/*
+ * Easy handles currently attached to the multi interface. Tracked (under
+ * transfer_lock) so that a fatal curl_multi_perform() error can fail and detach
+ * every in-flight transfer before the multi handle is rebuilt, instead of
+ * leaving transfer_blocking() waiting on a transfer that can never complete.
+ */
+static CURL **active_handles;
+static size_t n_active;
+static size_t active_cap;
+
+static int active_add_handle(CURL *handle)
+{
+    if (n_active == active_cap) {
+        size_t new_cap = active_cap ? active_cap * 2 : 16;
+        CURL **tmp = (CURL **)realloc((void *)active_handles,
+                                      new_cap * sizeof(CURL *));
+        if (!tmp) {
+            lprintf(error, "out of memory tracking active curl handles\n");
+            return -1;
+        }
+        active_handles = tmp;
+        active_cap = new_cap;
+    }
+    active_handles[n_active++] = handle;
+    return 0;
+}
+
+static void active_remove_handle(CURL *handle)
+{
+    for (size_t i = 0; i < n_active; i++) {
+        if (active_handles[i] == handle) {
+            memmove((void *)&active_handles[i],
+                    (const void *)&active_handles[i + 1],
+                    (n_active - i - 1) * sizeof(CURL *));
+            n_active--;
+            return;
+        }
+    }
+}
+
+static void curl_multi_init_new(void)
+{
+    curl_multi = curl_multi_init();
+    if (!curl_multi) {
+        lprintf(fatal, "curl_multi_init() failed!\n");
+    }
+    curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
+                      CONFIG.max_conns);
+    curl_multi_setopt(curl_multi, CURLMOPT_MAX_HOST_CONNECTIONS,
+                      CONFIG.max_conns);
+}
+
+/*
+ * Fail and detach every in-flight transfer, then rebuild the multi handle.
+ * Called (with transfer_lock held) when curl_multi_perform() reports a fatal
+ * CURLMcode. Each transfer is marked failed and cleared so a blocking waiter
+ * stops polling (no busy-spin); transfers with a completion callback are
+ * finalized through it. The multi handle is reset before it is used again.
+ */
+static void curl_multi_fail_all_and_reset(void)
+{
+    for (size_t i = 0; i < n_active; i++) {
+        CURL *h = active_handles[i];
+        curl_multi_remove_handle(curl_multi, h);
+        TransferStruct *ts = NULL;
+        if (!curl_easy_getinfo(h, CURLINFO_PRIVATE, &ts) && ts) {
+            ts->transferring = 0;
+            ts->failed = 1;
+            char *url = NULL;
+            curl_easy_getinfo(h, CURLINFO_EFFECTIVE_URL, &url);
+            if (ts->on_complete) {
+                ts->on_complete(ts, h, CURLE_ABORTED_BY_CALLBACK, url);
+            } else {
+                lprintf(error, "aborted transfer for <%s> after multi error\n",
+                        url ? url : "");
+            }
+        }
+    }
+    n_active = 0;
+    curl_multi_cleanup(curl_multi);
+    curl_multi_init_new();
+}
+
 /**
  * \brief Process a curl message
  * \details Adapted from:
@@ -155,6 +238,7 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
 
         CURLcode result = curl_msg->data.result;
         curl_multi_remove_handle(curl_multi, curl);
+        active_remove_handle(curl);
         if (ts->on_complete) {
             ts->on_complete(ts, curl, result, url);
         } else if (result) {
@@ -182,7 +266,14 @@ int curl_multi_perform_once(void)
     int n_running_curl = 0;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
     if (mc) {
-        lprintf(error, "%s\n", curl_multi_strerror(mc));
+        /*
+         * Fatal multi error. Fail and detach every in-flight transfer and
+         * rebuild the multi handle so the failure propagates to each transfer
+         * owner (a blocking waiter stops polling instead of busy-spinning) and
+         * the handle is clean before it is used for new transfers.
+         */
+        lprintf(error, "curl_multi_perform: %s\n", curl_multi_strerror(mc));
+        curl_multi_fail_all_and_reset();
         n_running_curl = 0;
     }
 
@@ -268,6 +359,8 @@ void transfer_blocking(CURL *curl)
     if (res > 0) {
         lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
         ts->transferring = 0;
+    } else {
+        active_add_handle(curl);
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
@@ -288,11 +381,23 @@ void transfer_nonblocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "%s\n", curl_multi_strerror(res));
+    } else {
+        active_add_handle(curl);
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
+}
+
+void transfer_requeue_locked(CURL *curl)
+{
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    if (res > 0) {
+        lprintf(error, "requeue: %s\n", curl_multi_strerror(res));
+    } else {
+        active_add_handle(curl);
+    }
 }
 
 int HTTP_temp_failure(HTTPResponseCode http_resp)
