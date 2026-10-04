@@ -21,7 +21,7 @@ set -euo pipefail
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HTTP_PORT="${HTTPDIRFS_TEST_PORT:-0}"
+HTTP_PORT="${HTTPDIRFS_TEST_PORT:-34521}"
 
 # Parse options
 MODE="all"
@@ -93,6 +93,11 @@ cleanup() {
         do_unmount "${CACHE_MOUNT_DIR}"
         sleep 1
     fi
+    if [[ -n "${ADV_MOUNT_DIR:-}" ]] \
+        && mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        do_unmount "${ADV_MOUNT_DIR}"
+        sleep 1
+    fi
 
     # Stop HTTP server
     if [[ -n "${HTTP_PID:-}" ]] && kill -0 "${HTTP_PID}" 2>/dev/null; then
@@ -143,11 +148,12 @@ WORK_DIR="$(mktemp -d /tmp/httpdirfs-integration-test.XXXXXX)"
 SERVE_DIR="${WORK_DIR}/serve"
 MOUNT_DIR="${WORK_DIR}/mnt"
 CACHE_MOUNT_DIR="${WORK_DIR}/cache_mnt"
+ADV_MOUNT_DIR="${WORK_DIR}/adv_mnt"
 CACHE_DIR="${WORK_DIR}/cache"
 MANIFEST="${SERVE_DIR}/manifest.json"
 MOUNT_TIMEOUT=15
 
-mkdir -p "${SERVE_DIR}" "${MOUNT_DIR}" "${CACHE_MOUNT_DIR}" "${CACHE_DIR}"
+mkdir -p "${SERVE_DIR}" "${MOUNT_DIR}" "${CACHE_MOUNT_DIR}" "${CACHE_DIR}" "${ADV_MOUNT_DIR}"
 
 log_info "Work directory: ${WORK_DIR}"
 log_info "httpdirfs binary: ${HTTPDIRFS_BIN}"
@@ -447,6 +453,38 @@ else
     fail "Deduplication failed for 'subdir with spaces' (count: ${subdir_count_dup})"
 fi
 
+# 4i. Test: In-directory hidden diagnostics (.httpdirfs)
+log_info "Test group: In-directory diagnostics (.httpdirfs)"
+
+if [[ -d "${MOUNT_DIR}/.httpdirfs" ]]; then
+    pass ".httpdirfs directory exists"
+else
+    fail ".httpdirfs directory missing"
+fi
+
+if [[ -f "${MOUNT_DIR}/.httpdirfs/CONTENT" ]] && [[ -s "${MOUNT_DIR}/.httpdirfs/CONTENT" ]]; then
+    pass ".httpdirfs/CONTENT exists and is non-empty"
+else
+    fail ".httpdirfs/CONTENT missing or empty"
+fi
+
+if [[ -f "${MOUNT_DIR}/.httpdirfs/HEADER" ]] && [[ -s "${MOUNT_DIR}/.httpdirfs/HEADER" ]]; then
+    pass ".httpdirfs/HEADER exists and is non-empty"
+else
+    fail ".httpdirfs/HEADER missing or empty"
+fi
+
+if grep -qi "HTTP/" "${MOUNT_DIR}/.httpdirfs/HEADER"; then
+    pass ".httpdirfs/HEADER contains HTTP status header"
+else
+    fail ".httpdirfs/HEADER does not contain HTTP status line"
+fi
+
+if [[ -d "${SUBDIR}/.httpdirfs" ]] && [[ -s "${SUBDIR}/.httpdirfs/CONTENT" ]]; then
+    pass "Subdirectory .httpdirfs exists with non-empty CONTENT"
+else
+    fail "Subdirectory .httpdirfs missing or empty"
+fi
 
 # ─── Step 5: Unmount non-cache mount ────────────────────────────────────────
 
@@ -557,12 +595,12 @@ HTML
 
 EXT_TEST_URL="${BASE_URL}ext_test_dir/"
 
-# ── Test 1: file listing with --external-links ─────────────────────────────
-log_info "Test group: External-links file listing"
+# ── Test 1: file listing with --allow-external-origin ──────────────────────
+log_info "Test group: External-origin file listing"
 
 "${HTTPDIRFS_BIN}" \
     -f \
-    --external-links \
+    --allow-external-origin \
     "${EXT_TEST_URL}" \
     "${EXT_MOUNT_DIR}" &
 EXT_HTTPDIRFS_PID=$!
@@ -572,7 +610,7 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     sleep 1
 done
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    fail "httpdirfs (--external-links) failed to mount."
+    fail "httpdirfs (--allow-external-origin) failed to mount."
     kill "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
 else
     # local file is present
@@ -665,8 +703,8 @@ else
     wait "${EXT_HTTPDIRFS_PID}" 2>/dev/null || true
 fi
 
-# ── Test 3: backward compatibility (no --external-links) ───────────────────
-log_info "Test group: External-links backward compatibility"
+# ── Test 3: external origins disabled by default (no --allow-external-origin)
+log_info "Test group: External origins disabled by default"
 
 "${HTTPDIRFS_BIN}" \
     -f \
@@ -679,27 +717,27 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
     sleep 1
 done
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    fail "httpdirfs (no --external-links) failed to mount."
+    fail "httpdirfs (no --allow-external-origin) failed to mount."
     kill "${COMPAT_PID}" 2>/dev/null || true
 else
     if [[ ! -e "${EXT_MOUNT_DIR}/external_file.txt" ]]; then
-        pass "external_link_backward_compat: external_file.txt not present (correct)"
+        pass "external_origin_default_disabled: external_file.txt not present (correct)"
     else
-        fail "external_link_backward_compat: external_file.txt unexpectedly present"
+        fail "external_origin_default_disabled: external_file.txt unexpectedly present"
     fi
 
     if [[ -e "${EXT_MOUNT_DIR}/local_ext_test.txt" ]]; then
-        pass "external_link_backward_compat: local_ext_test.txt still present"
+        pass "external_origin_default_disabled: local_ext_test.txt still present"
     else
-        fail "external_link_backward_compat: local_ext_test.txt missing"
+        fail "external_origin_default_disabled: local_ext_test.txt missing"
     fi
 
     do_unmount "${EXT_MOUNT_DIR}"
     wait "${COMPAT_PID}" 2>/dev/null || true
 fi
 
-# ── Test 6: cache mode with --external-links ───────────────────────────────
-log_info "Test group: External-links cache mode"
+# ── Test 6: cache mode with --allow-external-origin ────────────────────────
+log_info "Test group: External-origin cache mode"
 
 # Remove and recreate the cache directory for a completely clean state
 rm -rf "${CACHE_DIR:?}"
@@ -707,7 +745,7 @@ mkdir -p "${CACHE_DIR}"
 
 "${HTTPDIRFS_BIN}" \
     -f \
-    --external-links \
+    --allow-external-origin \
     --cache \
     --cache-location "${CACHE_DIR}" \
     "${EXT_TEST_URL}" \
@@ -720,7 +758,7 @@ for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
 done
 
 if ! mountpoint -q "${EXT_MOUNT_DIR}" 2>/dev/null; then
-    fail "httpdirfs (--external-links --cache) failed to mount."
+    fail "httpdirfs (--allow-external-origin --cache) failed to mount."
     kill "${EXT_CACHE_PID}" 2>/dev/null || true
 else
     # 6a. Check file presence
@@ -765,6 +803,15 @@ log_info "External HTTP server stopped."
     # ── Test 7: Cache size thresholds ───────────────────────────────────────────
     log_info "Test group: Cache size thresholds"
 
+    # Resolve the unified single-file cache container path of a URL:
+    # <CACHE_DIR>/<first 2 hex of md5(url)>/<md5(url)>
+    cache_container_path() {
+        local url="$1"
+        local hash
+        hash="$(printf '%s' "${url}" | md5sum | awk '{print $1}')"
+        printf '%s/%s/%s' "${CACHE_DIR}" "${hash:0:2}" "${hash}"
+    }
+
     # --- Test 7a: cache-min-size threshold ---
     log_info "Subgroup: Cache minimum size threshold"
     rm -rf "${CACHE_DIR:?}"
@@ -804,16 +851,16 @@ log_info "External HTTP server stopped."
 
         # Check cache directory
         # tiny.txt should NOT have a cache file
-        tiny_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*tiny.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -z "${tiny_cache_file}" ]]; then
+        tiny_cache_file="$(cache_container_path "${BASE_URL}tiny.txt")"
+        if [[ ! -f "${tiny_cache_file}" ]]; then
             pass "cache-min-size: tiny.txt (1 byte) was NOT cached (correct)"
         else
             fail "cache-min-size: tiny.txt (1 byte) was unexpectedly cached"
         fi
 
         # simple.txt should have a cache file
-        simple_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*simple.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -n "${simple_cache_file}" ]]; then
+        simple_cache_file="$(cache_container_path "${BASE_URL}simple.txt")"
+        if [[ -f "${simple_cache_file}" ]]; then
             pass "cache-min-size: simple.txt was cached (correct)"
         else
             fail "cache-min-size: simple.txt was NOT cached"
@@ -860,16 +907,16 @@ log_info "External HTTP server stopped."
 
         # Check cache directory
         # tiny.txt should have a cache file
-        tiny_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*tiny.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -n "${tiny_cache_file}" ]]; then
+        tiny_cache_file="$(cache_container_path "${BASE_URL}tiny.txt")"
+        if [[ -f "${tiny_cache_file}" ]]; then
             pass "cache-max-size: tiny.txt (1 byte) was cached (correct)"
         else
             fail "cache-max-size: tiny.txt (1 byte) was NOT cached"
         fi
 
         # simple.txt should NOT have a cache file
-        simple_cache_file=$(find "${CACHE_DIR}/meta" -type f -name "*simple.txt" 2>/dev/null | head -n 1 || true)
-        if [[ -z "${simple_cache_file}" ]]; then
+        simple_cache_file="$(cache_container_path "${BASE_URL}simple.txt")"
+        if [[ ! -f "${simple_cache_file}" ]]; then
             pass "cache-max-size: simple.txt (>100 bytes) was NOT cached (correct)"
         else
             fail "cache-max-size: simple.txt (>100 bytes) was unexpectedly cached"
@@ -904,6 +951,528 @@ log_info "External HTTP server stopped."
         pass "cache size validation: min > max consistency check rejected (correct)"
     else
         fail "cache size validation: min > max inconsistency not rejected correctly: ${err_out}"
+    fi
+
+    # --- Test 7d: cache clear options ---
+    log_info "Subgroup: Cache clear options (--cache-clear-host and --cache-clear)"
+
+    # --cache-clear-host targets the default cache layout
+    # (<XDG_CACHE_HOME>/httpdirfs/<escaped origin>/...), the only layout that
+    # contains per-origin subdirectories. Use XDG_CACHE_HOME and no
+    # --cache-location so the test mirrors production.
+    CACHE_HOST_XDG="${WORK_DIR}/cache_host_xdg"
+    rm -rf "${CACHE_HOST_XDG}"
+    mkdir -p "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com/ab"
+    mkdir -p "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com/ab/deadbeef"
+    touch "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fother.com/cd/cafebabe"
+
+    # Test --cache-clear-host
+    XDG_CACHE_HOME="${CACHE_HOST_XDG}" "${HTTPDIRFS_BIN}" --cache-clear-host "example.com"
+    if [[ ! -d "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com" && -d "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fother.com" ]]; then
+        pass "cache-clear-host: deleted target host cache directory (correct)"
+    else
+        fail "cache-clear-host: failed to delete target host or deleted unexpected host"
+    fi
+
+    # Test that --cache-clear-host is rejected with --cache-location
+    if out=$(XDG_CACHE_HOME="${CACHE_HOST_XDG}" "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear-host "example.com" 2>&1); then
+        fail "cache-clear-host + cache-location: expected rejection"
+    elif [[ "${out}" == *"not supported together with --cache-location"* ]]; then
+        pass "cache-clear-host + cache-location: rejected with clear error (correct)"
+    else
+        fail "cache-clear-host + cache-location: unexpected output: ${out}"
+    fi
+
+    # Test --cache-clear
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_DIR}/https%3A%2F%2Fother.com/cd/cafebabe"
+    "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear
+    if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
+        pass "cache-clear: cleared custom cache directory (correct)"
+    else
+        fail "cache-clear: failed to clear cache directory"
+    fi
+
+
+    # ── Test 8: Advanced Parsing Mode ───────────────────────────────────────────
+    log_info "Test group: Advanced Parsing Mode"
+
+    ADV_TEST_DIR="${SERVE_DIR}/adv_test_dir"
+    mkdir -p "${ADV_TEST_DIR}/nested"
+
+    # Extensionless file containing HTML for directory promotion
+    cat > "${ADV_TEST_DIR}/sub_page" <<'EOF'
+<!DOCTYPE html>
+<html>
+<body>
+<a href="nested_file.txt">Nested File</a>
+</body>
+</html>
+EOF
+
+    echo -n "nested file content" > "${ADV_TEST_DIR}/nested_file.txt"
+    echo -n "file1 content" > "${ADV_TEST_DIR}/file1.txt"
+    echo -n "file2 content" > "${ADV_TEST_DIR}/file2.txt"
+    echo -n "nested file2 content" > "${ADV_TEST_DIR}/nested/file2.txt"
+
+    # HTML larger than 1500 bytes for size limit testing
+    python3 -c "
+with open('${ADV_TEST_DIR}/large_page', 'w') as f:
+    f.write('<!DOCTYPE html><html><body>\n')
+    for i in range(100):
+        f.write(f'<a href=\"file1.txt\">Link item {i}</a>\n')
+    f.write('</body></html>\n')
+"
+
+    # Root index for adv_test_dir
+    cat > "${ADV_TEST_DIR}/index.html" <<EOF
+<!DOCTYPE html>
+<html>
+<body>
+<a href="sub_page">Disc Subdir</a>
+<a href="sub_page">Duplicate Link to Subdir</a>
+<a href="file1.txt">file1.txt</a>
+<a href="file2.txt">My File</a>
+<a href="nested/file2.txt">My File</a>
+<a href="large_page">Large HTML Dir</a>
+<a href="http://localhost:${ACTUAL_PORT}/adv_test_dir/file1.txt">Cross File</a>
+</body>
+</html>
+EOF
+
+    ADV_TEST_URL="${BASE_URL}adv_test_dir/"
+
+    # --- Test 8a: Mount with --html-is-directory and --allow-external-origin ---
+    log_info "Subgroup: --html-is-directory with --allow-external-origin"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        --allow-external-origin \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    ADV_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (--html-is-directory --allow-external-origin) failed to mount"
+        kill "${ADV_PID}" 2>/dev/null || true
+    else
+        # Subdirectory promotion: sub_page has text/html content-type, should be a directory
+        if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "html_is_directory: sub_page promoted to directory"
+        else
+            fail "html_is_directory: sub_page was not promoted to directory"
+        fi
+
+        # Early deduplication: only one Disc Subdir-sub_page exists
+        sub_count=$(find "${ADV_MOUNT_DIR}" -maxdepth 1 -name "*sub_page" 2>/dev/null | wc -l)
+        if [[ "${sub_count}" -eq 1 ]]; then
+            pass "link_parser: target URL deduplication (first anchor wins)"
+        else
+            fail "link_parser: expected 1 sub_page link, found ${sub_count}"
+        fi
+
+        # Filename matching (case-insensitive): anchor "file1.txt" equals filename -> anchor omitted
+        if [[ -f "${ADV_MOUNT_DIR}/file1.txt" ]]; then
+            pass "link_parser: anchor matching filename omitted (file1.txt present)"
+            content=$(cat "${ADV_MOUNT_DIR}/file1.txt" 2>/dev/null || true)
+            if [[ "${content}" == "file1 content" ]]; then
+                pass "link_parser: file1.txt content OK"
+            else
+                fail "link_parser: file1.txt content mismatch"
+            fi
+        else
+            fail "link_parser: file1.txt missing"
+        fi
+
+        # Custom naming: "My File" + "file2.txt" -> "My File-file2.txt"
+        if [[ -f "${ADV_MOUNT_DIR}/My File-file2.txt" ]]; then
+            pass "link_parser: custom naming (My File-file2.txt present)"
+        else
+            fail "link_parser: My File-file2.txt missing"
+        fi
+
+        # Collision resolution via backward escalation: nested/file2.txt -> "My File-nested-file2.txt"
+        if [[ -f "${ADV_MOUNT_DIR}/My File-nested-file2.txt" ]]; then
+            pass "link_parser: backward escalation collision resolution (My File-nested-file2.txt present)"
+            content=$(cat "${ADV_MOUNT_DIR}/My File-nested-file2.txt" 2>/dev/null || true)
+            if [[ "${content}" == "nested file2 content" ]]; then
+                pass "link_parser: My File-nested-file2.txt content OK"
+            else
+                fail "link_parser: My File-nested-file2.txt content mismatch"
+            fi
+        else
+            fail "link_parser: My File-nested-file2.txt missing"
+        fi
+
+        # Traversing promoted directory and reading nested file
+        if [[ -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" ]]; then
+            pass "html_is_directory: promoted directory traversal and nested file present"
+            content=$(cat "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" 2>/dev/null || true)
+            if [[ "${content}" == "nested file content" ]]; then
+                pass "html_is_directory: nested file content OK"
+            else
+                fail "html_is_directory: nested file content mismatch"
+            fi
+        else
+            fail "html_is_directory: promoted directory contents missing"
+        fi
+
+        # Cross-origin link present with --allow-external-origin
+        if [[ -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
+            pass "allow_external_origin: cross-origin link allowed with --allow-external-origin"
+            content=$(cat "${ADV_MOUNT_DIR}/Cross File-file1.txt" 2>/dev/null || true)
+            if [[ "${content}" == "file1 content" ]]; then
+                pass "allow_external_origin: cross-origin file content OK"
+            else
+                fail "allow_external_origin: cross-origin file content mismatch"
+            fi
+        else
+            fail "allow_external_origin: cross-origin link missing"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${ADV_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8b: External origin disabled by default ---
+    log_info "Subgroup: External origin disabled by default"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    SAME_ORIGIN_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (--html-is-directory) failed to mount"
+        kill "${SAME_ORIGIN_PID}" 2>/dev/null || true
+    else
+        if [[ ! -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
+            pass "allow_external_origin: cross-origin link filtered out by default"
+        else
+            fail "allow_external_origin: cross-origin link was not filtered out"
+        fi
+
+        if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "html_is_directory: same-origin directory preserved"
+        else
+            fail "html_is_directory: same-origin directory missing"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${SAME_ORIGIN_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8c: --max-html-size threshold ---
+    log_info "Subgroup: HTML directory size limit with --max-html-size"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        --max-html-size 1024 \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    MAX_SIZE_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (--html-is-directory --max-html-size) failed to mount"
+        kill "${MAX_SIZE_PID}" 2>/dev/null || true
+    else
+        # large_page exceeds 1024 bytes, so it is not promoted to a directory and remains a regular file
+        if [[ ! -d "${ADV_MOUNT_DIR}/Large HTML Dir-large_page" && -f "${ADV_MOUNT_DIR}/Large HTML Dir-large_page" ]]; then
+            pass "max_html_size: HTML exceeding --max-html-size not promoted to directory"
+        else
+            fail "max_html_size: oversized HTML was unexpectedly promoted to directory"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${MAX_SIZE_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8c2: Unknown-size (no Content-Length) HTML pages ---
+    log_info "Subgroup: Unknown-size HTML pages with --max-html-size (no Content-Length)"
+
+    ADV_CHUNKED_DIR="${SERVE_DIR}/adv_chunked_dir"
+    mkdir -p "${ADV_CHUNKED_DIR}"
+
+    # Small chunked-style page (within max_html_size) -> should be promoted to a directory
+    echo -n "chunked nested file content" > "${ADV_CHUNKED_DIR}/nested_file.txt"
+    cat > "${ADV_CHUNKED_DIR}/chunked_small_page" <<'EOF'
+<!DOCTYPE html>
+<html>
+<body>
+<a href="nested_file.txt">Chunked Nested File</a>
+</body>
+</html>
+EOF
+
+    # Large page (>1024 bytes) served without Content-Length -> tentatively a
+    # directory; the capped download exceeds max_html_size on first browse, so
+    # it degrades to an empty folder (a directory is never a file)
+    python3 -c "
+with open('${ADV_CHUNKED_DIR}/chunked_large_page', 'w') as f:
+    f.write('<!DOCTYPE html><html><body>\n')
+    for i in range(100):
+        f.write(f'<a href=\"nested_file.txt\">Link item {i}</a>\n')
+    f.write('</body></html>\n')
+"
+
+    cat > "${ADV_CHUNKED_DIR}/index.html" <<'EOF'
+<!DOCTYPE html>
+<html>
+<body>
+<a href="chunked_small_page">Small Chunked Dir</a>
+<a href="chunked_large_page">Large Chunked Page</a>
+</body>
+</html>
+EOF
+
+    CHUNKED_URL="${BASE_URL}adv_chunked_dir/"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        --max-html-size 1024 \
+        "${CHUNKED_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    CHUNKED_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (unknown-size HTML) failed to mount"
+        kill "${CHUNKED_PID}" 2>/dev/null || true
+    else
+        # chunked_large_page has no Content-Length and exceeds max_html_size
+        # (1024 bytes). A directory is never turned into a file: on first
+        # browse the capped download exceeds the cap, so the entry degrades to
+        # an empty folder. Trigger the browse now; the kernel caches FUSE
+        # attributes for ~1s (no attr_timeout set), so wait for the stale
+        # directory attributes to expire.
+        ls "${ADV_MOUNT_DIR}/Large Chunked Page-chunked_large_page" 2>/dev/null || true
+        sleep 2
+
+        # It must remain a directory (never demoted to a file)
+        if [[ -d "${ADV_MOUNT_DIR}/Large Chunked Page-chunked_large_page" ]]; then
+            pass "max_html_size: oversized unknown-size HTML stays a directory"
+        else
+            fail "max_html_size: oversized unknown-size HTML is not a directory"
+        fi
+
+        # ...and an empty folder (no entries parsed from the oversized body)
+        chunked_entries=$(ls -A "${ADV_MOUNT_DIR}/Large Chunked Page-chunked_large_page" 2>/dev/null | wc -l)
+        if [[ "${chunked_entries}" -eq 0 ]]; then
+            pass "max_html_size: oversized unknown-size HTML is an empty folder"
+        else
+            fail "max_html_size: oversized unknown-size HTML not empty (${chunked_entries} entries)"
+        fi
+
+        # chunked_small_page is within max_html_size, so it stays a directory
+        if [[ -d "${ADV_MOUNT_DIR}/Small Chunked Dir-chunked_small_page" ]]; then
+            pass "max_html_size: small unknown-size HTML still promoted to directory"
+            if [[ -f "${ADV_MOUNT_DIR}/Small Chunked Dir-chunked_small_page/Chunked Nested File-nested_file.txt" ]]; then
+                pass "max_html_size: promoted directory contents present"
+            else
+                fail "max_html_size: promoted directory contents missing"
+            fi
+        else
+            fail "max_html_size: small unknown-size HTML was not promoted to directory"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${CHUNKED_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8c3: No-Content-Type + unknown-size (no Content-Length) entries ---
+    log_info "Subgroup: No-Content-Type + no-Content-Length entries (on-the-fly listings)"
+
+    ADV_NOTYPE_DIR="${SERVE_DIR}/adv_notype_dir"
+    mkdir -p "${ADV_NOTYPE_DIR}"
+
+    # A headerless HTML listing (no Content-Type, no Content-Length) that DOES
+    # parse into entries -> a directory with contents, in both flag modes.
+    # NOTE: the nested file must NOT be named notype_*, otherwise the server
+    # would serve it headerless too and it would be a tentative directory
+    # instead of a plain file.
+    echo -n "notype nested content" > "${ADV_NOTYPE_DIR}/nested_content.txt"
+    cat > "${ADV_NOTYPE_DIR}/notype_listing" <<'EOF'
+<!DOCTYPE html>
+<html><body>
+<a href="nested_content.txt">Notype Nested</a>
+</body></html>
+EOF
+
+    # A headerless body with no anchors -> parses to zero entries -> empty
+    # folder (parsing "fails" to find entries, but a directory is never a file).
+    echo -n "A headerless body with no anchors and no content type; it parses to zero entries, so the tentative directory degrades to an empty folder." > "${ADV_NOTYPE_DIR}/notype_blob"
+
+    cat > "${ADV_NOTYPE_DIR}/index.html" <<'EOF'
+<!DOCTYPE html>
+<html><body>
+<a href="notype_listing">Notype Listing</a>
+<a href="notype_blob">Notype Blob</a>
+</body></html>
+EOF
+
+    NOTYPE_URL="${BASE_URL}adv_notype_dir/"
+
+    check_notype() {
+        local mode="$1"
+        # notype_listing has no Content-Type and no Content-Length: it is a
+        # tentative directory in both flag modes, and its body parses into
+        # entries, so it is a directory with contents.
+        if [[ -d "${ADV_MOUNT_DIR}/Notype Listing-notype_listing" ]]; then
+            pass "${mode}: headerless listing is a directory"
+            if [[ -f "${ADV_MOUNT_DIR}/Notype Listing-notype_listing/Notype Nested-nested_content.txt" ]]; then
+                pass "${mode}: headerless listing contents present"
+            else
+                fail "${mode}: headerless listing contents missing"
+            fi
+        else
+            fail "${mode}: headerless listing is not a directory"
+        fi
+        # notype_blob parses to zero user entries -> an empty folder. (Plain
+        # `ls`, not `ls -A`: every real directory carries the hidden
+        # .httpdirfs entry, which an empty one still has.)
+        if [[ -d "${ADV_MOUNT_DIR}/Notype Blob-notype_blob" ]]; then
+            pass "${mode}: headerless linkless body is a directory"
+            notype_entries=$(ls "${ADV_MOUNT_DIR}/Notype Blob-notype_blob" 2>/dev/null | wc -l)
+            if [[ "${notype_entries}" -eq 0 ]]; then
+                pass "${mode}: headerless linkless body is an empty folder"
+            else
+                fail "${mode}: headerless linkless body not empty (${notype_entries} entries)"
+            fi
+        else
+            fail "${mode}: headerless linkless body is not a directory"
+        fi
+    }
+
+    # Flag on (--html-is-directory)
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --html-is-directory \
+        --max-html-size 1024 \
+        "${NOTYPE_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    NOTYPE_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (no-Content-Type) failed to mount"
+        kill "${NOTYPE_PID}" 2>/dev/null || true
+    else
+        check_notype "html-is-directory"
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${NOTYPE_PID}" 2>/dev/null || true
+
+        # Flag off (default): no-Content-Type unknown-size is still a
+        # tentative directory, so the same expectations hold.
+        "${HTTPDIRFS_BIN}" \
+            -f \
+            --max-html-size 1024 \
+            "${NOTYPE_URL}" \
+            "${ADV_MOUNT_DIR}" &
+        NOTYPE_PID=$!
+
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+            sleep 1
+        done
+
+        if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+            fail "httpdirfs (no-Content-Type, default mode) failed to mount"
+            kill "${NOTYPE_PID}" 2>/dev/null || true
+        else
+            check_notype "default-mode"
+            do_unmount "${ADV_MOUNT_DIR}"
+            wait "${NOTYPE_PID}" 2>/dev/null || true
+        fi
+    fi
+
+    # --- Test 8d: Default mode without --html-is-directory ---
+    log_info "Subgroup: Default mode without --html-is-directory"
+
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        "${ADV_TEST_URL}" \
+        "${ADV_MOUNT_DIR}" &
+    VANILLA_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null && break
+        sleep 1
+    done
+
+    if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
+        fail "httpdirfs (default mode) failed to mount"
+        kill "${VANILLA_PID}" 2>/dev/null || true
+    else
+        # Without --html-is-directory, sub_page is NOT promoted to a directory; it remains a regular file
+        if [[ ! -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" && -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
+            pass "html_is_directory: sub_page not promoted to directory in default mode (correct)"
+        else
+            fail "html_is_directory: sub_page unexpectedly promoted or missing in default mode"
+        fi
+
+        # Anchor text and naming are universally applied
+        if [[ -f "${ADV_MOUNT_DIR}/My File-file2.txt" ]]; then
+            pass "link_parser: naming applied in default mode"
+        else
+            fail "link_parser: naming unexpectedly missing in default mode"
+        fi
+
+        do_unmount "${ADV_MOUNT_DIR}"
+        wait "${VANILLA_PID}" 2>/dev/null || true
+    fi
+
+    # --- Test 8e: CLI flag validation for --max-html-size ---
+    log_info "Subgroup: CLI validation for --max-html-size"
+
+    err_out=$("${HTTPDIRFS_BIN}" --max-html-size 0 "${BASE_URL}" "${MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --max-html-size must be greater than 0"* ]]; then
+        pass "advanced_parsing: --max-html-size 0 rejected (correct)"
+    else
+        fail "advanced_parsing: --max-html-size 0 not rejected correctly: ${err_out}"
+    fi
+
+    err_out=$("${HTTPDIRFS_BIN}" --max-html-size -100 "${BASE_URL}" "${MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --max-html-size requires a non-negative size"* ]]; then
+        pass "advanced_parsing: negative --max-html-size rejected (correct)"
+    else
+        fail "advanced_parsing: negative --max-html-size not rejected correctly: ${err_out}"
+    fi
+
+    err_out=$("${HTTPDIRFS_BIN}" --max-html-size 10XYZ "${BASE_URL}" "${MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --max-html-size has invalid suffix"* ]]; then
+        pass "advanced_parsing: invalid suffix in --max-html-size rejected (correct)"
+    else
+        fail "advanced_parsing: invalid suffix in --max-html-size not rejected correctly: ${err_out}"
     fi
 fi
 

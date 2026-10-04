@@ -26,6 +26,8 @@
  * \brief Utility functions and memory allocation wrappers implementation
  */
 
+#include <fcntl.h>
+
 #include "util.h"
 
 #include "config.h"
@@ -36,12 +38,14 @@
 #include "link.h"
 #endif
 
+#include <ctype.h>
 #include <curl/curl.h>
 #include <errno.h>
 #include <execinfo.h>
 #include <openssl/evp.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 #include <uuid/uuid.h>
 
@@ -105,6 +109,62 @@ char *path_append(const char *path, const char *filename)
     }
     memcpy(str + ul + needs_separator, f, sl);
     return str;
+}
+
+static int is_existing_dir(const char *path)
+{
+    /*
+     * Metadata-only check: opening the directory with O_RDONLY |
+     * O_DIRECTORY would require read permission on it, while stat()
+     * only needs search permission on the parent. stat() follows
+     * symlinks, matching the previous behavior.
+     */
+    struct stat st;
+    return stat(path, &st) == 0 && S_ISDIR(st.st_mode);
+}
+
+int mkdir_p(const char *path, mode_t mode)
+{
+    if (!path) {
+        return -1;
+    }
+    char tmp[PATH_MAX];
+    size_t len = strnlen(path, PATH_MAX);
+
+    if (len == 0 || len >= PATH_MAX) {
+        return -1;
+    }
+    memcpy(tmp, path, len + 1);
+
+    /* Strip trailing slashes */
+    while (len > 0 && tmp[len - 1] == '/') {
+        tmp[--len] = '\0';
+    }
+    if (len == 0) {
+        return 0;
+    }
+
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p == '/') {
+            *p = '\0';
+            if (p > tmp && *(p - 1) != '\0') {
+                if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
+                    return -1;
+                }
+                if (!is_existing_dir(tmp)) {
+                    return -1;
+                }
+            }
+            *p = '/';
+        }
+    }
+    if (mkdir(tmp, mode) != 0 && errno != EEXIST) {
+        return -1;
+    }
+    if (!is_existing_dir(tmp)) {
+        return -1;
+    }
+    return 0;
 }
 
 void pthread_mutex_init_wrapper(pthread_mutex_t *x,
@@ -812,4 +872,102 @@ char *str_to_hex(char *s)
         snprintf(h, 3, "%02x", (unsigned char)s[i]);
     }
     return hex;
+}
+
+int check_space(const char *s)
+{
+    if (!s) {
+        return 0;
+    }
+    unsigned char c = (unsigned char)*s;
+    if (isspace(c)) {
+        return 1;
+    }
+    /* UTF-8 non-breaking space: U+00A0 (0xC2, 0xA0) */
+    if (c == 0xc2 && (unsigned char)s[1] == 0xa0) {
+        return 2;
+    }
+    return 0;
+}
+
+off_t parse_size_with_suffix(const char *str, const char *opt_name)
+{
+    if (!str || *str == '\0') {
+        if (opt_name) {
+            fprintf(stderr,
+                    "Error: %s requires a non-negative size (e.g. 2097152, 2M, "
+                    "512K)\n",
+                    opt_name);
+        }
+        return -1;
+    }
+
+    while (isspace((unsigned char)*str)) {
+        str++;
+    }
+    if (*str == '-' || *str == '\0') {
+        if (opt_name) {
+            fprintf(stderr,
+                    "Error: %s requires a non-negative size (e.g. 2097152, 2M, "
+                    "512K)\n",
+                    opt_name);
+        }
+        return -1;
+    }
+
+    char *endptr = NULL;
+    errno = 0;
+    unsigned long long val = strtoull(str, &endptr, 10);
+    if (errno != 0 || endptr == str) {
+        if (opt_name) {
+            fprintf(stderr,
+                    "Error: %s requires a non-negative size (e.g. 2097152, 2M, "
+                    "512K)\n",
+                    opt_name);
+        }
+        return -1;
+    }
+
+    while (*endptr && isspace((unsigned char)*endptr)) {
+        endptr++;
+    }
+
+    unsigned long long multiplier = 1;
+    if (*endptr != '\0') {
+        if (strcasecmp(endptr, "k") == 0) {
+            multiplier = 1024ULL;
+        } else if (strcasecmp(endptr, "m") == 0) {
+            multiplier = 1024ULL * 1024ULL;
+        } else if (strcasecmp(endptr, "g") == 0) {
+            multiplier = 1024ULL * 1024ULL * 1024ULL;
+        } else {
+            if (opt_name) {
+                fprintf(
+                    stderr,
+                    "Error: %s has invalid suffix '%s' (supported: K, M, G)\n",
+                    opt_name, endptr);
+            }
+            return -1;
+        }
+    }
+
+    unsigned long long max_off = (unsigned long long)INT64_MAX;
+    if (multiplier > 1 && val > max_off / multiplier) {
+        if (opt_name) {
+            fprintf(stderr, "Error: %s value overflows off_t range\n",
+                    opt_name);
+        }
+        return -1;
+    }
+
+    unsigned long long result = val * multiplier;
+    if (result > max_off) {
+        if (opt_name) {
+            fprintf(stderr, "Error: %s value overflows off_t range\n",
+                    opt_name);
+        }
+        return -1;
+    }
+
+    return (off_t)result;
 }

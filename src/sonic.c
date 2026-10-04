@@ -31,7 +31,7 @@
 #include "config.h"
 #include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
 #include "util.h"
 
 #include <assert.h>
@@ -66,7 +66,7 @@ void sonic_config_init(const char *server, const char *username,
     }
     SONIC_CONFIG.username = STRNDUP(username, NAME_MAX);
     SONIC_CONFIG.password = STRNDUP(password, NAME_MAX);
-    SONIC_CONFIG.client = DEFAULT_USER_AGENT;
+    SONIC_CONFIG.client = CONFIG.user_agent;
 
     if (!CONFIG.sonic_insecure) {
         /*
@@ -391,7 +391,7 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     /*
      * start downloading the base URL
      */
-    TransferStruct xml = Link_download_full(linktbl->links[0]);
+    TransferStruct xml = Link_download_full(linktbl->links[0], NULL);
     if (xml.curr_size == 0) {
         LinkTable_free(linktbl);
         return NULL;

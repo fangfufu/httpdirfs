@@ -31,39 +31,6 @@
 #include <limits.h>
 #include <sys/types.h>
 
-/**
- * \brief the default user agent string
- */
-#define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
-
-/**
- * \brief The default maximum number of network connections
- */
-#define DEFAULT_NETWORK_MAX_CONNS 6
-
-/**
- * \brief The default refresh_timeout
- */
-#define DEFAULT_REFRESH_TIMEOUT 3600
-
-/**
- * \brief The default HTTP 429 (too many requests) wait time
- */
-#define DEFAULT_HTTP_WAIT_SEC 5
-
-/**
- * \brief Data file block size in MB
- */
-#define DEFAULT_DATA_BLKSZ_MB 8
-
-/**
- * \brief Data file block size
- * \details We set it to 1024*1024*8 = 8MiB
- */
-#define DEFAULT_DATA_BLKSZ (DEFAULT_DATA_BLKSZ_MB * 1024 * 1024)
-
-#define STR(x) #x
-#define XSTR(x) STR(x)
 
 /**
  * \brief Operation modes
@@ -112,12 +79,15 @@ typedef struct {
     char *cafile;
     /** \brief Server certificate directory */
     char *capath;
-    /** \brief Refresh directory listing after refresh_timeout seconds */
+    /** \brief Refresh files and directories after refresh_timeout seconds */
     int refresh_timeout;
     /** \brief Try refreshing invalid links when reading a directory */
     int invalid_refresh;
-    /** \brief Include external (cross-origin) links from directory listings */
-    int external_links;
+    /** \brief Allow following links pointing to external (cross-origin) servers
+     */
+    int allow_external_origin;
+    /** \brief Ignore intra-page HTML anchor/fragment links starting with '#' */
+    int ignore_anchors;
     /*--------------- Cache related ---------------*/
     /** \brief Whether cache mode is enabled */
     int cache_enabled;
@@ -140,6 +110,11 @@ typedef struct {
     int sonic_id3;
     /** \brief Whether we use the legacy sonic authentication mode */
     int sonic_insecure;
+    /*--------- Directory promotion & traversal related --------*/
+    /** \brief Promote resources with Content-Type text/html to directories */
+    int html_is_directory;
+    /** \brief Maximum HTML size for directory listing promotion */
+    off_t max_html_size;
 } ConfigStruct;
 
 /**
