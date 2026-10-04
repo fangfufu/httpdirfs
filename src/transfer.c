@@ -320,9 +320,14 @@ CURL *Link_to_curl(Link *link)
  *
  * Automatic redirect following is disabled on the handle (see Link_to_curl), so
  * this walks a redirect chain one hop at a time. It returns 1 if a redirect was
- * followed (the caller must run the transfer again for the new target), 0
- * otherwise. The caller's loop resets the body / header buffers before the next
- * transfer. CONFIG.http_headers / credentials are only (re)sent to a
+ * followed (the caller must run the transfer again for the new target), 0 if no
+ * redirect was pending, or -1 if the redirect target was rejected: when
+ * external origins are disabled and is_cross_origin() reports the target
+ * differs from base_url, the target is not followed and the transfer must be
+ * treated as failed by the caller. A missing base_url fails closed (treated as
+ * cross-origin), matching the header / credential decision. The caller's loop
+ * resets the body / header buffers before the next transfer.
+ * CONFIG.http_headers / credentials are only (re)sent to a
  * same-origin target, so they are never leaked to a cross-origin redirect.
  */
 static int follow_one_redirect(CURL *curl, const char *base_url)
@@ -339,6 +344,11 @@ static int follow_one_redirect(CURL *curl, const char *base_url)
     if (curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &redir_url) || !redir_url
         || !redir_url[0]) {
         return 0;
+    }
+
+    if (!CONFIG.allow_external_origin && is_cross_origin(base_url, redir_url)) {
+        lprintf(error, "cross-origin redirect rejected: %s\n", redir_url);
+        return -1;
     }
 
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_URL, redir_url);
@@ -360,7 +370,17 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
          * hop re-checks the target against the mounted origin before custom
          * headers / credentials are sent.
          */
-        if (follow_one_redirect(curl, origin_base_url(ts->link))) {
+        int redir = follow_one_redirect(curl, origin_base_url(ts->link));
+        if (redir < 0) {
+            lprintf(error, "cross-origin redirect rejected for %s\n",
+                    ts->link->f_url);
+            ts->link->type = LINK_INVALID;
+            curl_easy_cleanup(curl);
+            FREE(ts->data);
+            FREE(ts);
+            return;
+        }
+        if (redir) {
             ts->redirects++;
             if (ts->redirects > MAX_REDIRECTS) {
                 lprintf(error, "too many redirects for %s\n", ts->link->f_url);
@@ -685,7 +705,7 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
          * custom headers / credentials are sent, so a cross-origin redirect
          * never receives them.
          */
-        if (follow_one_redirect(curl, base_url)) {
+        if (follow_one_redirect(curl, base_url) == 1) {
             redirects++;
             if (redirects > MAX_REDIRECTS) {
                 lprintf(error, "too many redirects for %s\n", url);
@@ -912,7 +932,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
 
             transfer_blocking(curl);
 
-            if (!follow_one_redirect(curl, base_url)) {
+            if (follow_one_redirect(curl, base_url) != 1) {
                 break;
             }
             if (++redirects > MAX_REDIRECTS) {
