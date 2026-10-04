@@ -136,6 +136,50 @@ entries concurrently using HTTP `HEAD` requests (`CURLOPT_NOBODY`) via
       - unknown size (`cl < 0`) → tentatively `LINK_DIR`; parsed on first
         browse, degrading to an empty folder if oversized, failed, or linkless.
 
+### Phase 2.1: Classification Matrix
+
+The rules above reduce to the following matrix for `LINK_UNINITIALISED_FILE`
+entries that receive `HTTP 200 OK`:
+
+| Content-Type    | Content-Length                   | `--html-is-directory` OFF (default)             | ON                                              |
+| --------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `text/html`     | known, `0 < cl <= max_html_size` | `LINK_FILE`                                     | `LINK_DIR` (promoted)                           |
+| `text/html`     | known, `cl > max_html_size`      | `LINK_FILE`                                     | `LINK_FILE`                                     |
+| `text/html`     | `cl = 0`                         | `LINK_FILE` (`LINK_DIR` if `--zero-len-is-dir`) | `LINK_DIR`                                      |
+| `text/html`     | unknown (`cl < 0`)               | `LINK_DIR` (tentative)                          | `LINK_DIR` (tentative)                          |
+| known non-HTML  | `cl = 0`                         | `LINK_FILE` (`LINK_DIR` if `--zero-len-is-dir`) | `LINK_FILE` (`LINK_DIR` if `--zero-len-is-dir`) |
+| known non-HTML  | `cl > 0`                         | `LINK_FILE`                                     | `LINK_FILE`                                     |
+| known non-HTML  | unknown (`cl < 0`)               | `LINK_INVALID` (hidden)                         | `LINK_INVALID` (hidden)                         |
+| missing / empty | `cl = 0`                         | `LINK_FILE` (`LINK_DIR` if `--zero-len-is-dir`) | `LINK_FILE` (`LINK_DIR` if `--zero-len-is-dir`) |
+| missing / empty | `cl > 0`                         | `LINK_FILE`                                     | `LINK_FILE`                                     |
+| missing / empty | unknown (`cl < 0`)               | `LINK_DIR` (tentative)                          | `LINK_DIR` (tentative)                          |
+
+Pre-conditions (both modes):
+
+- Any entry receiving a non-200 status becomes `LINK_INVALID` (retried later on
+  temporary failures).
+- Entries with initial type `LINK_UNINITIALISED_DIR` (URL path ends with `/`)
+  become `LINK_DIR` without inspecting `Content-Type`.
+
+Matrix notes:
+
+- The unknown-size rows (`cl < 0`) are identical in both modes and are resolved
+  on content type alone **before** the `--html-is-directory` flag is consulted
+  (`Link_classify_response()`, `src/transfer.c`): a concrete non-HTML type is
+  hidden, while HTML or a missing/empty `Content-Type` is a tentative directory.
+- Only two rows change with the flag: `text/html` with `0 < cl <= max_html_size`
+  (`LINK_FILE` → `LINK_DIR`, promoted) and `text/html` with `cl = 0` (`LINK_DIR`
+  regardless of `--zero-len-is-dir`, since the HTML check runs first). The
+  `cl > max_html_size` row stays `LINK_FILE` in both modes.
+- **Tentative `LINK_DIR`** (unknown size): parsed on first browse; degrades to
+  an empty folder if the listing fails, or (with `--html-is-directory` enabled)
+  exceeds `max_html_size` (Phase 3) — never demoted to a file.
+- **Promoted `LINK_DIR`** (flag enabled, HTML): the download is capped at
+  `max_html_size` on first browse, with the same empty-folder degradation if it
+  exceeds the cap or fails.
+- `max_html_size` is `--max-html-size` (default `2M`); it is consulted only when
+  `--html-is-directory` is enabled.
+
 ### Phase 3: Oversized / Failed Directory → Empty Folder
 
 A link classified as a directory is **never** turned into a file: a directory
@@ -154,10 +198,17 @@ than being parsed as a partial listing or demoted to a file:
 - The same `max_html_size` gate is re-applied to a cached body, so a listing
   cached under a larger limit is treated as an empty folder after the limit is
   lowered (and the now-inconsistent container is deleted).
-- Real directories (URL path ends with `/`) and the root table are **exempt from
-  the cap**: their listing is unambiguously a directory listing and may
-  legitimately exceed `max_html_size`, so it is downloaded in full. A real
-  directory whose listing fails to download also degrades to an empty folder.
+- The cap (and the cached-body gate) only applies when `--html-is-directory` is
+  enabled. With the flag disabled, a tentative `LINK_DIR` (unknown size) is
+  downloaded in full without a cap and parsed normally on first browse.
+- **Exemption from the cap** is decided purely by URL syntax: any URL whose path
+  (ignoring query string and fragment) ends with `/` is a real directory and is
+  downloaded in full, since its listing is unambiguously a directory listing and
+  may legitimately exceed `max_html_size`. There is no special exemption for the
+  root table: a root mounted from a no-trailing-slash URL is capped like any
+  other promoted page and degrades to an empty folder if its listing exceeds
+  `max_html_size` (mount with a trailing slash to avoid this). A real directory
+  whose listing fails to download also degrades to an empty folder.
 
 ______________________________________________________________________
 
@@ -181,8 +232,10 @@ a clean, human-readable name without collisions or data loss.
    newlines) are collapsed into single spaces.
 1. Path separator slashes (`/`) are replaced with underscores (`_`) to prevent
    unintended subpath creation.
-1. Leading dots (`.`) and spaces are trimmed so that entries do not become
-   hidden Unix files.
+
+When a candidate name is constructed (Steps 2-4), the anchor is additionally
+stripped of leading dots (`.`) and whitespace (yielding `clean_anchor`) so that
+entries do not become hidden Unix files.
 
 ### Step 2: Zero Path Segment Fallback
 
@@ -204,13 +257,16 @@ The algorithm iterates through escalation depths $i = 1, 2, \\dots, N$:
    \\text{"-"} \\mathbin{\\Vert} \\dots \\mathbin{\\Vert}
    \\text{segments}[N-1]$$
 
-1. **Redundancy Omission (Depth $i = 1$):** If $i == 1$ and `clean_anchor`
-   matches the final path segment `segments[N-1]` case-insensitively, repeating
-   the anchor is redundant (e.g. avoiding `file.iso-file.iso`). In this case,
-   the candidate is simply: $$\\text{candidate} = \\text{path_part}$$ Otherwise,
-   the candidate combines the anchor and path parts: $$\\text{candidate} =
-   \\text{clean_anchor} \\mathbin{\\Vert} \\text{"-"} \\mathbin{\\Vert}
-   \\text{path_part}$$
+   1. **Redundancy Omission (Depth $i = 1$):** If $i == 1$ and `clean_anchor`
+      matches the final path segment `segments[N-1]` case-insensitively
+      (whitespace runs are ignored on both sides), repeating the anchor is
+      redundant (e.g. avoiding `file.iso-file.iso`). In this case, the candidate
+      is simply: $$\\text{candidate} = \\text{path_part}$$
+   1. **Empty Anchor:** If `clean_anchor` is empty, the anchor prefix is omitted
+      at every depth and the candidate is simply: $$\\text{candidate} =
+      \\text{path_part}$$ Otherwise, the candidate combines the anchor and path
+      parts: $$\\text{candidate} = \\text{clean_anchor} \\mathbin{\\Vert}
+      \\text{"-"} \\mathbin{\\Vert} \\text{path_part}$$
 
 1. **Collision Probe:** The candidate is probed in `LinkHashSet`:
 
