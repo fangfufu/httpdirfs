@@ -727,11 +727,25 @@ static void retire_expired_table(LinkTable *tbl)
 
 static pthread_mutex_t root_refresh_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/*
+ * A root table must be (re)loaded when it has gone stale, or when it was never
+ * successfully populated (index_time left at 0 by a failed initial download in
+ * LinkSystem_init). The latter lets a mount whose root listing failed at
+ * startup be retried once the server recovers, instead of remaining an empty
+ * folder for the lifetime of the mount. A failed refresh still never replaces
+ * an already-populated root table (handled by the caller below).
+ */
+static int root_table_needs_reload(const LinkTable *tbl)
+{
+    return is_table_expired(tbl) || (tbl && tbl->index_time <= 0);
+}
+
 static void check_and_refresh_root_table(void)
 {
     PTHREAD_MUTEX_LOCK(&link_lock);
     if (!ROOT_LINK_TBL || ROOT_LINK_TBL->size == 0 || !ROOT_LINK_TBL->links
-        || !ROOT_LINK_TBL->links[0] || !is_table_expired(ROOT_LINK_TBL)) {
+        || !ROOT_LINK_TBL->links[0]
+        || !root_table_needs_reload(ROOT_LINK_TBL)) {
         PTHREAD_MUTEX_UNLOCK(&link_lock);
         return;
     }
@@ -744,7 +758,7 @@ static void check_and_refresh_root_table(void)
     PTHREAD_MUTEX_LOCK(&root_refresh_lock);
 
     PTHREAD_MUTEX_LOCK(&link_lock);
-    if (!ROOT_LINK_TBL || !is_table_expired(ROOT_LINK_TBL)) {
+    if (!ROOT_LINK_TBL || !root_table_needs_reload(ROOT_LINK_TBL)) {
         PTHREAD_MUTEX_UNLOCK(&link_lock);
         PTHREAD_MUTEX_UNLOCK(&root_refresh_lock);
         return;
