@@ -43,6 +43,14 @@
 #include <string.h>
 #include <unistd.h>
 
+/*
+ * Maximum number of redirect hops we are willing to follow when resolving a
+ * link. Redirects are followed manually (FOLLOWLOCATION is off) so each hop can
+ * be re-checked against the mounted origin before headers / credentials are
+ * sent to it.
+ */
+#define MAX_REDIRECTS 5
+
 size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp)
 {
@@ -93,15 +101,73 @@ size_t write_memory_capped_callback(void *recv_data, size_t size, size_t nmemb,
     return write_memory_callback(recv_data, size, nmemb, userp);
 }
 
-static int is_same_origin(const char *link_url)
+/*
+ * Determine the origin reference URL (the mounted server's root) used to decide
+ * whether a link is same-origin. Prefer the published root table's head link;
+ * fall back to the link's own parent table head link, which is available during
+ * table construction, before the root table is published. Returns NULL if no
+ * valid reference URL is available.
+ */
+static const char *origin_base_url(Link *link)
 {
-    if (!ROOT_LINK_TBL || !ROOT_LINK_TBL->links || !ROOT_LINK_TBL->links[0]) {
-        return 1;
+    if (ROOT_LINK_TBL && ROOT_LINK_TBL->links && ROOT_LINK_TBL->links[0]) {
+        return ROOT_LINK_TBL->links[0]->f_url;
     }
+    if (link && link->parent_table && link->parent_table->links
+        && link->parent_table->links[0]) {
+        return link->parent_table->links[0]->f_url;
+    }
+    return NULL;
+}
+
+/*
+ * Decide whether the mounted-server custom headers / credentials should be sent
+ * to target_url, given the origin reference base_url. When external origins are
+ * disabled everything is same-origin by construction. When they are enabled, a
+ * missing base_url fails closed (treated as cross-origin) so credentials and
+ * custom headers are never leaked to an unknown origin.
+ */
+static int is_same_origin_url(const char *base_url, const char *target_url)
+{
     if (!CONFIG.allow_external_origin) {
         return 1;
     }
-    return !is_cross_origin(ROOT_LINK_TBL->links[0]->f_url, link_url);
+    if (!base_url || !target_url) {
+        return 0;
+    }
+    return !is_cross_origin(base_url, target_url);
+}
+
+static int is_same_origin(Link *link)
+{
+    if (!link) {
+        return 0;
+    }
+    return is_same_origin_url(origin_base_url(link), link->f_url);
+}
+
+/*
+ * Apply (or clear) the mounted-server custom headers and basic-auth
+ * credentials on a curl handle, based on whether target_url is same-origin
+ * relative to base_url. This is called once per redirect hop so that the
+ * configured headers / credentials are never sent to a cross-origin redirect
+ * target.
+ */
+static void apply_origin_headers(CURL *curl, const char *base_url,
+                                 const char *target_url)
+{
+    int same_origin = is_same_origin_url(base_url, target_url);
+
+    if (CONFIG.http_headers) {
+        curl_easy_setopt(curl, CURLOPT_HTTPHEADER,
+                         same_origin ? (void *)CONFIG.http_headers : NULL);
+    }
+    if (CONFIG.http_username || CONFIG.http_password) {
+        curl_easy_setopt(curl, CURLOPT_USERNAME,
+                         same_origin ? (void *)CONFIG.http_username : NULL);
+        curl_easy_setopt(curl, CURLOPT_PASSWORD,
+                         same_origin ? (void *)CONFIG.http_password : NULL);
+    }
 }
 
 CURL *Link_to_curl(Link *link)
@@ -117,12 +183,20 @@ CURL *Link_to_curl(Link *link)
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
-    ret = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1);
+    /*
+     * Disable automatic redirect following. Redirects are handled one hop at a
+     * time by the download loops (follow_one_redirect) so that each target is
+     * re-checked against the mounted origin before the custom headers and
+     * credentials are sent to it. This also handles following directories that
+     * lack the trailing '/'.
+     */
+    ret = curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
     /*
-     * for following directories without the '/'
+     * Safety cap in case automatic following is ever re-enabled; the manual
+     * loop enforces MAX_REDIRECTS hops itself.
      */
     ret = curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 2);
     if (ret) {
@@ -190,31 +264,15 @@ CURL *Link_to_curl(Link *link)
         }
     }
 
-    if (CONFIG.http_headers && is_same_origin(link->f_url)) {
-        ret = curl_easy_setopt(curl, CURLOPT_HTTPHEADER, CONFIG.http_headers);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.http_username && is_same_origin(link->f_url)) {
-        /*
-         * Only apply credentials to the mounted server. When
-         * --allow-external-origin is active, cross-origin links must NOT
-         * receive the user's credentials for the primary server.
-         */
-        ret = curl_easy_setopt(curl, CURLOPT_USERNAME, CONFIG.http_username);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
-
-    if (CONFIG.http_password && is_same_origin(link->f_url)) {
-        ret = curl_easy_setopt(curl, CURLOPT_PASSWORD, CONFIG.http_password);
-        if (ret) {
-            lprintf(error, "%s\n", curl_easy_strerror(ret));
-        }
-    }
+    /*
+     * Apply the mounted-server custom headers and basic-auth credentials only
+     * when the link is same-origin. When --allow-external-origin is active,
+     * cross-origin links must NOT receive the user's credentials or custom
+     * headers for the primary server. Redirect hops are re-checked per hop by
+     * the download loops, so a cross-origin redirect target never receives
+     * them either.
+     */
+    apply_origin_headers(curl, origin_base_url(link), link->f_url);
 
     if (CONFIG.proxy) {
         ret = curl_easy_setopt(curl, CURLOPT_PROXY, CONFIG.proxy);
@@ -255,10 +313,75 @@ CURL *Link_to_curl(Link *link)
     return curl;
 }
 
+/*
+ * If the just-completed (single, non-redirect-following) transfer was an HTTP
+ * redirect, re-point the handle at the resolved target and re-apply the
+ * same-origin header / credential decision for that target.
+ *
+ * Automatic redirect following is disabled on the handle (see Link_to_curl), so
+ * this walks a redirect chain one hop at a time. It returns 1 if a redirect was
+ * followed (the caller must run the transfer again for the new target), 0
+ * otherwise. The caller's loop resets the body / header buffers before the next
+ * transfer. CONFIG.http_headers / credentials are only (re)sent to a
+ * same-origin target, so they are never leaked to a cross-origin redirect.
+ */
+static int follow_one_redirect(CURL *curl, const char *base_url)
+{
+    long http_resp = 0;
+    if (curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp)) {
+        return 0;
+    }
+    if (http_resp < 300 || http_resp >= 400) {
+        return 0;
+    }
+
+    char *redir_url = NULL;
+    if (curl_easy_getinfo(curl, CURLINFO_REDIRECT_URL, &redir_url) || !redir_url
+        || !redir_url[0]) {
+        return 0;
+    }
+
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_URL, redir_url);
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+        return 0;
+    }
+
+    apply_origin_headers(curl, base_url, redir_url);
+    return 1;
+}
+
 static void filestat_on_complete(TransferStruct *ts, CURL *curl,
                                  CURLcode result, const char *url)
 {
     if (!result) {
+        /*
+         * Follow redirects one hop at a time (FOLLOWLOCATION is off) so each
+         * hop re-checks the target against the mounted origin before custom
+         * headers / credentials are sent.
+         */
+        if (follow_one_redirect(curl, origin_base_url(ts->link))) {
+            ts->redirects++;
+            if (ts->redirects > MAX_REDIRECTS) {
+                lprintf(error, "too many redirects for %s\n", ts->link->f_url);
+                ts->link->type = LINK_INVALID;
+                curl_easy_cleanup(curl);
+                FREE(ts->data);
+                FREE(ts);
+                return;
+            }
+            /*
+             * Reset the accumulated header buffer so only the final hop's
+             * headers are cached, then re-enqueue. on_complete runs with
+             * transfer_lock already held, so use the lock-free requeue.
+             */
+            FREE(ts->data);
+            ts->curr_size = 0;
+            ts->transferring = 1;
+            transfer_requeue_locked(curl);
+            return;
+        }
+
         /*
          * Transfer successful, set the file size
          */
@@ -445,9 +568,8 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
          * that we are not providing.
          */
         if (CONFIG.allow_external_origin
-            && (http_resp == 401 || http_resp == 403) && ROOT_LINK_TBL
-            && is_cross_origin(ROOT_LINK_TBL->links[0]->f_url,
-                               this_link->f_url)) {
+            && (http_resp == 401 || http_resp == 403)
+            && !is_same_origin(this_link)) {
             lprintf(warning,
                     "External link %s requires authentication (HTTP %ld). "
                     "Credentials are only applied to the mounted "
@@ -523,6 +645,8 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     /*
      * If we get temporary HTTP failure, wait for 5 seconds before retry
      */
+    const char *base_url = origin_base_url(link);
+    int redirects = 0;
     long http_resp = 0;
     do {
         /*
@@ -541,6 +665,29 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
         ret = curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_resp);
         if (ret) {
             lprintf(error, "%s\n", curl_easy_strerror(ret));
+        }
+        /*
+         * Redirects are followed one hop at a time (FOLLOWLOCATION is off).
+         * Each hop re-checks the target against the mounted origin before the
+         * custom headers / credentials are sent, so a cross-origin redirect
+         * never receives them.
+         */
+        if (follow_one_redirect(curl, base_url)) {
+            redirects++;
+            if (redirects > MAX_REDIRECTS) {
+                lprintf(error, "too many redirects for %s\n", url);
+                ts.failed = 1;
+                ts.curr_size = 0;
+                free(ts.data);
+                ts.data = NULL;
+                if (!header_out) {
+                    free(header_ptr->data);
+                    header_ptr->data = NULL;
+                }
+                curl_easy_cleanup(curl);
+                return ts;
+            }
+            continue;
         }
         if (HTTP_temp_failure((HTTPResponseCode)http_resp)) {
             lprintf(warning, "URL: %s, HTTP %ld, retrying later.\n", url,
@@ -621,9 +768,9 @@ static curl_off_t Link_download_cleanup(CURL *curl, TransferStruct *header)
     /*
      * Check for range seek support
      */
-    if (!CONFIG.no_range_check
-        && !strcasestr((header->data), "Accept-Ranges: bytes")
-        && !strcasestr((header->data), "Content-Range: bytes")) {
+    if (header->data && !CONFIG.no_range_check
+        && !strcasestr(header->data, "Accept-Ranges: bytes")
+        && !strcasestr(header->data, "Content-Range: bytes")) {
         fprintf(stderr,
                 "This web server does not support HTTP range requests. "
                 "If you do not believe that is the case, and if you plan "
@@ -695,6 +842,7 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
     TransferStruct ts = {0};
     TransferStruct header = {0};
     curl_off_t recv_sz;
+    const char *base_url = origin_base_url(link);
 
     size_t remaining = link->content_length - (size_t)offset;
     if (req_size > remaining) {
@@ -731,7 +879,31 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
         CURL *curl
             = Link_download_curl_setup(link, req_size, offset, &header, &ts);
 
-        transfer_blocking(curl);
+        /*
+         * Follow redirects one hop at a time on the same handle (FOLLOWLOCATION
+         * is off). The Range header is preserved across hops so the same byte
+         * range is requested from the redirect target; each hop re-checks the
+         * target against the mounted origin before the custom headers /
+         * credentials are sent to it.
+         */
+        int redirects = 0;
+        for (;;) {
+            FREE(ts.data);
+            ts.curr_size = 0;
+            ts.transferring = 1;
+            FREE(header.data);
+            header.curr_size = 0;
+
+            transfer_blocking(curl);
+
+            if (!follow_one_redirect(curl, base_url)) {
+                break;
+            }
+            if (++redirects > MAX_REDIRECTS) {
+                lprintf(error, "too many redirects for %s\n", link->f_url);
+                break;
+            }
+        }
 
         recv_sz = Link_download_cleanup(curl, &header);
 
@@ -747,13 +919,17 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
         }
 
         if (recv_sz != (long int)req_size) {
-            lprintf(error,
-                    "req_size != recv, req_size: %lu, recv: %ld, retrying...\n",
+            /*
+             * A successful response that is shorter than the requested range
+             * is a data-integrity failure: the bytes we have cannot be trusted
+             * to be contiguous. Surface EIO instead of retrying, which would
+             * otherwise loop (and sleep) indefinitely.
+             */
+            lprintf(error, "req_size != recv, req_size: %lu, recv: %ld\n",
                     req_size, recv_sz);
             Link_download_finish_transfer(cf, offset, &ts);
             FREE(ts.data);
-            sleep(CONFIG.http_wait_sec);
-            continue;
+            return -EIO;
         }
 
         /* success */
@@ -762,7 +938,13 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
 
     Link_download_finish_transfer(cf, offset, &ts);
 
-    memmove(output_buf, ts.data, recv_sz);
+    /*
+     * Reached only on success, where recv_sz == req_size > 0, so ts.data is
+     * non-NULL; guard anyway for the degenerate zero-byte case.
+     */
+    if (ts.data) {
+        memmove(output_buf, ts.data, recv_sz);
+    }
     FREE(ts.data);
 
     return recv_sz;
