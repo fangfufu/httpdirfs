@@ -10,6 +10,7 @@
 *.orig
 
 # Build directories
+/build/
 /builddir/
 /.pre-commit-builds/
 
