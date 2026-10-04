@@ -78,6 +78,8 @@ struct TransferStruct {
     /** \brief Set to 1 if the transfer ended in a non-200, non-temporary
      *  HTTP response (the resource could not be retrieved) */
     int failed;
+    /** \brief Number of redirect hops already followed for this transfer */
+    int redirects;
     /** \brief Effective URL after redirects (malloc'd, may be NULL)
      *  \note You MUST free the eff_url field in TransferStruct after use! */
     char *eff_url;
