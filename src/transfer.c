@@ -949,12 +949,26 @@ long Link_download(Link *link, char *output_buf, size_t req_size, off_t offset,
 
             transfer_blocking(curl);
 
-            if (follow_one_redirect(curl, base_url) != 1) {
+            int redir = follow_one_redirect(curl, base_url);
+            if (redir < 0) {
+                lprintf(error, "cross-origin redirect rejected for %s\n",
+                        link->f_url);
+                FREE(header.data);
+                curl_easy_cleanup(curl);
+                Link_download_finish_transfer(cf, offset, &ts);
+                FREE(ts.data);
+                return -EIO;
+            }
+            if (redir != 1) {
                 break;
             }
             if (++redirects > MAX_REDIRECTS) {
                 lprintf(error, "too many redirects for %s\n", link->f_url);
-                break;
+                FREE(header.data);
+                curl_easy_cleanup(curl);
+                Link_download_finish_transfer(cf, offset, &ts);
+                FREE(ts.data);
+                return -EIO;
             }
         }
 
