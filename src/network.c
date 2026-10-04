@@ -397,7 +397,10 @@ int transfer_requeue_locked(CURL *curl)
         lprintf(error, "requeue: %s\n", curl_multi_strerror(res));
         return -1;
     }
-    active_add_handle(curl);
+    if (active_add_handle(curl) != 0) {
+        curl_multi_remove_handle(curl_multi, curl);
+        return -1;
+    }
     return 0;
 }
 
