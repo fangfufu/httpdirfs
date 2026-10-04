@@ -37,6 +37,9 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 
+#define STR(x) #x
+#define XSTR(x) STR(x)
+
 #ifdef __APPLE__
 typedef struct {
     pthread_mutex_t mutex;

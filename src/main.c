@@ -619,38 +619,59 @@ static void print_long_help(void)
             "server\n"
             "        --capath            Certificate authority directory for "
             "the server\n");
-    fprintf(stderr, "\
-        --dl-seg-size       Set cache download segment size, in MB (default: " XSTR(
-                        DEFAULT_DATA_BLKSZ_MB) ")\n\
-                            Note: this setting is ignored if previously\n\
-                            cached data is found for the requested file.\n\
-        --http-header       Set one or more HTTP headers\n\
-        --max-conns         Set maximum number of network connections that\n\
-                            libcurl is allowed to make. (default: " XSTR(DEFAULT_NETWORK_MAX_CONNS) ")\n\
-        --refresh-timeout   Directory listings and files without verifiable\n\
-                            remote metadata are refreshed after the specified\n\
-                            time, in seconds (default: " XSTR(DEFAULT_REFRESH_TIMEOUT) ")\n\
-        --retry-wait        Set delay in seconds before retrying an HTTP request\n\
-                            after encountering an error. (default: " XSTR(DEFAULT_HTTP_WAIT_SEC) ")\n\
-        --invalid-refresh   Try refreshing invalid links when reading a directory.\n\
-        --user-agent        Set user agent string (default: \"" DEFAULT_USER_AGENT "\")\n\
-        --no-range-check    Disable the built-in check for the server's support\n\
-                            for HTTP range requests\n\
-        --zero-len-is-dir   If a file has a zero length, treat it as a directory\n\
-        --insecure-tls      Disable libcurl TLS certificate verification by\n\
-                            setting CURLOPT_SSL_VERIFYHOST to 0\n\
-        --allow-external-origin\n\
-                            Allow traversing links pointing to external\n\
-                            servers (default: off)\n\
-        --ignore-anchors    Ignore intra-page HTML anchor/fragment links\n\
-                            starting with '#' (default: off)\n\
-        --html-is-directory Promote resources with Content-Type text/html to\n\
-                            directories (default: off)\n\
-        --max-html-size     Set maximum HTML size for directory listing\n\
-                            promotion (default: 2M)\n\
-        --single-file-mode  Single file mode - rather than mounting a whole\n\
-                            directory, present a single file inside a virtual\n\
-                            directory.\n\n");
+    fprintf(
+        stderr,
+        "        --dl-seg-size       Set cache download segment size, in MB "
+        "(default: %d)\n"
+        "                            Note: this setting is ignored if "
+        "previously\n"
+        "                            cached data is found for the requested "
+        "file.\n"
+        "        --http-header       Set one or more HTTP headers\n"
+        "        --max-conns         Set maximum number of network connections "
+        "that\n"
+        "                            libcurl is allowed to make. (default: "
+        "%ld)\n"
+        "        --refresh-timeout   Directory listings and files without "
+        "verifiable\n"
+        "                            remote metadata are refreshed after the "
+        "specified\n"
+        "                            time, in seconds (default: %d)\n"
+        "        --retry-wait        Set delay in seconds before retrying an "
+        "HTTP request\n"
+        "                            after encountering an error. (default: "
+        "%d)\n"
+        "        --invalid-refresh   Try refreshing invalid links when reading "
+        "a directory.\n"
+        "        --user-agent        Set user agent string (default: \"%s\")\n"
+        "        --no-range-check    Disable the built-in check for the "
+        "server's support\n"
+        "                            for HTTP range requests\n"
+        "        --zero-len-is-dir   If a file has a zero length, treat it as "
+        "a directory\n"
+        "        --insecure-tls      Disable libcurl TLS certificate "
+        "verification by\n"
+        "                            setting CURLOPT_SSL_VERIFYHOST to 0\n"
+        "        --allow-external-origin\n"
+        "                            Allow traversing links pointing to "
+        "external\n"
+        "                            servers (default: off)\n"
+        "        --ignore-anchors    Ignore intra-page HTML anchor/fragment "
+        "links\n"
+        "                            starting with '#' (default: off)\n"
+        "        --html-is-directory Promote resources with Content-Type "
+        "text/html to\n"
+        "                            directories (default: off)\n"
+        "        --max-html-size     Set maximum HTML size for directory "
+        "listing\n"
+        "                            promotion (default: 2M)\n"
+        "        --single-file-mode  Single file mode - rather than mounting a "
+        "whole\n"
+        "                            directory, present a single file inside a "
+        "virtual\n"
+        "                            directory.\n\n",
+        CONFIG.data_blksz / (1024 * 1024), CONFIG.max_conns,
+        CONFIG.refresh_timeout, CONFIG.http_wait_sec, CONFIG.user_agent);
     fprintf(stderr,
             "    For mounting a Airsonic / Subsonic server:\n"
             "        --sonic-username    The username for your Airsonic / "

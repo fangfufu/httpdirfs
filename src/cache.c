@@ -1021,7 +1021,7 @@ static Cache *Cache_alloc(void)
     PTHREAD_COND_INIT(&cf->shutdown_cond, NULL);
     cf->shutting_down = 0;
 
-    cf->num_bg_workers = MIN(CONFIG.max_conns, DEFAULT_NETWORK_MAX_CONNS) / 2;
+    cf->num_bg_workers = CONFIG.max_conns / 2;
     if (cf->num_bg_workers <= 0) {
         cf->num_bg_workers = 1;
     }
