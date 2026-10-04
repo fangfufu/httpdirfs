@@ -66,7 +66,7 @@ void sonic_config_init(const char *server, const char *username,
     }
     SONIC_CONFIG.username = STRNDUP(username, NAME_MAX);
     SONIC_CONFIG.password = STRNDUP(password, NAME_MAX);
-    SONIC_CONFIG.client = DEFAULT_USER_AGENT;
+    SONIC_CONFIG.client = CONFIG.user_agent;
 
     if (!CONFIG.sonic_insecure) {
         /*

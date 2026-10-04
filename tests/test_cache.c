@@ -326,7 +326,7 @@ void test_Cache_alloc_num_bg_workers(void)
         CONFIG.max_conns = test_conns[i];
         Cache *cf = Cache_open("dummy.bin");
         TEST_ASSERT_NOT_NULL(cf);
-        int expected = MIN(CONFIG.max_conns, DEFAULT_NETWORK_MAX_CONNS) / 2;
+        int expected = CONFIG.max_conns / 2;
         if (expected <= 0) {
             expected = 1;
         }

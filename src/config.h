@@ -31,44 +31,6 @@
 #include <limits.h>
 #include <sys/types.h>
 
-/**
- * \brief the default user agent string
- */
-#define DEFAULT_USER_AGENT "HTTPDirFS-" VERSION
-
-/**
- * \brief The default maximum number of network connections
- */
-#define DEFAULT_NETWORK_MAX_CONNS 6
-
-/**
- * \brief The default refresh_timeout
- */
-#define DEFAULT_REFRESH_TIMEOUT 3600
-
-/**
- * \brief The default HTTP 429 (too many requests) wait time
- */
-#define DEFAULT_HTTP_WAIT_SEC 5
-
-/**
- * \brief Data file block size in MB
- */
-#define DEFAULT_DATA_BLKSZ_MB 8
-
-/**
- * \brief Data file block size
- * \details We set it to 1024*1024*8 = 8MiB
- */
-#define DEFAULT_DATA_BLKSZ (DEFAULT_DATA_BLKSZ_MB * 1024 * 1024)
-
-/**
- * \brief Default maximum HTML size for directory listing promotion (2 MiB)
- */
-#define DEFAULT_MAX_HTML_SIZE ((off_t)2 * 1024 * 1024)
-
-#define STR(x) #x
-#define XSTR(x) STR(x)
 
 /**
  * \brief Operation modes
