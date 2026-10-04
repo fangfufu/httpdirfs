@@ -1326,6 +1326,13 @@ Cache *Cache_open(const char *fn)
             if (stat(full_path, &st) != 0) {
                 lprintf(error, "cannot stat container file %s.\n", actual_fn);
                 ok = 0;
+            } else if ((uintmax_t)st.st_size < (uintmax_t)cf->header_size) {
+                lprintf(error,
+                        "metadata inconsistency %s, "
+                        "container size %jd smaller than header size %jd.\n",
+                        actual_fn, (intmax_t)st.st_size,
+                        (intmax_t)cf->header_size);
+                ok = 0;
             } else if ((uintmax_t)cf->link->content_length
                        > (uintmax_t)st.st_size - (uintmax_t)cf->header_size) {
                 lprintf(error,
