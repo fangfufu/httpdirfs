@@ -390,14 +390,15 @@ void transfer_nonblocking(CURL *curl)
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
 }
 
-void transfer_requeue_locked(CURL *curl)
+int transfer_requeue_locked(CURL *curl)
 {
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "requeue: %s\n", curl_multi_strerror(res));
-    } else {
-        active_add_handle(curl);
+        return -1;
     }
+    active_add_handle(curl);
+    return 0;
 }
 
 int HTTP_temp_failure(HTTPResponseCode http_resp)

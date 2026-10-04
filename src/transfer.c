@@ -378,7 +378,15 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
             FREE(ts->data);
             ts->curr_size = 0;
             ts->transferring = 1;
-            transfer_requeue_locked(curl);
+            if (transfer_requeue_locked(curl)) {
+                lprintf(error, "requeue failed for %s\n", ts->link->f_url);
+                ts->transferring = 0;
+                ts->link->type = LINK_INVALID;
+                curl_easy_cleanup(curl);
+                FREE(ts->data);
+                FREE(ts);
+                return;
+            }
             return;
         }
 
@@ -648,7 +656,12 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     const char *base_url = origin_base_url(link);
     int redirects = 0;
     long http_resp = 0;
-    do {
+    /*
+     * Loop until the response is neither a redirect (followed one hop at a
+     * time) nor a temporary failure (retried after a wait); every other
+     * response is final and leaves the loop.
+     */
+    while (1) {
         /*
          * Reset the transfer struct for each attempt to avoid accumulating
          * data from failed/partial attempts.
@@ -693,7 +706,9 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
             lprintf(warning, "URL: %s, HTTP %ld, retrying later.\n", url,
                     http_resp);
             sleep(CONFIG.http_wait_sec);
-        } else if (http_resp != HTTP_OK) {
+            continue;
+        }
+        if (http_resp != HTTP_OK) {
             lprintf(warning, "cannot retrieve URL: %s, HTTP %ld\n", url,
                     http_resp);
             ts.failed = 1;
@@ -707,7 +722,8 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
             curl_easy_cleanup(curl);
             return ts;
         }
-    } while (HTTP_temp_failure((HTTPResponseCode)http_resp));
+        break;
+    }
 
     ret = curl_easy_getinfo(curl, CURLINFO_FILETIME, &(link->time));
     if (ret) {
