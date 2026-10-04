@@ -538,21 +538,14 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
         return current_type;
     }
 
-    if (CONFIG.html_is_directory && is_html_content_type(content_type)) {
-        if (cl > 0 && (off_t)cl > CONFIG.max_html_size) {
-            if (content_len_out) {
-                *content_len_out = (size_t)cl;
-            }
-            return LINK_FILE;
-        }
-        return LINK_DIR;
-    }
+    int is_html = is_html_content_type(content_type);
+    int has_ct = content_type != NULL && *content_type != '\0';
 
     if (cl < 0) {
         /*
          * Unknown size (chunked / no Content-Length): we cannot report a size
          * without downloading the whole body, so decide purely on content
-         * type (both flag modes).
+         * type (both --html-is-directory modes).
          *   - A concrete non-HTML type (e.g. image/png, application/zip) is
          *     trusted to be a plain file, not a listing, so parsing it is
          *     pointless; and its size is unknown, so it cannot be presented
@@ -562,13 +555,22 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
          *     content type is common for on-the-fly generated directory
          *     listings, which also lack a Content-Length.
          */
-        int is_html = is_html_content_type(content_type);
-        int has_ct = content_type != NULL && *content_type != '\0';
         if (has_ct && !is_html) {
             return LINK_INVALID;
         }
         return LINK_DIR;
     }
+
+    if (CONFIG.html_is_directory && is_html) {
+        if ((off_t)cl > CONFIG.max_html_size) {
+            if (content_len_out) {
+                *content_len_out = (size_t)cl;
+            }
+            return LINK_FILE;
+        }
+        return LINK_DIR;
+    }
+
     if (cl == 0 && CONFIG.zero_len_is_dir) {
         return LINK_DIR;
     }
