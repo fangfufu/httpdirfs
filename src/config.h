@@ -101,6 +101,15 @@ typedef struct {
     off_t cache_min_size;
     /** \brief The maximum file size threshold for caching */
     off_t cache_max_size;
+    /** \brief Whether --cache-clear was requested; the clearing itself is
+     *  deferred until the full argument list has been parsed so that the
+     *  outcome does not depend on option order
+     */
+    int cache_clear;
+    /** \brief The argument of --cache-clear-host; the clearing itself is
+     *  deferred until the full argument list has been parsed
+     */
+    char *cache_clear_host;
     /*-------------- Sonic related -------------*/
     /** \brief The Sonic server username */
     char *sonic_username;

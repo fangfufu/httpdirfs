@@ -45,15 +45,28 @@ void test_CacheSystem_get_cache_dir(void)
     FREE(dir);
     unsetenv("XDG_CACHE_HOME");
 
-    // 3. Test fallback to HOME/.cache
+    // 3. Test that an empty or relative XDG_CACHE_HOME is treated as unset
     setenv("HOME", "/tmp/my_home", 1);
+    setenv("XDG_CACHE_HOME", "", 1);
+    dir = CacheSystem_get_cache_dir();
+    TEST_ASSERT_NOT_NULL(dir);
+    TEST_ASSERT_EQUAL_STRING("/tmp/my_home/.cache", dir);
+    FREE(dir);
+    setenv("XDG_CACHE_HOME", "relative/xdg_cache", 1);
+    dir = CacheSystem_get_cache_dir();
+    TEST_ASSERT_NOT_NULL(dir);
+    TEST_ASSERT_EQUAL_STRING("/tmp/my_home/.cache", dir);
+    FREE(dir);
+    unsetenv("XDG_CACHE_HOME");
+
+    // 4. Test fallback to HOME/.cache
     dir = CacheSystem_get_cache_dir();
     TEST_ASSERT_NOT_NULL(dir);
     TEST_ASSERT_EQUAL_STRING("/tmp/my_home/.cache", dir);
     FREE(dir);
     unsetenv("HOME");
 
-    // 4. Test fallback when neither is set
+    // 5. Test fallback when neither is set
     dir = CacheSystem_get_cache_dir();
     TEST_ASSERT_NOT_NULL(dir);
     char *expected_cur_dir = REALPATH("./", NULL);
@@ -975,7 +988,15 @@ void test_container_file_then_dir(void)
 
 void test_cache_clear_host(void)
 {
-    const char *tmp_xdg_cache = "./test_cache_clear_host_xdg";
+    /*
+     * XDG_CACHE_HOME must be an absolute path: a relative value is treated
+     * as unset, so build an absolute one from the current working directory.
+     */
+    char *cwd = REALPATH("./", NULL);
+    TEST_ASSERT_NOT_NULL(cwd);
+    char *tmp_xdg_cache = path_append(cwd, "test_cache_clear_host_xdg");
+    TEST_ASSERT_NOT_NULL(tmp_xdg_cache);
+    FREE(cwd);
     cleanup_temp_dir(tmp_xdg_cache);
     TEST_ASSERT_EQUAL_INT(0, mkdir(tmp_xdg_cache, S_IRWXU));
 
@@ -1058,6 +1079,7 @@ void test_cache_clear_host(void)
     }
     CONFIG.cache_dir = old_cache_dir;
     cleanup_temp_dir(tmp_xdg_cache);
+    FREE(tmp_xdg_cache);
 }
 
 void test_container_head_write_read(void)

@@ -94,6 +94,9 @@ void Config_init(void)
     CONFIG.cache_min_size = -1;
     CONFIG.cache_max_size = -1;
 
+    CONFIG.cache_clear = 0;
+    CONFIG.cache_clear_host = NULL;
+
     /*-------------- Sonic related -------------*/
     CONFIG.sonic_username = NULL;
 
@@ -126,6 +129,7 @@ void Config_cleanup(void)
     FREE(CONFIG.cafile);
     FREE(CONFIG.capath);
     FREE(CONFIG.cache_dir);
+    FREE(CONFIG.cache_clear_host);
     FREE(CONFIG.sonic_username);
     FREE(CONFIG.sonic_password);
 }

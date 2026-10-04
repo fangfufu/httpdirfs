@@ -232,8 +232,13 @@ static char *get_XDG_CONFIG_HOME(void)
     const char *default_config_subdir = "/.config";
     char *config_dir = NULL;
 
+    /*
+     * Per the XDG Base Directory specification, XDG_CONFIG_HOME must be an
+     * absolute path when set; an empty or relative value is treated as
+     * unset and the default locations are used instead.
+     */
     const char *xdg_config_home = getenv("XDG_CONFIG_HOME");
-    if (xdg_config_home) {
+    if (xdg_config_home && xdg_config_home[0] == '/') {
         config_dir = STRNDUP(xdg_config_home, PATH_MAX);
     } else {
         const char *user_home = getenv("HOME");
@@ -466,7 +471,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                     = curl_slist_append(CONFIG.http_headers, optarg);
                 break;
             case 26:
-                CacheSystem_clear();
+                CONFIG.cache_clear = 1;
                 break;
             case 27:
                 CONFIG.zero_len_is_dir = 1;
@@ -528,7 +533,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.allow_external_origin = 1;
                 break;
             case 37:
-                CacheSystem_clear_host(optarg);
+                CONFIG.cache_clear_host = STRDUP(optarg);
                 break;
             default:
                 fprintf(stderr, "see httpdirfs -h for usage\n");
@@ -545,6 +550,24 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
         fprintf(stderr, "Error: --cache-min-size cannot be greater than "
                         "--cache-max-size\n");
         exit(EXIT_FAILURE);
+    }
+
+    /*
+     * The cache clearing options are executed here, after the full argument
+     * list (including the config file) has been parsed, so that the outcome
+     * does not depend on the order in which the options appear. Both call
+     * exit() and never return.
+     */
+    if (CONFIG.cache_clear && CONFIG.cache_clear_host) {
+        fprintf(stderr, "Error: --cache-clear and --cache-clear-host cannot be "
+                        "used together\n");
+        exit(EXIT_FAILURE);
+    }
+    if (CONFIG.cache_clear) {
+        CacheSystem_clear();
+    }
+    if (CONFIG.cache_clear_host) {
+        CacheSystem_clear_host(CONFIG.cache_clear_host);
     }
     return 0;
 }
@@ -593,12 +616,13 @@ static void print_long_help(void)
             "        --cache-location    Set a custom cache location\n"
             "                            (default: "
             "\"${XDG_CACHE_HOME}/httpdirfs\")\n"
-            "        --cache-clear       Delete the cache directory or the "
+            "        --cache-clear       Delete the cache directory, or the "
             "custom location\n"
-            "                            specified with `--cache-location`, "
-            "if the option is\n"
-            "                            seen first. Then exit in either "
-            "case.\n"
+            "                            specified with --cache-location if "
+            "that option is\n"
+            "                            given (the order of the two options "
+            "does not matter).\n"
+            "                            Then exit.\n"
             "        --cache-clear-host  Delete only the cache of a single "
             "server host,\n"
             "                            given as a full URL or a bare host "

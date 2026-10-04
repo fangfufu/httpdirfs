@@ -80,8 +80,13 @@ char *CacheSystem_get_cache_dir(void)
     const char *default_cache_subdir = "/.cache";
     char *cache_dir = NULL;
 
+    /*
+     * Per the XDG Base Directory specification, XDG_CACHE_HOME must be an
+     * absolute path when set; an empty or relative value is treated as
+     * unset and the default locations are used instead.
+     */
     const char *xdg_cache_home = getenv("XDG_CACHE_HOME");
-    if (xdg_cache_home) {
+    if (xdg_cache_home && xdg_cache_home[0] == '/') {
         cache_dir = STRNDUP(xdg_cache_home, PATH_MAX);
     } else {
         const char *user_home = getenv("HOME");

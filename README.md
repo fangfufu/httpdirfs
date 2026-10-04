@@ -4,44 +4,35 @@
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=fangfufu_httpdirfs&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=fangfufu_httpdirfs)
 [![pre-commit.ci status](https://results.pre-commit.ci/badge/github/fangfufu/httpdirfs/master.svg)](https://results.pre-commit.ci/latest/github/fangfufu/httpdirfs/master)
 
-# HTTPDirFS - HTTP Directory Filesystem with a permanent cache, and Airsonic / Subsonic server support
+# HTTPDirFS - HTTP Directory Filesystem
 
-Have you ever wanted to mount those HTTP directory listings as if it was a
-partition? Look no further, this is your solution. HTTPDirFS stands for Hyper
-Text Transfer Protocol Directory Filesystem.
+HTTPDirFS is a filesystem that allows you to mount arbitrary websites using the
+FUSE framework. It comes with a cache system, and Airsonic / Subsonic server
+support
+
+HTTPDirFS parses HTML directory listings using the Gumbo HTML5 parser. It
+extracts descriptive filenames from anchor text (`<a>`), resolves name
+collisions with progressive URL path escalation.
+
+If you only want to access a single file, there is also a simplified Single File
+Mode. This can be especially useful if the web server does not present a HTTP
+directory listing.
+
+There is also support for Airsonic / Subsonic server. This allows you to mount a
+remote music collection locally.
 
 The performance of the program is excellent. HTTP connections are reused through
 curl-multi interface. The FUSE component runs in the multithreaded mode.
 
-There is a permanent cache system which can cache all the file segments you have
-downloaded, so you don't need to these segments again if you access them later.
-This feature is triggered by the `--cache` flag. This is similar to the
-`--vfs-cache-mode full` feature of
+The cache system caches the file segments you have accessed, so you don't need
+to download those segments again if you access them later. This feature is
+triggered by the `--cache` flag. This is similar to the `--vfs-cache-mode full`
+feature of
 [rclone mount](https://rclone.org/commands/rclone_mount/#vfs-cache-mode-full)
 
 The cache system runs multiple background worker threads to process downloads
 asynchronously, allowing multiple concurrent HTTP connections to download
 different file segments in parallel.
-
-There is support for Airsonic / Subsonic server. This allows you to mount a
-remote music collection locally.
-
-HTTPDirFS parses HTML directory listings using the Gumbo HTML5 parser. It
-extracts descriptive filenames from anchor text (`<a>`), resolves name
-collisions with progressive URL path escalation, and prevents navigation loops.
-
-By default, cross-origin links are discarded to confine filesystem traversal to
-the mounted server's origin. You can follow external origin links using
-`--allow-external-origin`.
-
-By default, resources whose URLs do not end with a trailing slash are treated as
-regular files. If you are mounting websites where subdirectories are represented
-by HTML pages without trailing slashes, you can enable `--html-is-directory` to
-dynamically inspect and promote linked HTML pages into browsable directories.
-
-If you only want to access a single file, there is also a simplified Single File
-Mode. This can be especially useful if the web server does not present a HTTP
-directory listing.
 
 ## Usage
 
@@ -72,6 +63,94 @@ Please note that the man page only works if you have installed HTTPDirFS
 properly.
 
 The full usage flags is also documented in the [usage](USAGE.md) page.
+
+### Single file mode
+
+If you just want to access a single file, you can specify `--single-file-mode`.
+This effectively creates a virtual directory that contains one single file. This
+operating mode is similar to the unmaintained
+[httpfs](http://httpfs.sourceforge.net/).
+
+e.g.
+
+```
+./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
+```
+
+This can be useful if the web server does not present a HTTP directory listing.
+
+### Airsonic / Subsonic server support
+
+The Airsonic / Subsonic server support is dedicated the my Debian package
+maintainer Jerome Charaoui.You can mount the music collection on your Airsonic /
+Subsonic server (\*sonic), and browse them using your favourite file browser.
+For more information on how to use it, please refer to the
+[usage](USAGE.md#airsonic--subsonic-mounting-options) page.
+
+### The cache system
+
+You can cache the files you have accessed on your storage device by using the
+`--cache` flag. The files it caches persist across sessions. You can clear the
+entire cache using `--cache-clear`, or clear only a specific server using
+`--cache-clear-host <URL_OR_HOST>`.
+
+> [!WARNING]
+> If `--cache-location <dir>` is given together with `--cache-clear`, the entire
+> directory `<dir>` will be deleted instead of the default cache location,
+> regardless of the order of the two options. Take caution when specifying
+> non-empty directories to be used as cache.
+
+By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
+`${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
+directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
+is normally `${HOME}/.cache/httpdirfs`.
+
+Please note that a custom directory supplied via `--cache-location` is used
+verbatim as the cache root of the mounted server: unlike the default location,
+no per-origin subdirectory is appended to it.
+
+Each HTTP server origin gets its own cache directory, named using the escaped
+server root URL. Within each origin, files are sharded into 256 subdirectories
+using the first two hex characters of their canonical URL's MD5 hash.
+
+Once a segment of the file has been downloaded once, it won't be downloaded
+again as long as the server still reports the same `Last-Modified` timestamp and
+content length. Subsequent reads are served offline at local storage speed.
+Directory listings (and files whose remote metadata cannot be verified) are
+considered stale, and refetched from the server, once they are older than
+`--refresh-timeout` seconds (default: 3600).
+
+The permanent cache system relies on sparse allocation. Please make sure your
+filesystem supports it. Otherwise your local storage device will get heavy I/O
+from cache file creation. For a list of filesystem that supports sparse
+allocation, please refer to
+[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
+
+### Configuration file support
+
+This program has basic support for using a configuration file. By default, the
+configuration file which the program reads is
+`${XDG_CONFIG_HOME}/httpdirfs/config`, which by default is at
+`${HOME}/.config/httpdirfs/config`. You will have to create the sub-directory
+and the configuration file yourself. In the configuration file, please supply
+one option per line. For example:
+
+```
+--username test
+--password test
+-f
+```
+
+Alternatively, you can specify your own configuration file by using the
+`--config` option.
+
+### Log levels
+
+You can control how much log HTTPDirFS outputs by setting the
+`HTTPDIRFS_LOG_LEVEL` environmental variable. For details of the different types
+of log that are supported, please refer to
+[log.h](https://github.com/fangfufu/httpdirfs/blob/master/src/log.h) and
+[log.c](https://github.com/fangfufu/httpdirfs/blob/master/src/log.c).
 
 ## Compilation
 
@@ -172,139 +251,6 @@ Please note if you install HTTDirFS from a repository, it may be outdated.
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/fusefs%3Ahttpdirfs.svg)](https://repology.org/project/fusefs%3Ahttpdirfs/versions)
 
-## Airsonic / Subsonic server support
-
-The Airsonic / Subsonic server support is dedicated the my Debian package
-maintainer Jerome Charaoui.You can mount the music collection on your Airsonic /
-Subsonic server (\*sonic), and browse them using your favourite file browser.
-
-You simply have to supply both `--sonic-username` and `--sonic-password` to
-trigger the \*sonic server mode. For example:
-
-```
-./httpdirfs -f --cache --sonic-username $USERNAME --sonic-password $PASSWORD $URL $MOUNT_POINT
-```
-
-You definitely want to enable the cache for this one, otherwise it is painfully
-slow.
-
-There are two ways of mounting your \*sonic server
-
-- the index mode
-- and the ID3 mode.
-
-In the index mode, the filesystem is presented based on the listing on the
-`Index` link in your \*sonic's home page.
-
-In ID3 mode, the filesystem is presented using the following hierarchy: 0. Root
-
-1. Alphabetical indices of the artists' names
-1. The artists' names
-1. All of the albums by a single artist
-1. All the songs in an album.
-
-By default, \*sonic server is mounted in the index mode. If you want to mount in
-ID3 mode, please use the `--sonic-id3` flag.
-
-Please note that the cache feature is unaffected by how you mount your \*sonic
-server. If you mounted your server in index mode, the cache is still valid in
-ID3 mode, and vice versa.
-
-HTTPDirFS is also known to work with the following applications, which implement
-some or all of Subsonic API:
-
-- [Funkwhale](https://funkwhale.audio/) (requires `--sonic-id3` and
-  `--no-range-check`, more information in
-  [issue #45](https://github.com/fangfufu/httpdirfs/issues/45))
-- [LMS](https://github.com/epoupon/lms) (requires `--sonic-insecure` and
-  `--no-range-check`, more information in
-  [issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the
-  [demo instance](https://lms-demo.poupon.dev/), you might also need
-  `--insecure-tls`)
-- [Navidrome](https://github.com/navidrome/navidrome), more information in
-  [issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
-
-## Single file mode
-
-If you just want to access a single file, you can specify `--single-file-mode`.
-This effectively creates a virtual directory that contains one single file. This
-operating mode is similar to the unmaintained
-[httpfs](http://httpfs.sourceforge.net/).
-
-e.g.
-
-```
-./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
-```
-
-This can be useful if the web server does not present a HTTP directory listing.
-This feature was implemented due to Github
-[issue #86](https://github.com/fangfufu/httpdirfs/issues/86)
-
-## Permanent cache system
-
-You can cache the files you have accessed permanently on your hard drive by
-using the `--cache` flag. The files it caches persist across sessions. You can
-clear the entire cache using `--cache-clear`, or clear only a specific server
-using `--cache-clear-host <URL_OR_HOST>`.
-
-> [!WARNING]
-> If `--cache-location <dir>` appears before `--cache-clear`, the entire
-> directory `<dir>` will be deleted instead. Take caution when specifying
-> non-empty directories to be used as cache.
-
-By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
-`${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
-directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
-is normally `${HOME}/.cache/httpdirfs`.
-
-Please note that a custom directory supplied via `--cache-location` is used
-verbatim as the cache root of the mounted server: unlike the default location,
-no per-origin subdirectory is appended to it.
-
-Each HTTP server origin gets its own cache directory, named using the escaped
-server root URL. Within each origin, files are sharded into 256 subdirectories
-using the first two hex characters of their canonical URL's MD5 hash.
-
-Once a segment of the file has been downloaded once, it won't be downloaded
-again as long as the server still reports the same `Last-Modified` timestamp and
-content length. Subsequent reads are served offline at local storage speed.
-Directory listings (and files whose remote metadata cannot be verified) are
-considered stale, and refetched from the server, once they are older than
-`--refresh-timeout` seconds (default: 3600).
-
-The permanent cache system relies on sparse allocation. Please make sure your
-filesystem supports it. Otherwise your local storage device will get heavy I/O
-from cache file creation. For a list of filesystem that supports sparse
-allocation, please refer to
-[Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
-
-## Configuration file support
-
-This program has basic support for using a configuration file. By default, the
-configuration file which the program reads is
-`${XDG_CONFIG_HOME}/httpdirfs/config`, which by default is at
-`${HOME}/.config/httpdirfs/config`. You will have to create the sub-directory
-and the configuration file yourself. In the configuration file, please supply
-one option per line. For example:
-
-```
---username test
---password test
--f
-```
-
-Alternatively, you can specify your own configuration file by using the
-`--config` option.
-
-### Log levels
-
-You can control how much log HTTPDirFS outputs by setting the
-`HTTPDIRFS_LOG_LEVEL` environmental variable. For details of the different types
-of log that are supported, please refer to
-[log.h](https://github.com/fangfufu/httpdirfs/blob/master/src/log.h) and
-[log.c](https://github.com/fangfufu/httpdirfs/blob/master/src/log.c).
-
 ## The Technical Details
 
 For the normal HTTP directories, this program downloads the HTML web pages/files
@@ -361,14 +307,11 @@ Filenames must:
 - Must not contain '/' in the middle of the filename.
 - Must not end with '/'.
 
-Directories must:
+Without the `--html-is-directory` flag, directories must:
 
 - Consists of printable characters
 - Must not contain '/' in the middle of the directory name.
 - Must end with '/'.
-
-The exact change that set these rules was done in commit
-[647657169574bf7be29f858ff3d1a3a70d27d661](https://github.com/fangfufu/httpdirfs/commit/647657169574bf7be29f858ff3d1a3a70d27d661).
 
 ## Press Coverage
 

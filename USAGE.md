@@ -7,7 +7,7 @@ configuration and usage flags supported by HTTPDirFS.
 ### Command Syntax
 
 ```bash
-usage: httpdirfs [options] URL mountpoint
+usage: ./httpdirfs [options] <mountpoint>
 
 FUSE options:
     -h   --help            print help
@@ -69,9 +69,10 @@ HTTPDirFS options:
         --cache             Enable cache (default: off)
         --cache-location    Set a custom cache location
                             (default: "${XDG_CACHE_HOME}/httpdirfs")
-        --cache-clear       Delete the cache directory or the custom location
-                            specified with `--cache-location`, if the option is
-                            seen first. Then exit in either case.
+        --cache-clear       Delete the cache directory, or the custom location
+                            specified with --cache-location if that option is
+                            given (the order of the two options does not matter).
+                            Then exit.
         --cache-clear-host  Delete only the cache of a single server host,
                             given as a full URL or a bare host (both the http
                             and https origin directories are then removed).
@@ -122,312 +123,8 @@ HTTPDirFS options:
         --sonic-insecure    Authenticate against your Airsonic / Subsonic server
                             using the insecure username / hex encoded password
                             scheme
+
 ```
-
-______________________________________________________________________
-
-### General Options
-
-#### `--config <path>`
-
-- **Description:** Specify the path to a configuration file containing option
-  key-value pairs. Using a configuration file is a clean alternative to passing
-  multiple flags directly via the command line.
-- **Example:**
-  `httpdirfs --config /etc/httpdirfs/mount.conf http://example.com/dir /mnt/dir`
-
-#### `-o opt,[opt...]`
-
-- **Description:** Pass options directly to the underlying FUSE library or load
-  modules. This is extremely powerful for customizing filesystem behavior,
-  permission maps, performance tweaks, and character encoding.
-
-  **Commonly Used FUSE Options:**
-
-  - `ro`: Mount the filesystem as read-only.
-  - `allow_other`: Allow other users on the system to access the mountpoint. By
-    default, only the mounting user has access.
-  - `allow_root`: Allow the root user to access the mountpoint.
-  - `auto_unmount`: Automatically unmount the filesystem when the mounting
-    process terminates.
-  - `kernel_cache`: Cache files in the kernel to significantly speed up repeated
-    reads.
-  - `umask=M`, `fmask=M`, `dmask=M`: Customize permission masks for files and
-    directories (specified in octal, e.g., `umask=022`).
-  - `uid=N`, `gid=N`: Override the user ID and group ID ownership of all virtual
-    files.
-
-  **Commonly Used Module Options:**
-
-  - `subdir=DIR`: Prepend the specified directory `DIR` to all paths (loads the
-    subdir module).
-  - `rellinks` / `norellinks`: Transform absolute symlinks to relative ones
-    within the subdir module.
-  - `from_code=CHARSET` / `to_code=CHARSET`: Translate character encodings of
-    filenames (e.g., from UTF-8 to ISO-8859-1) (loads the iconv module).
-
-- **Example:**
-  `httpdirfs -o allow_other,ro,auto_unmount http://example.com/dir /mnt/dir`
-
-#### `-h, --help`
-
-- **Description:** Prints a concise summary of the command-line usage and exits.
-
-#### `-V, --version`
-
-- **Description:** Prints the current version information of HTTPDirFS and
-  exits.
-
-#### `-f`
-
-- **Description:** Runs HTTPDirFS in the foreground. By default, HTTPDirFS
-  daemonizes and runs in the background. Running in the foreground is useful for
-  debugging or when running inside containers (e.g., Docker).
-
-#### `-s`
-
-- **Description:** Disables multi-threaded operation. This runs FUSE and network
-  operations in a single thread, which can be useful for debugging concurrency
-  issues.
-
-#### `-d, --debug`
-
-- **Description:** Enables verbose debug output. This output includes detailed
-  curl request logs and FUSE kernel-level interaction logs. Note that this flag
-  automatically implies foreground operation (`-f`).
-
-______________________________________________________________________
-
-### HTTPDirFS Core Options
-
-#### `-u, --username <string>`
-
-- **Description:** Sets the HTTP authentication username for servers requiring
-  Basic, Digest, or NTLM authentication.
-- **Note:** Credentials are automatically scoped to the primary mount server
-  only.
-
-#### `-p, --password <string>`
-
-- **Description:** Sets the HTTP authentication password for servers requiring
-  authentication.
-
-#### `-P, --proxy <url>`
-
-- **Description:** Set the HTTP proxy server URL (e.g., `http://127.0.0.1:8080`)
-  for all network requests. For more details, refer to the
-  [CURLOPT_PROXY documentation](https://curl.se/libcurl/c/CURLOPT_PROXY.html).
-
-#### `--proxy-username <string>`
-
-- **Description:** The username to authenticate against the specified proxy
-  server.
-
-#### `--proxy-password <string>`
-
-- **Description:** The password to authenticate against the specified proxy
-  server.
-
-#### `--proxy-cacert <path>`
-
-- **Description:** Path to a custom Certificate Authority (CA) bundle file used
-  to verify the TLS certificate of the proxy server.
-
-#### `--proxy-capath <path>`
-
-- **Description:** Path to a directory containing CA certificates to verify the
-  TLS certificate of the proxy server.
-
-#### `--cacert <path>`
-
-- **Description:** Path to a Certificate Authority (CA) PEM bundle file to
-  verify the SSL certificate of the remote HTTPS directory server.
-
-#### `--capath <path>`
-
-- **Description:** Path to a directory containing CA PEM certificates to verify
-  the SSL certificate of the HTTPS directory server.
-
-#### `--insecure-tls`
-
-- **Description:** Disables TLS certificate validation of the HTTPS server (sets
-  `CURLOPT_SSL_VERIFYPEER` and `CURLOPT_SSL_VERIFYHOST` to 0). Useful for
-  mounting servers using self-signed certificates in private networks.
-- **Warning:** Disabling certificate verification exposes connections to
-  potential man-in-the-middle (MitM) attacks.
-
-______________________________________________________________________
-
-### Cache Settings
-
-#### `--cache`
-
-- **Description:** Enables the persistent local cache mode. When cache mode is
-  active, HTTPDirFS caches directory trees and file content segments locally on
-  disk. Subsequent directory reads and file accesses are served from the cache,
-  significantly improving speed and reducing network usage.
-
-#### `--cache-location <path>`
-
-- **Description:** Specify a custom directory path where cache data and metadata
-  should be stored.
-- **Default:** `${XDG_CACHE_HOME}/httpdirfs` (usually resolves to
-  `~/.cache/httpdirfs`).
-- **Note:** The custom directory is used **verbatim** as the cache root of the
-  mounted server. Unlike the default location, no per-origin subdirectory is
-  appended to it, so all cached data for that server is stored directly inside
-  it.
-
-#### `--cache-clear`
-
-- **Description:** Deletes the existing cache directory (or the custom cache
-  path if `--cache-location` is specified before this option) and immediately
-  exits. Highly useful for cleaning up disk space or forcing a full directory
-  recrawl.
-
-#### `--cache-clear-host <URL_OR_HOST>`
-
-- **Description:** Deletes only the cached data and metadata of a single server
-  host, provided as a full URL (e.g., `https://example.com/dir`) or a bare
-  hostname (e.g., `example.com`), clearing both the HTTP and HTTPS origin cache
-  directories, and immediately exits.
-- **Note:** Only supported with the default cache location. Per-origin
-  subdirectories do not exist when a custom location is set with
-  `--cache-location`, so combining the two options is rejected with an error;
-  use `--cache-clear` to remove a custom cache directory.
-
-#### `--dl-seg-size <size>`
-
-- **Description:** Sets the size of individual file cache segments in Megabytes
-  (MB).
-- **Default:** `8`
-- **Note:** This setting is ignored for files that already have existing cached
-  segment data on disk.
-
-#### `--cache-min-size <bytes>`
-
-- **Description:** Sets the minimum file size threshold for caching in bytes.
-  Files with a size smaller than this threshold will bypass the local disk cache
-  and be downloaded directly from the network upon access.
-- **Default:** None (no minimum limit is set).
-
-#### `--cache-max-size <bytes>`
-
-- **Description:** Sets the maximum file size threshold for caching in bytes.
-  Files with a size larger than this threshold will bypass the local disk cache
-  and be downloaded directly from the network upon access.
-- **Default:** None (no maximum limit is set).
-
-______________________________________________________________________
-
-### Network & Performance Options
-
-#### `--http-header <header>`
-
-- **Description:** Set one or more custom HTTP headers for requests sent to the
-  mounted server. This option can be specified multiple times.
-- **Example:**
-  `httpdirfs --http-header "Authorization: Bearer token" --http-header "X-Custom: value" URL mountpoint`
-
-#### `--max-conns <count>`
-
-- **Description:** Sets the maximum number of concurrent network connections
-  libcurl is allowed to establish.
-- **Default:** `6`
-- **Tip:** Lowering this number reduces load on remote servers and helps prevent
-  rate-limiting or blocking.
-
-#### `--refresh-timeout <seconds>`
-
-- **Description:** Sets the duration in seconds after which directory listings,
-  and cached files whose remote `Last-Modified` timestamp or content length
-  cannot be verified, are treated as stale and refetched from the remote server
-  when accessed. A cached file whose remote `Last-Modified` timestamp and
-  content length both match the server is reused regardless of its age.
-- **Default:** `3600` (1 hour)
-
-#### `--retry-wait <seconds>`
-
-- **Description:** Sets the delay in seconds to wait before retrying an HTTP
-  request after a connection failure or server error.
-- **Default:** `5`
-
-#### `--user-agent <string>`
-
-- **Description:** Customizes the HTTP `User-Agent` header sent with each
-  request.
-- **Default:** `HTTPDirFS-1.3.3` <!-- x-release-please-version -->
-
-#### `--no-range-check`
-
-- **Description:** Skips the built-in HTTP Range check. Normally, HTTPDirFS
-  tests whether the remote server supports HTTP Range requests (required for
-  random-access file seeks). If you know your server supports Range requests but
-  fails the probe, enable this flag.
-- **Warning:** If the remote server truly does not support Range requests,
-  reading files from the mountpoint will be extremely slow or fail.
-
-______________________________________________________________________
-
-### Behavioral & Advanced Flags
-
-#### `--invalid-refresh`
-
-- **Description:** Tries to refresh and resolve invalid or expired links
-  dynamically when reading directory contents, rather than relying strictly on
-  the refresh timeout.
-
-#### `--zero-len-is-dir`
-
-- **Description:** Instructs HTTPDirFS to treat any file listed with a length of
-  `0` bytes as a subdirectory. Useful for servers that do not end directory URLs
-  with `/` in their listings but represent them with a size of zero.
-
-#### `--single-file-mode`
-
-- **Description:** Launches HTTPDirFS in Single File Mode. Rather than
-  attempting to mount and traverse a directory listing, it mounts the specified
-  URL as a single virtual file inside the mountpoint. This is highly useful for
-  files hosted on servers that do not present any directory listings.
-
-#### `--ignore-anchors`
-
-- **Description:** Ignores intra-page HTML fragment links starting with `#`
-  (e.g., `#top` or `#section`), preventing them from appearing as entries in
-  directory listings.
-
-______________________________________________________________________
-
-### External Origins (`--allow-external-origin`)
-
-By default, HTTPDirFS confines filesystem traversal strictly to the origin
-(scheme, host, port) of the URL specified at mount time. Any links pointing to
-external (cross-origin) servers are dropped during HTML parsing.
-
-Enabling `--allow-external-origin` allows HTTPDirFS to follow and mount links
-pointing to external origins.
-
-#### How It Works
-
-- **File and Directory Exposure:** External files and directories will appear
-  alongside local files in the mountpoint. External URLs ending with a trailing
-  slash (`/`) are treated as directories; navigating into them triggers
-  recursive discovery on the remote server.
-- **Cache Compatibility:** Caching works seamlessly with external links. Cache
-  paths are safely hashed and segregated into dedicated origin directories
-  within the unified container cache to avoid path traversal.
-
-#### Security & Credentials Scoping
-
-- **Credential Protection:** To prevent credential leakage, HTTP credentials
-  specified with `-u`/`--username` and `-p`/`--password` are strictly scoped to
-  the primary mounted origin. They are **not** forwarded to cross-origin
-  servers.
-- **Custom HTTP Headers:** Custom HTTP headers set via `--http-header` are also
-  strictly scoped to the primary origin and will not be sent to external hosts.
-- **Authentication Warnings:** External servers requiring authentication
-  (returning HTTP 401 or 403) will log a warning indicating that credentials are
-  restricted to the main server.
 
 ______________________________________________________________________
 
@@ -494,10 +191,89 @@ and is never stored in the cache.
 
 ______________________________________________________________________
 
+### External Origins (`--allow-external-origin`)
+
+By default, HTTPDirFS confines filesystem traversal strictly to the origin
+(scheme, host, port) of the URL specified at mount time. Any links pointing to
+external (cross-origin) servers are dropped during HTML parsing.
+
+Enabling `--allow-external-origin` allows HTTPDirFS to follow and mount links
+pointing to external origins.
+
+#### How It Works
+
+- **File and Directory Exposure:** External files and directories will appear
+  alongside local files in the mountpoint. External URLs ending with a trailing
+  slash (`/`) are treated as directories; navigating into them triggers
+  recursive discovery on the remote server.
+- **Cache Compatibility:** Caching works seamlessly with external links. Cache
+  paths are safely hashed and segregated into dedicated origin directories
+  within the unified container cache to avoid path traversal.
+
+#### Security & Credentials Scoping
+
+- **Credential Protection:** To prevent credential leakage, HTTP credentials
+  specified with `-u`/`--username` and `-p`/`--password` are strictly scoped to
+  the primary mounted origin. They are **not** forwarded to cross-origin
+  servers.
+- **Custom HTTP Headers:** Custom HTTP headers set via `--http-header` are also
+  strictly scoped to the primary origin and will not be sent to external hosts.
+- **Authentication Warnings:** External servers requiring authentication
+  (returning HTTP 401 or 403) will log a warning indicating that credentials are
+  restricted to the main server.
+
+______________________________________________________________________
+
 ### Airsonic / Subsonic Mounting Options
 
 HTTPDirFS can mount remote Airsonic or Subsonic music collections. When mounted,
 the music structure is presented locally as virtual directories and files.
+
+You simply have to supply both `--sonic-username` and `--sonic-password` to
+trigger the \*sonic server mode. For example:
+
+```
+./httpdirfs -f --cache --sonic-username $USERNAME --sonic-password $PASSWORD $URL $MOUNT_POINT
+```
+
+You definitely want to enable the cache for this one, otherwise it is painfully
+slow.
+
+There are two ways of mounting your \*sonic server
+
+- the index mode
+- and the ID3 mode.
+
+In the index mode, the filesystem is presented based on the listing on the
+`Index` link in your \*sonic's home page.
+
+In ID3 mode, the filesystem is presented using the following hierarchy: 0. Root
+
+1. Alphabetical indices of the artists' names
+1. The artists' names
+1. All of the albums by a single artist
+1. All the songs in an album.
+
+By default, \*sonic server is mounted in the index mode. If you want to mount in
+ID3 mode, please use the `--sonic-id3` flag.
+
+Please note that the cache feature is unaffected by how you mount your \*sonic
+server. If you mounted your server in index mode, the cache is still valid in
+ID3 mode, and vice versa.
+
+HTTPDirFS is also known to work with the following applications, which implement
+some or all of Subsonic API:
+
+- [Funkwhale](https://funkwhale.audio/) (requires `--sonic-id3` and
+  `--no-range-check`, more information in
+  [issue #45](https://github.com/fangfufu/httpdirfs/issues/45))
+- [LMS](https://github.com/epoupon/lms) (requires `--sonic-insecure` and
+  `--no-range-check`, more information in
+  [issue #46](https://github.com/fangfufu/httpdirfs/issues/46). To mount the
+  [demo instance](https://lms-demo.poupon.dev/), you might also need
+  `--insecure-tls`)
+- [Navidrome](https://github.com/navidrome/navidrome), more information in
+  [issue #51](https://github.com/fangfufu/httpdirfs/issues/51).
 
 #### `--sonic-username <string>`
 

@@ -995,6 +995,27 @@ log_info "External HTTP server stopped."
         fail "cache-clear: failed to clear cache directory"
     fi
 
+    # Test --cache-clear with --cache-location given AFTER: the outcome must
+    # not depend on the order of the two options
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_DIR}/https%3A%2F%2Fother.com/cd/cafebabe"
+    "${HTTPDIRFS_BIN}" --cache-clear --cache-location "${CACHE_DIR}"
+    if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
+        pass "cache-clear: cleared custom cache directory when --cache-clear came first (correct)"
+    else
+        fail "cache-clear: failed to clear custom cache directory when --cache-clear came first"
+    fi
+
+    # Test that --cache-clear and --cache-clear-host are rejected together
+    if out=$("${HTTPDIRFS_BIN}" --cache-clear --cache-clear-host "example.com" 2>&1); then
+        fail "cache-clear + cache-clear-host: expected rejection"
+    elif [[ "${out}" == *"cannot be used together"* ]]; then
+        pass "cache-clear + cache-clear-host: rejected with clear error (correct)"
+    else
+        fail "cache-clear + cache-clear-host: unexpected output: ${out}"
+    fi
+
 
     # ── Test 8: Advanced Parsing Mode ───────────────────────────────────────────
     log_info "Test group: Advanced Parsing Mode"
