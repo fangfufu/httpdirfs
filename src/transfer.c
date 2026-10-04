@@ -329,6 +329,10 @@ CURL *Link_to_curl(Link *link)
  * resets the body / header buffers before the next transfer.
  * CONFIG.http_headers / credentials are only (re)sent to a
  * same-origin target, so they are never leaked to a cross-origin redirect.
+ * The handle is also restricted to HTTP/HTTPS before the redirect URL is
+ * assigned, so a manually followed redirect cannot switch to another scheme
+ * (the transfer then fails with CURLE_UNSUPPORTED_PROTOCOL) even when
+ * --allow-external-origin is enabled.
  */
 static int follow_one_redirect(CURL *curl, const char *base_url)
 {
@@ -351,7 +355,20 @@ static int follow_one_redirect(CURL *curl, const char *base_url)
         return -1;
     }
 
-    CURLcode ret = curl_easy_setopt(curl, CURLOPT_URL, redir_url);
+    /*
+     * Restrict the handle to HTTP/HTTPS before re-pointing it at the manually
+     * followed target, so that a redirect cannot switch to another scheme
+     * (file://, gopher://, ...) even when --allow-external-origin is enabled.
+     * A disallowed scheme then fails the transfer with
+     * CURLE_UNSUPPORTED_PROTOCOL instead of being executed.
+     */
+    CURLcode ret = curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "http,https");
+    if (ret) {
+        lprintf(error, "%s\n", curl_easy_strerror(ret));
+        return 0;
+    }
+
+    ret = curl_easy_setopt(curl, CURLOPT_URL, redir_url);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
         return 0;
