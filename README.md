@@ -21,9 +21,6 @@ directory listing.
 There is also support for Airsonic / Subsonic server. This allows you to mount a
 remote music collection locally.
 
-The performance of the program is excellent. HTTP connections are reused through
-curl-multi interface. The FUSE component runs in the multithreaded mode.
-
 The cache system caches the file segments you have accessed, so you don't need
 to download those segments again if you access them later. This feature is
 triggered by the `--cache` flag. This is similar to the `--vfs-cache-mode full`
@@ -244,6 +241,16 @@ using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 For \*sonic servers parses \*sonic servers' XML responses using
 [expat](https://github.com/libexpat/libexpat).
 
+The filesystem read requests are received by libfuse, are then translated to
+HTTP requests by libcurl.
+
+The OS reads files in blocks, therefore the corresponding HTTP download requests
+are ranged requests in chunks. Because of these reasons, HTTPDirFS by default
+expects the server to support HTTP Range Request. The server can indicate this
+feature by presenting `"Accept-Ranges: bytes` in the header responses. You can
+disable this check by using the `--no-range-check` flag, however HTTPDirFS will
+have to download the entire file before serving you.
+
 > [!WARNING]
 > HTTPDirFS 1.4.x contains a breaking change to the format of the cache system.
 > Please delete your existing cache with `--cache-clear` or remove
@@ -257,12 +264,6 @@ server origin gets its own cache directory beneath the cache location root,
 named using the escaped server root URL. Within each origin, files are sharded
 into 256 subdirectories using the first two hex characters of their canonical
 URL's MD5 hash.
-
-Note that HTTPDirFS by default expects the server to support HTTP Range Request,
-though some servers support this feature but do not present
-`"Accept-Ranges: bytes` in the header responses. You can disable this check by
-using the `--no-range-check` flag, however HTTPDirFS will have to download the
-entire file before serving you.
 
 ## Press Coverage
 
