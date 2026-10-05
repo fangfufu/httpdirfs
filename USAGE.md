@@ -67,17 +67,17 @@ HTTPDirFS options:
         --proxy-cacert      Certificate authority for the proxy
         --proxy-capath      Certificate authority directory for the proxy
         --cache             Enable cache (default: off)
-        --cache-location    Set a custom cache location
-                            (default: "${XDG_CACHE_HOME}/httpdirfs")
-        --cache-clear       Delete the cache directory, or the custom location
-                            specified with --cache-location if that option is
-                            given (the order of the two options does not matter).
-                            Then exit.
+        --cache-location    Set a custom cache location root; each server origin
+                            gets its own subdirectory beneath it (default:
+                            "${XDG_CACHE_HOME}/httpdirfs")
+        --cache-clear       Delete the entire cache location (all server
+                            origins), or the custom location specified with
+                            --cache-location if that option is given (the order
+                            of the two options does not matter). Then exit.
         --cache-clear-host  Delete only the cache of a single server host,
                             given as a full URL or a bare host (both the http
                             and https origin directories are then removed).
-                            Only supported with the default cache location,
-                            not with --cache-location. Then exit.
+                            Then exit.
         --cache-min-size    Set minimum file size threshold for caching, in bytes
                             (default: none)
         --cache-max-size    Set maximum file size threshold for caching, in bytes
@@ -207,8 +207,9 @@ pointing to external origins.
   slash (`/`) are treated as directories; navigating into them triggers
   recursive discovery on the remote server.
 - **Cache Compatibility:** Caching works seamlessly with external links. Cache
-  paths are safely hashed and segregated into dedicated origin directories
-  within the unified container cache to avoid path traversal.
+  entries are keyed by the full canonical URL, so external-origin content is
+  safely hashed into the mounted origin's own cache directory (beneath the cache
+  location root), with no risk of path traversal or cross-origin collisions.
 
 #### Security & Credentials Scoping
 

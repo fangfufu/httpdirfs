@@ -217,9 +217,10 @@ char *CacheSystem_get_cache_root(void);
 
 /**
  * \brief Compute the cache directory of a server origin.
- * \details Equivalent to CacheSystem_get_cache_root() with the escaped
- * server root of \p url appended. Used by CacheSystem_init() and
- * CacheSystem_clear_host().
+ * \details The cache root (a custom --cache-location if set, or the
+ * default "<cache home>/httpdirfs") with the escaped server root of
+ * \p url appended. Creates the root (with a CACHEDIR.TAG) and the
+ * origin directory on disk.
  * \note The caller must free the returned string with FREE().
  */
 char *CacheSystem_calc_dir(const char *url);
@@ -229,10 +230,12 @@ char *CacheSystem_calc_dir(const char *url);
  * \details This function basically sets up the following variables:
  *  - CACHE_DIR
  *
- * If the directory does not exist, it will be created.
+ * CACHE_DIR is set to the cache directory of the mounted server origin
+ * (the cache root with the escaped server root appended). If the
+ * directory does not exist, it will be created.
  * \note Called by LinkSystem_init(), verified to be working
  */
-void CacheSystem_init(const char *path, int url_supplied);
+void CacheSystem_init(const char *url);
 
 /**
  * \brief clean up the cache system, freeing the cache directory

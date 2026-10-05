@@ -224,6 +224,10 @@ fi
 
 BASE_URL="http://127.0.0.1:${ACTUAL_PORT}/"
 
+# Escaped origin directory of BASE_URL, as used in the per-origin cache
+# layout ("<cache root>/<escaped origin>/<shard>/<hash>")
+BASE_URL_ORIGIN_DIR="http%3A%2F%2F127.0.0.1%3A${ACTUAL_PORT}"
+
 if [[ "${MODE}" != "long" ]]; then
 # ─── Step 3: Mount with httpdirfs (non-cache mode) ─────────────────────────
 
@@ -804,12 +808,13 @@ log_info "External HTTP server stopped."
     log_info "Test group: Cache size thresholds"
 
     # Resolve the unified single-file cache container path of a URL:
-    # <CACHE_DIR>/<first 2 hex of md5(url)>/<md5(url)>
+    # <CACHE_DIR>/<escaped origin>/<first 2 hex of md5(url)>/<md5(url)>
     cache_container_path() {
         local url="$1"
         local hash
         hash="$(printf '%s' "${url}" | md5sum | awk '{print $1}')"
-        printf '%s/%s/%s' "${CACHE_DIR}" "${hash:0:2}" "${hash}"
+        printf '%s/%s/%s/%s' "${CACHE_DIR}" "${BASE_URL_ORIGIN_DIR}" \
+            "${hash:0:2}" "${hash}"
     }
 
     # --- Test 7a: cache-min-size threshold ---
@@ -838,6 +843,15 @@ log_info "External HTTP server stopped."
         fail "httpdirfs (cache-min-size) failed to mount."
         kill "${THRESH_PID}" 2>/dev/null || true
     else
+        # Verify the per-origin layout under the custom cache root: the
+        # escaped origin subdirectory and a CACHEDIR.TAG at the root
+        if [[ -d "${CACHE_DIR}/${BASE_URL_ORIGIN_DIR}" \
+            && -f "${CACHE_DIR}/CACHEDIR.TAG" ]]; then
+            pass "cache layout: origin subdir and CACHEDIR.TAG under custom root"
+        else
+            fail "cache layout: missing origin subdir or CACHEDIR.TAG under custom root"
+        fi
+
         # Read tiny.txt (1 byte, should not be cached)
         tiny_content=$(cat "${CACHE_MOUNT_DIR}/tiny.txt")
         if [[ -n "${tiny_content}" ]]; then
@@ -956,10 +970,10 @@ log_info "External HTTP server stopped."
     # --- Test 7d: cache clear options ---
     log_info "Subgroup: Cache clear options (--cache-clear-host and --cache-clear)"
 
-    # --cache-clear-host targets the default cache layout
-    # (<XDG_CACHE_HOME>/httpdirfs/<escaped origin>/...), the only layout that
-    # contains per-origin subdirectories. Use XDG_CACHE_HOME and no
-    # --cache-location so the test mirrors production.
+    # --cache-clear-host targets the per-origin subdirectory beneath the
+    # cache root (<cache root>/<escaped origin>/...), which exists for both
+    # the default and custom cache locations. Use XDG_CACHE_HOME and no
+    # --cache-location here so the default layout is exercised.
     CACHE_HOST_XDG="${WORK_DIR}/cache_host_xdg"
     rm -rf "${CACHE_HOST_XDG}"
     mkdir -p "${CACHE_HOST_XDG}/httpdirfs/https%3A%2F%2Fexample.com/ab"
@@ -975,13 +989,22 @@ log_info "External HTTP server stopped."
         fail "cache-clear-host: failed to delete target host or deleted unexpected host"
     fi
 
-    # Test that --cache-clear-host is rejected with --cache-location
-    if out=$(XDG_CACHE_HOME="${CACHE_HOST_XDG}" "${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear-host "example.com" 2>&1); then
-        fail "cache-clear-host + cache-location: expected rejection"
-    elif [[ "${out}" == *"not supported together with --cache-location"* ]]; then
-        pass "cache-clear-host + cache-location: rejected with clear error (correct)"
+    # Test --cache-clear-host with --cache-location: only the escaped origin
+    # subdirectory beneath the custom root is removed
+    rm -rf "${CACHE_DIR:?}"
+    mkdir -p "${CACHE_DIR}/https%3A%2F%2Fexample.com/ab" \
+             "${CACHE_DIR}/https%3A%2F%2Fother.com/cd"
+    touch "${CACHE_DIR}/https%3A%2F%2Fexample.com/ab/deadbeef"
+    touch "${CACHE_DIR}/https%3A%2F%2Fother.com/cd/cafebabe"
+    if out=$("${HTTPDIRFS_BIN}" --cache-location "${CACHE_DIR}" --cache-clear-host "example.com" 2>&1); then
+        if [[ ! -d "${CACHE_DIR}/https%3A%2F%2Fexample.com" \
+            && -d "${CACHE_DIR}/https%3A%2F%2Fother.com" ]]; then
+            pass "cache-clear-host + cache-location: deleted only target origin (correct)"
+        else
+            fail "cache-clear-host + cache-location: wrong origin directories removed"
+        fi
     else
-        fail "cache-clear-host + cache-location: unexpected output: ${out}"
+        fail "cache-clear-host + cache-location: unexpected error: ${out}"
     fi
 
     # Test --cache-clear

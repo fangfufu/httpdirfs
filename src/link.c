@@ -217,11 +217,7 @@ LinkTable *LinkSystem_init(const char *url)
      * --------------------- Enable cache system --------------------
      */
     if (CONFIG.cache_enabled) {
-        if (CONFIG.cache_dir) {
-            CacheSystem_init(CONFIG.cache_dir, 0);
-        } else {
-            CacheSystem_init(url, 1);
-        }
+        CacheSystem_init(url);
     }
 
     /*

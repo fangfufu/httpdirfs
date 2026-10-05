@@ -30,10 +30,6 @@ triggered by the `--cache` flag. This is similar to the `--vfs-cache-mode full`
 feature of
 [rclone mount](https://rclone.org/commands/rclone_mount/#vfs-cache-mode-full)
 
-The cache system runs multiple background worker threads to process downloads
-asynchronously, allowing multiple concurrent HTTP connections to download
-different file segments in parallel.
-
 ## Usage
 
 Basic usage:
@@ -94,24 +90,17 @@ You can cache the files you have accessed on your storage device by using the
 entire cache using `--cache-clear`, or clear only a specific server using
 `--cache-clear-host <URL_OR_HOST>`.
 
-> [!WARNING]
-> If `--cache-location <dir>` is given together with `--cache-clear`, the entire
-> directory `<dir>` will be deleted instead of the default cache location,
-> regardless of the order of the two options. Take caution when specifying
-> non-empty directories to be used as cache.
-
 By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
 `${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
 directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
-is normally `${HOME}/.cache/httpdirfs`.
+is normally `${HOME}/.cache/httpdirfs`. A custom cache location root can be
+supplied with `--cache-location`.
 
-Please note that a custom directory supplied via `--cache-location` is used
-verbatim as the cache root of the mounted server: unlike the default location,
-no per-origin subdirectory is appended to it.
-
-Each HTTP server origin gets its own cache directory, named using the escaped
-server root URL. Within each origin, files are sharded into 256 subdirectories
-using the first two hex characters of their canonical URL's MD5 hash.
+Each HTTP server origin gets its own cache directory beneath the cache location
+root, named using the escaped server root URL. Within each origin, files are
+sharded into 256 subdirectories using the first two hex characters of their
+canonical URL's MD5 hash. Note that `--cache-clear` removes the entire cache
+location root, including the caches of every origin stored there.
 
 Once a segment of the file has been downloaded once, it won't be downloaded
 again as long as the server still reports the same `Last-Modified` timestamp and
@@ -119,6 +108,10 @@ content length. Subsequent reads are served offline at local storage speed.
 Directory listings (and files whose remote metadata cannot be verified) are
 considered stale, and refetched from the server, once they are older than
 `--refresh-timeout` seconds (default: 3600).
+
+The cache system runs multiple background worker threads to process downloads
+asynchronously, allowing multiple concurrent HTTP connections to download
+different file segments in parallel.
 
 The permanent cache system relies on sparse allocation. Please make sure your
 filesystem supports it. Otherwise your local storage device will get heavy I/O

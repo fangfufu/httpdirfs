@@ -192,7 +192,8 @@ static void cleanup_temp_dir(const char *tmp_cache_dir)
             snprintf(filepath, sizeof(filepath), "%s/%s", tmp_cache_dir,
                      entry->d_name);
             /*
-             * Recursively remove shard directories ("<ab>/<hash>" layout)
+             * Recursively remove origin subdirectories, which contain the
+             * shard directories ("<origin>/<ab>/<hash>" layout)
              */
             nftw(filepath, ntfw_cb, 32, FTW_DEPTH | FTW_PHYS);
         }
@@ -233,15 +234,15 @@ void test_Cache_invalid_zero_length_disk_files(void)
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
 
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     char *cache_key = url_to_cache_path("https://example.com/file.bin");
     TEST_ASSERT_NOT_NULL(cache_key);
     char container_filepath[512];
-    snprintf(container_filepath, sizeof(container_filepath), "%s/%s",
-             tmp_cache_dir, cache_key);
+    snprintf(container_filepath, sizeof(container_filepath), "%s/%s", CACHE_DIR,
+             cache_key);
     char shard_dir[512];
-    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", tmp_cache_dir, cache_key);
+    snprintf(shard_dir, sizeof(shard_dir), "%s/%.2s", CACHE_DIR, cache_key);
     TEST_ASSERT_EQUAL_INT(0, mkdir_p(shard_dir, S_IRWXU));
 
     // Scenario 1: the container file exists but is 0 bytes (it was created
@@ -332,7 +333,7 @@ void test_Cache_alloc_num_bg_workers(void)
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
 
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     int test_conns[] = {10, 4, 1};
     for (int i = 0; i < 3; i++) {
@@ -369,7 +370,7 @@ void test_Cache_free_active_downloads(void)
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
 
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     Cache *cf = Cache_open("dummy.bin");
     TEST_ASSERT_NOT_NULL(cf);
@@ -442,7 +443,7 @@ void test_Cache_free_active_downloads_with_waiters(void)
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
 
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     Cache *cf = Cache_open("dummy.bin");
     TEST_ASSERT_NOT_NULL(cf);
@@ -566,14 +567,14 @@ void test_container_file_create_open(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     TEST_ASSERT_EQUAL_INT(0, Cache_create("test-item"));
 
     char *cache_key = url_to_cache_path(link->f_url);
     TEST_ASSERT_NOT_NULL(cache_key);
     char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
 
     int fd = open(full_path, O_RDONLY);
     TEST_ASSERT_TRUE(fd >= 0);
@@ -676,7 +677,7 @@ void test_container_html_parse_on_the_fly(void)
                               "Content-Type: text/html\r\n"
                               "\r\n";
 
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(url, html, strlen(html),
                                                   http_header,
@@ -685,7 +686,7 @@ void test_container_html_parse_on_the_fly(void)
     char *cache_key = url_to_cache_path(url);
     TEST_ASSERT_NOT_NULL(cache_key);
     char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
 
     struct stat st;
     TEST_ASSERT_EQUAL_INT(0, stat(full_path, &st));
@@ -787,12 +788,12 @@ void test_container_timestamps(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     char *cache_key = url_to_cache_path(link->f_url);
     TEST_ASSERT_NOT_NULL(cache_key);
     char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
 
     /*
      * Create the container, then tamper with cache_time to simulate a
@@ -928,7 +929,7 @@ void test_container_file_then_dir(void)
 
     LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
     ROOT_LINK_TBL = table;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     /*
      * Create the file cache and fill its payload region with the HTML
@@ -1089,7 +1090,7 @@ void test_container_head_write_read(void)
 
     char *old_cache_dir = CONFIG.cache_dir;
     CONFIG.cache_dir = tmp_cache_dir;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     const char *url = "https://example.com/test-head.bin";
     const char *headers
@@ -1146,7 +1147,7 @@ void test_container_head_to_data_promotion(void)
 
     char *old_cache_dir = CONFIG.cache_dir;
     CONFIG.cache_dir = tmp_cache_dir;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     LinkTable *old_root = ROOT_LINK_TBL;
     LinkTable *table = LinkTable_alloc("https://example.com/");
@@ -1179,7 +1180,7 @@ void test_container_head_to_data_promotion(void)
     /* Check that file on disk is sparse-allocated to full size */
     char *cache_key = url_to_cache_path(link->f_url);
     char full_path[512];
-    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
     struct stat st;
     TEST_ASSERT_EQUAL_INT(0, stat(full_path, &st));
     TEST_ASSERT_EQUAL_INT64(cf->header_size + (off_t)link->content_length,
@@ -1215,7 +1216,7 @@ void test_container_redirect_pointer(void)
 
     char *old_cache_dir = CONFIG.cache_dir;
     CONFIG.cache_dir = tmp_cache_dir;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     const char *source_url = "https://example.com/folder";
     const char *target_url = "https://example.com/folder/";
@@ -1272,7 +1273,7 @@ void test_container_head_and_html_expiration(void)
 
     char *old_cache_dir = CONFIG.cache_dir;
     CONFIG.cache_dir = tmp_cache_dir;
-    CacheSystem_init(tmp_cache_dir, 0);
+    CacheSystem_init("https://example.com/");
 
     const char *url = "https://example.com/expire-test.bin";
     const char *headers = "HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\n";
@@ -1292,7 +1293,7 @@ void test_container_head_and_html_expiration(void)
     char *cache_key = string_to_cache_path(url);
     TEST_ASSERT_NOT_NULL(cache_key);
     char full_path[PATH_MAX];
-    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir, cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
 
     FILE *f = fopen(full_path, "r+");
     TEST_ASSERT_NOT_NULL(f);
@@ -1338,8 +1339,7 @@ void test_container_head_and_html_expiration(void)
     /* Tamper with dir container cache_time */
     char *dir_cache_key = string_to_cache_path(dir_url);
     TEST_ASSERT_NOT_NULL(dir_cache_key);
-    snprintf(full_path, sizeof(full_path), "%s/%s", tmp_cache_dir,
-             dir_cache_key);
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, dir_cache_key);
 
     f = fopen(full_path, "r+");
     TEST_ASSERT_NOT_NULL(f);

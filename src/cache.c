@@ -63,13 +63,6 @@ char *CACHE_DIR;
  */
 static pthread_mutex_t cf_lock;
 
-/**
- * \brief Whether CACHE_DIR was allocated by this module
- * \details When the user supplies --cache-location, CACHE_DIR points to
- * CONFIG.cache_dir which is freed by Config_cleanup().
- */
-static int cache_dir_owned = 0;
-
 
 char *CacheSystem_get_cache_dir(void)
 {
@@ -116,8 +109,9 @@ char *CacheSystem_get_cache_root(void)
     char *root;
     if (CONFIG.cache_dir) {
         /*
-         * A custom cache location is used verbatim as the cache root of the
-         * mounted server.
+         * A custom cache location is the cache root; per-origin
+         * subdirectories are appended by the callers (see
+         * CacheSystem_calc_dir() and cache_host_path()).
          */
         root = cache_home;
     } else {
@@ -151,32 +145,14 @@ static char *cache_host_path(const char *url)
 
 char *CacheSystem_calc_dir(const char *url)
 {
-    char *cache_home = CacheSystem_get_cache_dir();
+    const mode_t dir_mode = S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH;
+    char *cache_root = CacheSystem_get_cache_root();
 
-    if (CONFIG.cache_dir) {
-        /*
-         * A custom cache location is the cache root of this server itself;
-         * no origin directory is appended.
-         */
-        if (mkdir(cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
-            lprintf(fatal, "mkdir(): %s\n", strerror(errno));
-        }
-        return cache_home;
-    }
-
-    if (mkdir(cache_home, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+    if (mkdir(cache_root, dir_mode) && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
-    const char *cache_dir_root = path_append(cache_home, "/httpdirfs/");
-    if (mkdir(cache_dir_root, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
-        lprintf(fatal, "mkdir(): %s\n", strerror(errno));
-    }
-    FREE(cache_home);
 
-    char *fn = path_append(cache_dir_root, "/CACHEDIR.TAG");
+    char *fn = path_append(cache_root, "/CACHEDIR.TAG");
     FILE *fp = fopen(fn, "w");
     if (fp) {
         fprintf(fp, "Signature: 8a477f597d28d172789f06886806bc55\n\
@@ -193,31 +169,22 @@ char *CacheSystem_calc_dir(const char *url)
         lprintf(fatal, "fclose(%s): %s\n", fn, strerror(errno));
     }
     FREE(fn);
+    FREE(cache_root);
 
     char *full_path = cache_host_path(url);
-    if (mkdir(full_path, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-        && (errno != EEXIST)) {
+    if (mkdir(full_path, dir_mode) && (errno != EEXIST)) {
         lprintf(fatal, "mkdir(): %s\n", strerror(errno));
     }
     return full_path;
 }
 
-void CacheSystem_init(const char *path, int url_supplied)
+void CacheSystem_init(const char *url)
 {
     lprintf(cache_lock_debug, "thread %lx: initialise cf_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_INIT(&cf_lock, NULL);
 
-    if (url_supplied) {
-        CACHE_DIR = CacheSystem_calc_dir(path);
-    } else {
-        CACHE_DIR = STRDUP(path);
-        if (mkdir(CACHE_DIR, S_IRWXU | S_IRGRP | S_IXGRP | S_IROTH | S_IXOTH)
-            && (errno != EEXIST)) {
-            lprintf(fatal, "mkdir(): %s\n", strerror(errno));
-        }
-    }
-    cache_dir_owned = 1;
+    CACHE_DIR = CacheSystem_calc_dir(url);
 
     CACHE_SYSTEM_INIT = 1;
 }
@@ -225,10 +192,7 @@ void CacheSystem_init(const char *path, int url_supplied)
 void CacheSystem_cleanup(void)
 {
     if (CACHE_SYSTEM_INIT) {
-        if (cache_dir_owned) {
-            FREE(CACHE_DIR);
-            cache_dir_owned = 0;
-        }
+        FREE(CACHE_DIR);
         PTHREAD_MUTEX_DESTROY(&cf_lock);
         CACHE_SYSTEM_INIT = 0;
     }
@@ -247,9 +211,7 @@ void CacheSystem_clear(void)
 {
     char *cache_del = CacheSystem_get_cache_root();
     nftw(cache_del, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
-    if (!CONFIG.cache_dir) {
-        FREE(cache_del);
-    }
+    FREE(cache_del);
     exit(EXIT_SUCCESS);
 }
 
@@ -257,15 +219,6 @@ int CacheSystem_delete_host(const char *arg)
 {
     if (!arg || !arg[0]) {
         lprintf(error, "--cache-clear-host requires a URL or host\n");
-        return -1;
-    }
-
-    if (CONFIG.cache_dir) {
-        lprintf(error,
-                "--cache-clear-host is not supported together with "
-                "--cache-location: per-origin subdirectories only exist in "
-                "the default cache location. Use --cache-clear to remove "
-                "the custom cache directory instead.\n");
         return -1;
     }
 

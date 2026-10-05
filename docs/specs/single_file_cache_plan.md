@@ -119,9 +119,8 @@ path specified by `--cache-location`):
   MD5 hash (`generate_md5sum(canonical_url)`).
 - **Container Filename (`<hash>`)**: The complete 32-character MD5 hash string.
 - **Custom location:** When `--cache-location <dir>` is supplied, `<dir>` is
-  used verbatim as the cache root of the mounted server itself: no escaped
-  origin directory is appended (shard directories are created directly inside
-  `<dir>`), and no `CACHEDIR.TAG` is written.
+  used as the cache location root; the escaped origin directory (and a
+  `CACHEDIR.TAG`) is created inside it exactly as with the default location.
 
 ______________________________________________________________________
 
