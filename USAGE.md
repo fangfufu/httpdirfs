@@ -132,7 +132,24 @@ ______________________________________________________________________
 
 HTTPDirFS parses HTML listing documents using the Gumbo HTML5 parser. It
 extracts descriptive filenames from anchor text, resolves name collisions, and
-identifies directories.
+identifies directories. For complete technical specifications, please refer to
+[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
+
+#### Allowed characters in filenames
+
+The intended allowed character in filenames is the following:
+
+Filenames must:
+
+- Consists of printable characters
+- Must not contain '/' in the middle of the filename.
+- Must not end with '/'.
+
+Without the `--html-is-directory` flag, directories must:
+
+- Consists of printable characters
+- Must not contain '/' in the middle of the directory name.
+- Must end with '/'.
 
 #### Universal Parsing Mechanics
 

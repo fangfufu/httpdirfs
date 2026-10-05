@@ -90,18 +90,6 @@ You can cache the files you have accessed on your storage device by using the
 entire cache using `--cache-clear`, or clear only a specific server using
 `--cache-clear-host <URL_OR_HOST>`.
 
-By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
-`${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
-directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
-is normally `${HOME}/.cache/httpdirfs`. A custom cache location root can be
-supplied with `--cache-location`.
-
-Each HTTP server origin gets its own cache directory beneath the cache location
-root, named using the escaped server root URL. Within each origin, files are
-sharded into 256 subdirectories using the first two hex characters of their
-canonical URL's MD5 hash. Note that `--cache-clear` removes the entire cache
-location root, including the caches of every origin stored there.
-
 Once a segment of the file has been downloaded once, it won't be downloaded
 again as long as the server still reports the same `Last-Modified` timestamp and
 content length. Subsequent reads are served offline at local storage speed.
@@ -109,14 +97,16 @@ Directory listings (and files whose remote metadata cannot be verified) are
 considered stale, and refetched from the server, once they are older than
 `--refresh-timeout` seconds (default: 3600).
 
-The cache system runs multiple background worker threads to process downloads
-asynchronously, allowing multiple concurrent HTTP connections to download
-different file segments in parallel.
+By default, the cache files are stored under `${XDG_CACHE_HOME}/httpdirfs`,
+`${HOME}/.cache/httpdirfs`, or `./.cache/httpdirfs` in the current working
+directory, whichever is found first. By default, `${XDG_CACHE_HOME}/httpdirfs`
+is normally `${HOME}/.cache/httpdirfs`. A custom cache location root can be
+supplied with `--cache-location`.
 
-The permanent cache system relies on sparse allocation. Please make sure your
-filesystem supports it. Otherwise your local storage device will get heavy I/O
-from cache file creation. For a list of filesystem that supports sparse
-allocation, please refer to
+The cache system relies on sparse allocation. Please make sure your filesystem
+supports it. Otherwise your local storage device will get heavy I/O from cache
+file creation. For a list of filesystem that supports sparse allocation, please
+refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
 
 ### Configuration file support
@@ -251,60 +241,28 @@ using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages
 using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
 [libfuse](https://github.com/libfuse/libfuse).
 
-For \*sonic servers, rather than using the Gumbo parser, this program parses
-\*sonic servers' XML responses using
+For \*sonic servers parses \*sonic servers' XML responses using
 [expat](https://github.com/libexpat/libexpat).
+
+> [!WARNING]
+> HTTPDirFS 1.4.x contains a breaking change to the format of the cache system.
+> Please delete your existing cache with `--cache-clear` or remove
+> `~/.cache/httpdirfs` (this is the default location) before using HTTPDirFS
+> 1.4.x.
 
 The cache system uses a unified single-file container architecture. Each URL
 maps to exactly one container file storing its binary header, canonical URL, raw
-HTTP response headers, segment download bitmap, and payload data.
+HTTP response headers, segment download bitmap, and payload data. Each HTTP
+server origin gets its own cache directory beneath the cache location root,
+named using the escaped server root URL. Within each origin, files are sharded
+into 256 subdirectories using the first two hex characters of their canonical
+URL's MD5 hash.
 
-Note that HTTPDirFS requires the server to support HTTP Range Request, some
-servers support this features, but does not present `"Accept-Ranges: bytes` in
-the header responses. HTTPDirFS by default checks for this header field. You can
-disable this check by using the `--no-range-check` flag.
-
-### Directory Detection and Name Collision Resolution
-
-HTTPDirFS uses a universal HTML parsing and collision resolution pipeline:
-
-- **Anchor text extraction:** Text inside `<a>` tags is extracted, whitespace is
-  normalized, and slashes (`/`) are converted to underscores (`_`). Leading dots
-  and spaces are trimmed so entries do not become hidden Unix files.
-- **Progressive collision escalation:** When multiple links share identical
-  anchor text, HTTPDirFS disambiguates names by combining anchor text with
-  backward URL path segments (e.g. `Title-filename.iso`,
-  `Title-subdir-filename.iso`). When anchor text matches the filename
-  case-insensitively, redundant prefixing is omitted.
-- **Deterministic directory detection:** Trailing slashes (`/`) denote
-  directories. When `--html-is-directory` is enabled, linked HTML resources
-  (within `--max-html-size`) are dynamically promoted to virtual subdirectories.
-
-For complete technical specifications, see
-[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
-
-### Diagnostics
-
-Every directory listing exposes a hidden virtual `.httpdirfs` directory,
-containing `CONTENT` (the raw HTML payload of the listing page) and `HEADER`
-(the raw HTTP response headers). This is useful for debugging how a web server
-presents a directory when HTTPDirFS appears to misparse a listing.
-
-### Allowed characters in filenames
-
-The intended allowed character in filenames is the following:
-
-Filenames must:
-
-- Consists of printable characters
-- Must not contain '/' in the middle of the filename.
-- Must not end with '/'.
-
-Without the `--html-is-directory` flag, directories must:
-
-- Consists of printable characters
-- Must not contain '/' in the middle of the directory name.
-- Must end with '/'.
+Note that HTTPDirFS by default expects the server to support HTTP Range Request,
+though some servers support this feature but do not present
+`"Accept-Ranges: bytes` in the header responses. You can disable this check by
+using the `--no-range-check` flag, however HTTPDirFS will have to download the
+entire file before serving you.
 
 ## Press Coverage
 
