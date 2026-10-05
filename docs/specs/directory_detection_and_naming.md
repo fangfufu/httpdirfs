@@ -248,25 +248,37 @@ If the target URL has no path segments (e.g., root URL `/` or query-only):
 ### Step 3: Progressive URL Path Escalation
 
 When the target URL contains $N$ path segments (`segments[0]` through
-`segments[N-1]`):
+`segments[N-1]`), the last $i$ of them, in order, are denoted $r_1, r_2, …, r_i$
+($r_i$ being the final segment `segments[N-1]`). At each depth $i$, the path
+part (those segments joined by `-`) is $P_i$ and the candidate name is $C_i$;
+$A$ denotes `clean_anchor`.
 
-The algorithm iterates through escalation depths $i = 1, 2, \\dots, N$:
+The algorithm iterates through escalation depths $i = 1, 2, …, N$:
 
 1. **Extract Suffix Segments:** Collect the last $i$ segments from the URL path
-   joined by `-`: $$\\text{path_part} = \\text{segments}[N-i] \\mathbin{\\Vert}
-   \\text{"-"} \\mathbin{\\Vert} \\dots \\mathbin{\\Vert}
-   \\text{segments}[N-1]$$
+   and join them with `-`:
+
+   $$P_i = r_1 | - | … | - | r_i$$
+
+   (A `|` between two parts means the two parts are concatenated, with `-` as
+   the joining string.)
 
    1. **Redundancy Omission (Depth $i = 1$):** If $i == 1$ and `clean_anchor`
       matches the final path segment `segments[N-1]` case-insensitively
       (whitespace runs are ignored on both sides), repeating the anchor is
       redundant (e.g. avoiding `file.iso-file.iso`). In this case, the candidate
-      is simply: $$\\text{candidate} = \\text{path_part}$$
+      is simply:
+
+      $$C_i = P_i$$
+
    1. **Empty Anchor:** If `clean_anchor` is empty, the anchor prefix is omitted
-      at every depth and the candidate is simply: $$\\text{candidate} =
-      \\text{path_part}$$ Otherwise, the candidate combines the anchor and path
-      parts: $$\\text{candidate} = \\text{clean_anchor} \\mathbin{\\Vert}
-      \\text{"-"} \\mathbin{\\Vert} \\text{path_part}$$
+      at every depth and the candidate is simply:
+
+      $$C_i = P_i$$
+
+      Otherwise, the candidate combines the anchor and path parts:
+
+      $$C_i = A | - | P_i$$
 
 1. **Collision Probe:** The candidate is probed in `LinkHashSet`:
 
@@ -292,8 +304,9 @@ When constructing candidates and appending numeric suffixes:
 
 - Suffix buffers are accounted for upfront (`sizeof(candidate)` limited to
   `NAME_MAX + 1`).
-- When appending `-<suffix>`, the base candidate length is truncated so that
-  $\\text{base_len} + \\text{suffix_len} < \\text{NAME_MAX} + 1$.
+- When appending `-<suffix>`, truncate the base candidate so that the total
+  stays below $M + 1$: write the base candidate length as $b$ and the appended
+  suffix length as $s$, then require $b + s < M + 1$ ($M$ is `NAME_MAX`).
 
 ______________________________________________________________________
 
