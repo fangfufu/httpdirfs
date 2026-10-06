@@ -1188,25 +1188,26 @@ void test_container_head_to_data_promotion(void)
     TEST_ASSERT_EQUAL_INT(1, cf->cache_opened);
     TEST_ASSERT_NOT_NULL(cf->seg);
 
-    /* Check that file on disk is sparse-allocated to full size */
+    /* Check that file on disk is sparse-allocated to full size. Open once
+     * and keep the handle for the rest of the test, so the path is never
+     * re-resolved between checks. */
     char *cache_key = url_to_cache_path(link->f_url);
     char full_path[512];
     snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
-    struct stat st;
-    TEST_ASSERT_EQUAL_INT(0, stat(full_path, &st));
-    TEST_ASSERT_EQUAL_INT64(cf->header_size + (off_t)link->content_length,
-                            st.st_size);
-
-    /* Read header to verify preserved flags and header len */
-    FILE *f = fopen(full_path, "r");
+    FILE *f = fopen(full_path, "r+");
     TEST_ASSERT_NOT_NULL(f);
     if (f == NULL) {
         return;
     }
+    struct stat st;
+    TEST_ASSERT_EQUAL_INT(0, fstat(fileno(f), &st));
+    TEST_ASSERT_EQUAL_INT64(cf->header_size + (off_t)link->content_length,
+                            st.st_size);
+
+    /* Read header to verify preserved flags and header len */
     CacheHeader hdr;
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
-    fclose(f);
     TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_SPARSE);
     TEST_ASSERT_EQUAL_UINT32((uint32_t)strlen(raw_hdr), hdr.http_header_len);
     TEST_ASSERT_EQUAL_INT64(1000000, hdr.remote_mtime);
@@ -1216,24 +1217,11 @@ void test_container_head_to_data_promotion(void)
     /* 3. A later HEAD with unchanged remote metadata must preserve the data
      * container, refresh only the HEAD freshness stamp (head_cache_time),
      * and leave the payload download time (cache_time) untouched. */
-    f = fopen(full_path, "r+");
-    TEST_ASSERT_NOT_NULL(f);
-    if (f == NULL) {
-        ROOT_LINK_TBL = old_root;
-        LinkTable_free(table);
-        CacheSystem_cleanup();
-        CONFIG.cache_dir = old_cache_dir;
-        FREE(cache_key);
-        cleanup_temp_dir(tmp_cache_dir);
-        return;
-    }
-    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
-                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
     hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
     TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
-    fclose(f);
+    TEST_ASSERT_EQUAL_INT(0, fflush(f));
 
     TEST_ASSERT_EQUAL_INT(
         0, CacheContainer_write_head(link->f_url, 200,
@@ -1241,20 +1229,9 @@ void test_container_head_to_data_promotion(void)
                                      link->time, "application/octet-stream",
                                      raw_hdr, strlen(raw_hdr), LINK_FILE));
 
-    f = fopen(full_path, "r");
-    TEST_ASSERT_NOT_NULL(f);
-    if (f == NULL) {
-        ROOT_LINK_TBL = old_root;
-        LinkTable_free(table);
-        CacheSystem_cleanup();
-        CONFIG.cache_dir = old_cache_dir;
-        FREE(cache_key);
-        cleanup_temp_dir(tmp_cache_dir);
-        return;
-    }
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
-    fclose(f);
     TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_SPARSE);
     TEST_ASSERT_TRUE((int64_t)time(NULL) - hdr.cache_time
                      > CONFIG.refresh_timeout);
@@ -1263,24 +1240,11 @@ void test_container_head_to_data_promotion(void)
 
     /* 4. A HEAD reporting a changed remote mtime must NOT refresh the HEAD
      * stamp, so the container re-expires and the change gets revalidated. */
-    f = fopen(full_path, "r+");
-    TEST_ASSERT_NOT_NULL(f);
-    if (f == NULL) {
-        ROOT_LINK_TBL = old_root;
-        LinkTable_free(table);
-        CacheSystem_cleanup();
-        CONFIG.cache_dir = old_cache_dir;
-        FREE(cache_key);
-        cleanup_temp_dir(tmp_cache_dir);
-        return;
-    }
-    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
-                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
     hdr.head_cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
     TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
-    fclose(f);
+    TEST_ASSERT_EQUAL_INT(0, fflush(f));
 
     TEST_ASSERT_EQUAL_INT(
         0, CacheContainer_write_head(link->f_url, 200,
@@ -1288,23 +1252,13 @@ void test_container_head_to_data_promotion(void)
                                      link->time + 1, "application/octet-stream",
                                      raw_hdr, strlen(raw_hdr), LINK_FILE));
 
-    f = fopen(full_path, "r");
-    TEST_ASSERT_NOT_NULL(f);
-    if (f == NULL) {
-        ROOT_LINK_TBL = old_root;
-        LinkTable_free(table);
-        CacheSystem_cleanup();
-        CONFIG.cache_dir = old_cache_dir;
-        FREE(cache_key);
-        cleanup_temp_dir(tmp_cache_dir);
-        return;
-    }
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
-    fclose(f);
     TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_SPARSE);
     TEST_ASSERT_TRUE((int64_t)time(NULL) - hdr.head_cache_time
                      > CONFIG.refresh_timeout);
+    fclose(f);
 
     ROOT_LINK_TBL = old_root;
     LinkTable_free(table);
