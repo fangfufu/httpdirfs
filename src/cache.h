@@ -114,8 +114,11 @@ typedef struct CacheHeader {
     int64_t remote_mtime;     /**< Remote server Last-Modified (or 0) */
     int64_t content_length;   /**< Total length of payload in bytes */
     int32_t blksz;            /**< Segment block size */
-    int32_t segbc;        /**< Total segment count (1 for non-sparse HTML) */
-    uint8_t reserved[12]; /**< Reserved for future use (zero) */
+    int32_t segbc;           /**< Total segment count (1 for non-sparse HTML) */
+    uint8_t reserved[4];     /**< Reserved for future use (zero) */
+    int64_t head_cache_time; /**< Local time when HEAD metadata was refreshed
+                                 (0 for pre-existing headers; fall back to
+                                 cache_time) */
 } __attribute__((packed)) CacheHeader;
 
 _Static_assert(sizeof(CacheHeader) == CACHE_HEADER_SIZE,

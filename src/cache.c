@@ -396,6 +396,7 @@ static void container_fill_header(CacheHeader *hdr, const char *url,
     hdr->header_size = (uint32_t)header_size;
     hdr->http_header_len = (uint32_t)http_header_len;
     hdr->cache_time = (int64_t)time(NULL);
+    hdr->head_cache_time = hdr->cache_time;
     hdr->remote_mtime = remote_mtime;
     hdr->content_length = content_length;
     hdr->blksz = blksz;
@@ -2253,7 +2254,7 @@ int CacheContainer_write_head(const char *url, long http_resp,
      * still rejected at open time, when the remote mtime and content length
      * are checked against the live link.
      */
-    int existing_fd = open(full_path, O_RDONLY);
+    int existing_fd = open(full_path, O_RDWR);
     if (existing_fd != -1) {
         CacheHeader existing_hdr;
         int preserve_data
@@ -2263,6 +2264,23 @@ int CacheContainer_write_head(const char *url, long http_resp,
               && existing_hdr.version == CACHE_VERSION
               && (existing_hdr.flags
                   & (CACHE_FLAG_IS_SPARSE | CACHE_FLAG_IS_COMPLETE));
+        if (preserve_data && remote_mtime > 0
+            && existing_hdr.remote_mtime == (int64_t)remote_mtime
+            && existing_hdr.content_length == (off_t)content_length) {
+            /*
+             * Remote metadata is confirmed unchanged, so refresh the HEAD
+             * freshness stamp in place. This keeps read_head from re-expiring
+             * (and re-triggering a HEAD) on later table fills while
+             * cache_time still tracks the payload download time.
+             */
+            int64_t head_cache_time = (int64_t)time(NULL);
+            if (pwrite(existing_fd, &head_cache_time, sizeof(head_cache_time),
+                       (off_t)(CACHE_HEADER_SIZE - sizeof(head_cache_time)))
+                != (ssize_t)sizeof(head_cache_time)) {
+                lprintf(warning, "failed to refresh HEAD cache time in %s\n",
+                        fn);
+            }
+        }
         close(existing_fd);
         if (preserve_data) {
             lprintf(debug,
@@ -2392,7 +2410,9 @@ static int CacheContainer_read_head_internal(const char *url,
         || hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION) {
         res = -1;
     } else {
-        int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+        int64_t head_cache_time
+            = hdr.head_cache_time > 0 ? hdr.head_cache_time : hdr.cache_time;
+        int64_t age = (int64_t)time(NULL) - head_cache_time;
         if (age > CONFIG.refresh_timeout) {
             lprintf(
                 info,

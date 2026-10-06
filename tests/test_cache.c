@@ -1212,6 +1212,100 @@ void test_container_head_to_data_promotion(void)
     TEST_ASSERT_EQUAL_INT64(1000000, hdr.remote_mtime);
 
     Cache_close(cf);
+
+    /* 3. A later HEAD with unchanged remote metadata must preserve the data
+     * container, refresh only the HEAD freshness stamp (head_cache_time),
+     * and leave the payload download time (cache_time) untouched. */
+    f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        ROOT_LINK_TBL = old_root;
+        LinkTable_free(table);
+        CacheSystem_cleanup();
+        CONFIG.cache_dir = old_cache_dir;
+        FREE(cache_key);
+        cleanup_temp_dir(tmp_cache_dir);
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    TEST_ASSERT_EQUAL_INT(
+        0, CacheContainer_write_head(link->f_url, 200,
+                                     (curl_off_t)link->content_length,
+                                     link->time, "application/octet-stream",
+                                     raw_hdr, strlen(raw_hdr), LINK_FILE));
+
+    f = fopen(full_path, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        ROOT_LINK_TBL = old_root;
+        LinkTable_free(table);
+        CacheSystem_cleanup();
+        CONFIG.cache_dir = old_cache_dir;
+        FREE(cache_key);
+        cleanup_temp_dir(tmp_cache_dir);
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+    TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_SPARSE);
+    TEST_ASSERT_TRUE((int64_t)time(NULL) - hdr.cache_time
+                     > CONFIG.refresh_timeout);
+    TEST_ASSERT_TRUE((int64_t)time(NULL) - hdr.head_cache_time
+                     <= CONFIG.refresh_timeout);
+
+    /* 4. A HEAD reporting a changed remote mtime must NOT refresh the HEAD
+     * stamp, so the container re-expires and the change gets revalidated. */
+    f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        ROOT_LINK_TBL = old_root;
+        LinkTable_free(table);
+        CacheSystem_cleanup();
+        CONFIG.cache_dir = old_cache_dir;
+        FREE(cache_key);
+        cleanup_temp_dir(tmp_cache_dir);
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.head_cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    TEST_ASSERT_EQUAL_INT(
+        0, CacheContainer_write_head(link->f_url, 200,
+                                     (curl_off_t)link->content_length,
+                                     link->time + 1, "application/octet-stream",
+                                     raw_hdr, strlen(raw_hdr), LINK_FILE));
+
+    f = fopen(full_path, "r");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        ROOT_LINK_TBL = old_root;
+        LinkTable_free(table);
+        CacheSystem_cleanup();
+        CONFIG.cache_dir = old_cache_dir;
+        FREE(cache_key);
+        cleanup_temp_dir(tmp_cache_dir);
+        return;
+    }
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+    TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_SPARSE);
+    TEST_ASSERT_TRUE((int64_t)time(NULL) - hdr.head_cache_time
+                     > CONFIG.refresh_timeout);
+
     ROOT_LINK_TBL = old_root;
     LinkTable_free(table);
     CacheSystem_cleanup();
@@ -1300,7 +1394,9 @@ void test_container_head_and_html_expiration(void)
     TEST_ASSERT_EQUAL_INT(1, CacheContainer_read_head(url, &cs));
     TEST_ASSERT_EQUAL_INT64(100, cs.content_length);
 
-    /* Tamper with cache_time to make it expired */
+    /* Tamper with the header to make it expired. head_cache_time is left 0
+     * to model a pre-existing header (created before that field existed),
+     * so the age check must fall back to cache_time. */
     char *cache_key = string_to_cache_path(url);
     TEST_ASSERT_NOT_NULL(cache_key);
     char full_path[PATH_MAX];
@@ -1315,6 +1411,7 @@ void test_container_head_and_html_expiration(void)
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
     hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    hdr.head_cache_time = 0;
     TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
     TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
                           (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
