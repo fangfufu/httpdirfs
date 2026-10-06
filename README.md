@@ -55,7 +55,27 @@ man httpdirfs
 Please note that the man page only works if you have installed HTTPDirFS
 properly.
 
-The full usage flags is also documented in the [usage](docs/usage.md) page.
+The full usage flags and more details on how to use this program can be found in
+the [usage](docs/usage.md) page.
+
+### Mounting non-directory listing websites.
+
+There are plenty websites that are not directory listing. You can still
+technically mount them with the `--html-is-directory` flag.
+
+By default, resources whose URLs do not end with a trailing slash (`/`) are
+treated as regular files. When `--html-is-directory` is enabled, HTTPDirFS
+inspects the HTTP `Content-Type` response header of linked resources during link
+initialization. Any resource returning `Content-Type: text/html` (with a size
+within `--max-html-size`) is promoted to a virtual directory, allowing you to
+browse into it as a subdirectory. Non-HTML resources remain regular files.
+
+> [!WARNING]
+> If you mount a non-directory listing website that had not been previously
+> cached, and you decide to browse it using a graphical file browser, the file
+> browser will likely to respond very slowly, as if it has hung up. This is
+> because most graphical file browsers tend to read into every subdirectory
+> within. This causes massive amount of HTTP requests.
 
 ### Single file mode
 

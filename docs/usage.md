@@ -151,8 +151,6 @@ For the comprehensive architectural specification, see
 
 ______________________________________________________________________
 
-______________________________________________________________________
-
 ### External Origins (`--allow-external-origin`)
 
 By default, HTTPDirFS confines filesystem traversal strictly to the origin
