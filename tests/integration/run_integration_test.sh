@@ -826,7 +826,7 @@ log_info "External HTTP server stopped."
         -f \
         --cache \
         --cache-location "${CACHE_DIR}" \
-        --cache-min-size 1024 \
+        --cache-min-size 1K \
         "${BASE_URL}" \
         "${CACHE_MOUNT_DIR}" &
     THRESH_PID=$!
@@ -945,7 +945,7 @@ log_info "External HTTP server stopped."
 
     # Test negative cache-min-size
     err_out=$("${HTTPDIRFS_BIN}" --cache --cache-min-size -50 "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
-    if [[ "${err_out}" == *"Error: --cache-min-size requires a non-negative integer"* ]]; then
+    if [[ "${err_out}" == *"Error: --cache-min-size requires a non-negative size"* ]]; then
         pass "cache size validation: negative --cache-min-size rejected (correct)"
     else
         fail "cache size validation: negative --cache-min-size not rejected correctly: ${err_out}"
@@ -953,14 +953,38 @@ log_info "External HTTP server stopped."
 
     # Test non-numeric cache-max-size
     err_out=$("${HTTPDIRFS_BIN}" --cache --cache-max-size abc "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
-    if [[ "${err_out}" == *"Error: --cache-max-size requires a non-negative integer"* ]]; then
+    if [[ "${err_out}" == *"Error: --cache-max-size requires a non-negative size"* ]]; then
         pass "cache size validation: non-numeric --cache-max-size rejected (correct)"
     else
         fail "cache size validation: non-numeric --cache-max-size not rejected correctly: ${err_out}"
     fi
 
-    # Test min-size > max-size inconsistency
-    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-min-size 1000 --cache-max-size 500 "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    # Test invalid suffix on cache-min-size
+    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-min-size 10XYZ "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --cache-min-size has invalid suffix"* ]]; then
+        pass "cache size validation: invalid suffix in --cache-min-size rejected (correct)"
+    else
+        fail "cache size validation: invalid suffix in --cache-min-size not rejected correctly: ${err_out}"
+    fi
+
+    # Test invalid suffix on cache-max-size
+    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-max-size 2TB "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --cache-max-size has invalid suffix"* ]]; then
+        pass "cache size validation: invalid suffix in --cache-max-size rejected (correct)"
+    else
+        fail "cache size validation: invalid suffix in --cache-max-size not rejected correctly: ${err_out}"
+    fi
+
+    # Test zero dl-seg-size
+    err_out=$("${HTTPDIRFS_BIN}" --cache --dl-seg-size 0 "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
+    if [[ "${err_out}" == *"Error: --dl-seg-size must be greater than 0"* ]]; then
+        pass "cache size validation: zero --dl-seg-size rejected (correct)"
+    else
+        fail "cache size validation: zero --dl-seg-size not rejected correctly: ${err_out}"
+    fi
+
+    # Test min-size > max-size inconsistency (suffix notation)
+    err_out=$("${HTTPDIRFS_BIN}" --cache --cache-min-size 1K --cache-max-size 500 "${BASE_URL}" "${CACHE_MOUNT_DIR}" 2>&1 || true)
     if [[ "${err_out}" == *"Error: --cache-min-size cannot be greater than --cache-max-size"* ]]; then
         pass "cache size validation: min > max consistency check rejected (correct)"
     else
@@ -1546,7 +1570,7 @@ else
     #   1 MB  - many segments, 1 GB / 1 MB  = 1024 exactly
     #   7 MB  - 1 GB / 7 MB ≈ 146.3 (remainder)
     #   3 MB  - 1 GB / 3 MB ≈ 341.3 (remainder)
-    BLOCK_SIZES="8 16 1 7 3"
+    BLOCK_SIZES="8M 16M 1M 7M 3M"
 
     for BLKSZ in ${BLOCK_SIZES}; do
         log_info "--- Cache test: --dl-seg-size ${BLKSZ} ---"

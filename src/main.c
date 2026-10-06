@@ -416,9 +416,23 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
             case 8:
                 CONFIG.cache_enabled = 1;
                 break;
-            case 9:
-                CONFIG.data_blksz = (int)strtol(optarg, NULL, 10) * 1024 * 1024;
-                break;
+            case 9: {
+                off_t size = parse_size_with_suffix(optarg, "--dl-seg-size");
+                if (size <= 0) {
+                    if (size == 0) {
+                        fprintf(
+                            stderr,
+                            "Error: --dl-seg-size must be greater than 0\n");
+                    }
+                    exit(EXIT_FAILURE);
+                }
+                if (size > INT_MAX) {
+                    fprintf(stderr, "Error: --dl-seg-size value overflows int "
+                                    "range\n");
+                    exit(EXIT_FAILURE);
+                }
+                CONFIG.data_blksz = (int)size;
+            } break;
             case 10:
                 CONFIG.max_conns = (int)strtol(optarg, NULL, 10);
                 break;
@@ -486,30 +500,18 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.proxy_capath = STRDUP(optarg);
                 break;
             case 31: {
-                char *endptr;
-                errno = 0;
-                long long val = strtoll(optarg, &endptr, 10);
-                if (errno != 0 || endptr == optarg || *endptr != '\0' || val < 0
-                    || (long long)(off_t)val != val) {
-                    fprintf(stderr,
-                            "Error: --cache-min-size requires a "
-                            "non-negative integer within off_t range\n");
+                off_t size = parse_size_with_suffix(optarg, "--cache-min-size");
+                if (size < 0) {
                     exit(EXIT_FAILURE);
                 }
-                CONFIG.cache_min_size = (off_t)val;
+                CONFIG.cache_min_size = size;
             } break;
             case 32: {
-                char *endptr;
-                errno = 0;
-                long long val = strtoll(optarg, &endptr, 10);
-                if (errno != 0 || endptr == optarg || *endptr != '\0' || val < 0
-                    || (long long)(off_t)val != val) {
-                    fprintf(stderr,
-                            "Error: --cache-max-size requires a "
-                            "non-negative integer within off_t range\n");
+                off_t size = parse_size_with_suffix(optarg, "--cache-max-size");
+                if (size < 0) {
                     exit(EXIT_FAILURE);
                 }
-                CONFIG.cache_max_size = (off_t)val;
+                CONFIG.cache_max_size = size;
             } break;
             case 33:
                 CONFIG.ignore_anchors = 1;
@@ -631,10 +633,12 @@ static void print_long_help(void)
             "then removed).\n"
             "                            Then exit.\n"
             "        --cache-min-size    Set minimum file size threshold for "
-            "caching, in bytes\n"
+            "caching, in\n"
+            "                            bytes (K/M/G suffix supported)\n"
             "                            (default: none)\n"
             "        --cache-max-size    Set maximum file size threshold for "
-            "caching, in bytes\n"
+            "caching, in\n"
+            "                            bytes (K/M/G suffix supported)\n"
             "                            (default: none)\n"
             "        --cacert            Certificate authority for the "
             "server\n"
@@ -642,8 +646,9 @@ static void print_long_help(void)
             "the server\n");
     fprintf(
         stderr,
-        "        --dl-seg-size       Set cache download segment size, in MB "
-        "(default: %d)\n"
+        "        --dl-seg-size       Set cache download segment size, in "
+        "bytes\n"
+        "                            (K/M/G suffix supported, default: 8M)\n"
         "                            Note: this setting is ignored if "
         "previously\n"
         "                            cached data is found for the requested "
@@ -691,8 +696,8 @@ static void print_long_help(void)
         "                            directory, present a single file inside a "
         "virtual\n"
         "                            directory.\n\n",
-        CONFIG.data_blksz / (1024 * 1024), CONFIG.max_conns,
-        CONFIG.refresh_timeout, CONFIG.http_wait_sec, CONFIG.user_agent);
+        CONFIG.max_conns, CONFIG.refresh_timeout, CONFIG.http_wait_sec,
+        CONFIG.user_agent);
     fprintf(stderr,
             "    For mounting a Airsonic / Subsonic server:\n"
             "        --sonic-username    The username for your Airsonic / "

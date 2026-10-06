@@ -78,15 +78,16 @@ HTTPDirFS options:
                             given as a full URL or a bare host (both the http
                             and https origin directories are then removed).
                             Then exit.
-        --cache-min-size    Set minimum file size threshold for caching, in bytes
-                            (default: none)
-        --cache-max-size    Set maximum file size threshold for caching, in bytes
-                            (default: none)
+         --cache-min-size    Set minimum file size threshold for caching, in
+                             bytes (K/M/G suffix supported, default: none)
+         --cache-max-size    Set maximum file size threshold for caching, in
+                             bytes (K/M/G suffix supported, default: none)
         --cacert            Certificate authority for the server
         --capath            Certificate authority directory for the server
-        --dl-seg-size       Set cache download segment size, in MB (default: 8)
-                            Note: this setting is ignored if previously
-                            cached data is found for the requested file.
+         --dl-seg-size       Set cache download segment size, in bytes
+                             (K/M/G suffix supported, default: 8M)
+                             Note: this setting is ignored if previously
+                             cached data is found for the requested file.
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
                             libcurl is allowed to make. (default: 6)
