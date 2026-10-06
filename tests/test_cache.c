@@ -946,6 +946,17 @@ void test_container_file_then_dir(void)
     TEST_ASSERT_EQUAL_INT(0, fseeko(cf->fp, cf->header_size, SEEK_SET));
     TEST_ASSERT_EQUAL_INT((int)strlen(html),
                           (int)fwrite(html, 1, strlen(html), cf->fp));
+    /*
+     * Mark every segment as downloaded in the on-disk bitmap, simulating a
+     * completed file download: only a fully downloaded payload (all segments
+     * present) may be served back as a directory listing.
+     */
+    for (long i = 0; i < cf->segbc; i++) {
+        cf->seg[i] = 1;
+    }
+    TEST_ASSERT_EQUAL_INT(0, fseeko(cf->fp, cf->bitmap_offset, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT((int)cf->segbc,
+                          (int)fwrite(cf->seg, 1, (size_t)cf->segbc, cf->fp));
     fflush(cf->fp);
     PTHREAD_MUTEX_UNLOCK(&cf->w_lock);
     Cache_close(cf);

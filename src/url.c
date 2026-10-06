@@ -86,6 +86,16 @@ static int parse_origin(const char *url, size_t origin_len, char *scheme,
 
     const char *host_start = scheme_end + 3;
     const char *origin_end = url + origin_len;
+    /*
+     * Skip userinfo ("user[:pass]@") so it is not parsed as host/port;
+     * the host compared here is the one libcurl actually connects to.
+     */
+    for (const char *p = origin_end; p > host_start; p--) {
+        if (*(p - 1) == '@') {
+            host_start = p;
+            break;
+        }
+    }
     if (host_start >= origin_end) {
         return -1;
     }

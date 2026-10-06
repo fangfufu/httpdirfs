@@ -66,7 +66,12 @@ void sonic_config_init(const char *server, const char *username,
     }
     SONIC_CONFIG.username = STRNDUP(username, NAME_MAX);
     SONIC_CONFIG.password = STRNDUP(password, NAME_MAX);
-    SONIC_CONFIG.client = CONFIG.user_agent;
+    /*
+     * Keep a fixed, URL-safe client identifier in the Sonic query string:
+     * CONFIG.user_agent is user-defined (via --user-agent) and may contain
+     * characters that would malform the request.
+     */
+    SONIC_CONFIG.client = "HTTPDirFS-" VERSION;
 
     if (!CONFIG.sonic_insecure) {
         /*

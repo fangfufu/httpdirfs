@@ -85,8 +85,8 @@ HTTPDirFS options:
         --cacert            Certificate authority for the server
         --capath            Certificate authority directory for the server
          --dl-seg-size       Set cache download segment size, in bytes
-                             (K/M/G suffix supported, default: 8M)
-                             Note: this setting is ignored if previously
+                             (K/M/G suffix supported, default: 8M, minimum:
+                             1M). Note: this setting is ignored if previously
                              cached data is found for the requested file.
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
@@ -148,7 +148,7 @@ ______________________________________________________________________
   `--max-html-size 4M`).
 
 For the comprehensive architectural specification, see
-[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
+[specs/directory_detection_and_naming.md](specs/directory_detection_and_naming.md).
 
 ______________________________________________________________________
 

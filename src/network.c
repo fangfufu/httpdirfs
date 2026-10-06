@@ -293,6 +293,14 @@ int curl_multi_perform_once(void)
         curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
     }
 
+    /*
+     * Completion callbacks may have requeued redirect hops after
+     * curl_multi_perform() computed n_running_curl; report every handle
+     * still attached so callers do not treat requeued transfers as
+     * finished.
+     */
+    n_running_curl = (int)n_active;
+
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);

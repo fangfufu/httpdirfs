@@ -2072,7 +2072,7 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
         res = 0;
     } else if (hdr.content_length <= 0 || hdr.header_size < CACHE_PAGE_SIZE
                || hdr.header_size % CACHE_PAGE_SIZE != 0
-               || hdr.url_len > PATH_MAX) {
+               || hdr.url_len > PATH_MAX || hdr.segbc <= 0) {
         lprintf(error, "corrupt container geometry in %s\n", fn);
     } else if (stat(full_path, &cst) != 0
                || (uintmax_t)cst.st_size
@@ -2080,61 +2080,107 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
                             + (uintmax_t)hdr.content_length) {
         lprintf(error, "truncated container file %s\n", fn);
     } else {
-        char *disk_url = CALLOC((size_t)hdr.url_len + 1, sizeof(char));
-        int key_match = fread(disk_url, 1, (size_t)hdr.url_len + 1, fp)
-                            == (size_t)hdr.url_len + 1
-                        && !ferror(fp);
-        if (key_match) {
-            disk_url[hdr.url_len] = '\0';
-            key_match = strcmp(key_url, disk_url) == 0;
-        }
-        if (!key_match) {
-            lprintf(error, "cache key mismatch in %s\n", fn);
-            FREE(disk_url);
-        } else {
-            if (out_resolved_url) {
-                *out_resolved_url = STRDUP(disk_url);
-            }
-            FREE(disk_url);
-            int64_t age = (int64_t)time(NULL) - hdr.cache_time;
-            if (age > CONFIG.refresh_timeout) {
-                lprintf(info,
-                        "cache container %s expired (age: %jd, "
-                        "limit: %d)\n",
-                        fn, (intmax_t)age, CONFIG.refresh_timeout);
-                res = 0;
-            } else {
-                if (hdr.http_header_len > 0) {
-                    char *http_hdr
-                        = CALLOC((size_t)hdr.http_header_len + 1, sizeof(char));
-                    if (fread(http_hdr, 1, hdr.http_header_len, fp)
-                            != hdr.http_header_len
-                        || ferror(fp)) {
-                        lprintf(error, "corrupt HTTP headers in %s\n", fn);
-                        FREE(http_hdr);
-                    } else {
-                        *out_http_header = http_hdr;
-                        *out_http_header_len = hdr.http_header_len;
+        /*
+         * Determine whether the payload is complete. Directory listings carry
+         * CACHE_FLAG_IS_COMPLETE; a file container (which keeps the sparse
+         * flag) is complete only when its on-disk segment bitmap is fully
+         * set -- undownloaded segments would read back as zero bytes, so a
+         * partial payload must never be served.
+         */
+        int is_complete = (hdr.flags & CACHE_FLAG_IS_COMPLETE) != 0;
+        if (!is_complete) {
+            off_t bitmap_off = (off_t)(CACHE_HEADER_SIZE + hdr.url_len + 1
+                                       + hdr.http_header_len);
+            unsigned char *bitmap
+                = CALLOC((size_t)hdr.segbc, sizeof(unsigned char));
+            if (bitmap && fseeko(fp, bitmap_off, SEEK_SET) == 0
+                && fread(bitmap, 1, (size_t)hdr.segbc, fp) == (size_t)hdr.segbc
+                && !ferror(fp)) {
+                is_complete = 1;
+                for (int i = 0; i < hdr.segbc; i++) {
+                    if (bitmap[i] == 0) {
+                        is_complete = 0;
+                        break;
                     }
                 }
-                if (hdr.http_header_len == 0 || *out_http_header != NULL) {
-                    char *payload = CALLOC(1, (size_t)hdr.content_length + 1);
-                    if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) != 0
-                        || fread(payload, 1, (size_t)hdr.content_length, fp)
-                               != (size_t)hdr.content_length
-                        || ferror(fp)) {
-                        lprintf(error, "corrupt payload in %s\n", fn);
-                        FREE(payload);
-                        FREE(*out_http_header);
-                        *out_http_header = NULL;
-                        *out_http_header_len = 0;
-                    } else {
-                        *out_payload = payload;
-                        *out_payload_len = (size_t)hdr.content_length;
-                        if (out_cache_time) {
-                            *out_cache_time = (time_t)hdr.cache_time;
+            } else {
+                is_complete = 0;
+            }
+            FREE(bitmap);
+        }
+        if (!is_complete) {
+            lprintf(debug,
+                    "cache container %s is a partial file payload, "
+                    "not a complete payload\n",
+                    fn);
+            res = 0;
+        } else {
+            fseeko(fp, CACHE_HEADER_SIZE, SEEK_SET);
+            char *disk_url = CALLOC((size_t)hdr.url_len + 1, sizeof(char));
+            int key_match = fread(disk_url, 1, (size_t)hdr.url_len + 1, fp)
+                                == (size_t)hdr.url_len + 1
+                            && !ferror(fp);
+            if (key_match) {
+                disk_url[hdr.url_len] = '\0';
+                /*
+                 * Containers store the link's raw f_url, which may differ from
+                 * its canonical form. Compare canonicalized forms so a
+                 * non-canonical f_url does not invalidate a valid container.
+                 */
+                char *canon_disk = canonicalize_url(disk_url);
+                const char *cmp_url = canon_disk ? canon_disk : disk_url;
+                key_match = strcmp(key_url, cmp_url) == 0;
+                FREE(canon_disk);
+            }
+            if (!key_match) {
+                lprintf(error, "cache key mismatch in %s\n", fn);
+                FREE(disk_url);
+            } else {
+                if (out_resolved_url) {
+                    *out_resolved_url = STRDUP(disk_url);
+                }
+                FREE(disk_url);
+                int64_t age = (int64_t)time(NULL) - hdr.cache_time;
+                if (age > CONFIG.refresh_timeout) {
+                    lprintf(info,
+                            "cache container %s expired (age: %jd, "
+                            "limit: %d)\n",
+                            fn, (intmax_t)age, CONFIG.refresh_timeout);
+                    res = 0;
+                } else {
+                    if (hdr.http_header_len > 0) {
+                        char *http_hdr = CALLOC((size_t)hdr.http_header_len + 1,
+                                                sizeof(char));
+                        if (fread(http_hdr, 1, hdr.http_header_len, fp)
+                                != hdr.http_header_len
+                            || ferror(fp)) {
+                            lprintf(error, "corrupt HTTP headers in %s\n", fn);
+                            FREE(http_hdr);
+                        } else {
+                            *out_http_header = http_hdr;
+                            *out_http_header_len = hdr.http_header_len;
                         }
-                        res = 1;
+                    }
+                    if (hdr.http_header_len == 0 || *out_http_header != NULL) {
+                        char *payload
+                            = CALLOC(1, (size_t)hdr.content_length + 1);
+                        if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) != 0
+                            || fread(payload, 1, (size_t)hdr.content_length, fp)
+                                   != (size_t)hdr.content_length
+                            || ferror(fp)) {
+                            lprintf(error, "corrupt payload in %s\n", fn);
+                            FREE(payload);
+                            FREE(*out_http_header);
+                            *out_http_header = NULL;
+                            *out_http_header_len = 0;
+                        } else {
+                            *out_payload = payload;
+                            *out_payload_len = (size_t)hdr.content_length;
+                            if (out_cache_time) {
+                                *out_cache_time = (time_t)hdr.cache_time;
+                            }
+                            res = 1;
+                        }
                     }
                 }
             }
@@ -2199,6 +2245,36 @@ int CacheContainer_write_head(const char *url, long http_resp,
 
     char *full_path = path_append(CACHE_DIR, fn);
     ensure_parent_dir(full_path);
+
+    /*
+     * If a file payload container (sparse or complete) already exists for
+     * this URL, do not replace it with HEAD-only metadata: the container
+     * holds downloaded segments that later opens can reuse. Stale data is
+     * still rejected at open time, when the remote mtime and content length
+     * are checked against the live link.
+     */
+    int existing_fd = open(full_path, O_RDONLY);
+    if (existing_fd != -1) {
+        CacheHeader existing_hdr;
+        int preserve_data
+            = read(existing_fd, &existing_hdr, CACHE_HEADER_SIZE)
+                  == (ssize_t)CACHE_HEADER_SIZE
+              && existing_hdr.magic == CACHE_MAGIC
+              && existing_hdr.version == CACHE_VERSION
+              && (existing_hdr.flags
+                  & (CACHE_FLAG_IS_SPARSE | CACHE_FLAG_IS_COMPLETE));
+        close(existing_fd);
+        if (preserve_data) {
+            lprintf(debug,
+                    "preserving existing data container %s over HEAD "
+                    "metadata\n",
+                    fn);
+            FREE(full_path);
+            FREE(fn);
+            FREE(canon_url);
+            return 0;
+        }
+    }
 
     char synth_header[256];
     const char *hdr_to_write = raw_headers;

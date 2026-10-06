@@ -25,14 +25,14 @@ server origin gets its own cache directory beneath the cache location root,
 named using the escaped server root URL. Within each origin, files are sharded
 into 256 subdirectories using the first two hex characters of their canonical
 URL's MD5 hash. For the specification of the cache system, please refer to
-[docs/specs/cache.md](docs/specs/cache.md).
+[specs/cache.md](specs/cache.md).
 
 ### Universal Link Parsing and Directory Detection
 
 HTTPDirFS parses HTML listing documents using the Gumbo HTML5 parser. It
 extracts descriptive filenames from anchor text, resolves name collisions, and
 identifies directories. For complete technical specifications, please refer to
-[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
+[specs/directory_detection_and_naming.md](specs/directory_detection_and_naming.md).
 
 #### Allowed characters in filenames
 

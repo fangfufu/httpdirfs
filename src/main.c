@@ -431,6 +431,11 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                                     "range\n");
                     exit(EXIT_FAILURE);
                 }
+                if (size < (off_t)(1024 * 1024)) {
+                    fprintf(stderr, "Error: --dl-seg-size must be at least 1M "
+                                    "(values are now in bytes; e.g. 8M)\n");
+                    exit(EXIT_FAILURE);
+                }
                 CONFIG.data_blksz = (int)size;
             } break;
             case 10:

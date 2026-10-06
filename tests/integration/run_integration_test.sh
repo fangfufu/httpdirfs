@@ -21,7 +21,7 @@ set -euo pipefail
 # ─── Configuration ───────────────────────────────────────────────────────────
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HTTP_PORT="${HTTPDIRFS_TEST_PORT:-34521}"
+HTTP_PORT="${HTTPDIRFS_TEST_PORT:-0}"
 
 # Parse options
 MODE="all"
@@ -1599,33 +1599,33 @@ else
         done
 
         if ! mountpoint -q "${CACHE_MOUNT_DIR}" 2>/dev/null; then
-            log_error "httpdirfs (cache, blksz=${BLKSZ}M) failed to mount."
-            skip "Cache mode tests (mount failed, blksz=${BLKSZ}M)"
+            log_error "httpdirfs (cache, blksz=${BLKSZ}) failed to mount."
+            skip "Cache mode tests (mount failed, blksz=${BLKSZ})"
             wait "${CACHE_HTTPDIRFS_PID}" 2>/dev/null || true
             continue
         fi
 
-        log_info "httpdirfs (cache, blksz=${BLKSZ}M) mounted"
+        log_info "httpdirfs (cache, blksz=${BLKSZ}) mounted"
 
         LARGE_FILE="${CACHE_MOUNT_DIR}/large_1g.bin"
 
         # Test: Multithreaded read with 8 threads
-        log_info "Test group: Multithreaded cache read (blksz=${BLKSZ}M)"
+        log_info "Test group: Multithreaded cache read (blksz=${BLKSZ})"
         if python3 "${SCRIPT_DIR}/multithread_read.py" \
             "${LARGE_FILE}" "${LARGE_FILE_SHA256}" 8; then
-            pass "Multithreaded read (blksz=${BLKSZ}M, 8 threads): OK"
+            pass "Multithreaded read (blksz=${BLKSZ}, 8 threads): OK"
         else
-            fail "Multithreaded read (blksz=${BLKSZ}M, 8 threads): FAIL"
+            fail "Multithreaded read (blksz=${BLKSZ}, 8 threads): FAIL"
         fi
 
         # Test: Sequential re-read (should come from cache now)
-        log_info "Test group: Cached re-read (blksz=${BLKSZ}M)"
+        log_info "Test group: Cached re-read (blksz=${BLKSZ})"
         actual_sha256=$(sha256sum "${LARGE_FILE}" 2>/dev/null \
             | awk '{print $1}')
         if [[ "${actual_sha256}" == "${LARGE_FILE_SHA256}" ]]; then
-            pass "Cached re-read (blksz=${BLKSZ}M): OK"
+            pass "Cached re-read (blksz=${BLKSZ}): OK"
         else
-            fail "Cached re-read (blksz=${BLKSZ}M): FAIL"
+            fail "Cached re-read (blksz=${BLKSZ}): FAIL"
             log_error "  expected: ${LARGE_FILE_SHA256}"
             log_error "  actual:   ${actual_sha256}"
         fi
@@ -1633,7 +1633,7 @@ else
         # Test: Zero-length files in cache mode (run once — not block-size
         # dependent, but checked here to confirm the fi->fh=0 bypass works
         # when the cache system is active).
-        if [[ "${MODE}" != "long" && "${BLKSZ}" == "8" ]]; then
+        if [[ "${MODE}" != "long" && "${BLKSZ}" == "8M" ]]; then
             log_info "Test group: Zero-length files in cache mode"
             CACHE_ZERO_FILES_LIST=$(python3 -c "
 import json
@@ -1686,7 +1686,7 @@ for name, info in sorted(m.items()):
         # Unmount
         do_unmount "${CACHE_MOUNT_DIR}"
         wait "${CACHE_HTTPDIRFS_PID}" 2>/dev/null || true
-        log_info "Cache mount (blksz=${BLKSZ}M) unmounted."
+        log_info "Cache mount (blksz=${BLKSZ}) unmounted."
 
     done
 fi

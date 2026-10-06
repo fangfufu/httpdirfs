@@ -94,7 +94,12 @@ size_t write_memory_capped_callback(void *recv_data, size_t size, size_t nmemb,
     TransferStruct *ts = (TransferStruct *)userp;
     size_t recv_size = size * nmemb;
     if (ts->size_cap > 0 && ts->curr_size + recv_size > ts->size_cap) {
-        ts->transferring = 0;
+        /*
+         * Only flag the cap: curl_process_msgs() clears transferring after
+         * it detaches the handle. Clearing it here, while the handle is
+         * still attached, lets another thread clean up the transfer
+         * underneath a concurrent curl_multi_perform_once() (use-after-free).
+         */
         ts->cap_hit = 1;
         return 0;
     }
