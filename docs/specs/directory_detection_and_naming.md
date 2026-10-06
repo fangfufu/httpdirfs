@@ -23,7 +23,7 @@ The system is designed around two core tenets:
    filenames while avoiding collisions and preventing link loss.
 1. **Deterministic Directory Classification:** Directory detection follows
    strict rules: trailing slashes denote directories by default, while
-   `--html-is-directory` allows dynamic promotion of linked HTML resources into
+   `--website-mode` allows dynamic promotion of linked HTML resources into
    navigable subdirectories.
 
 ______________________________________________________________________
@@ -48,7 +48,7 @@ URL Resolution: resolve_target_url()
                                                 │
                  ┌──────────────────────────────┴──────────────────────────────┐
                  │                                                             │
-       --html-is-directory is OFF (Default)                          --html-is-directory is ON
+       --website-mode is OFF (Default)                          --website-mode is ON
                   │                                                             │
                   ├─ cl >= 0 (known size) ──────────► LINK_FILE                 ├─ Content-Type: text/html?
                   │    (cl == 0 && --zero-len-is-dir ► LINK_DIR)                │     ├─ cl > max_html_size ──► LINK_FILE
@@ -97,7 +97,7 @@ entries concurrently using HTTP `HEAD` requests (`CURLOPT_NOBODY`) via
 
 - **Entries with Initial Type `LINK_UNINITIALISED_FILE`:**
 
-  - **When `--html-is-directory` is Disabled (Default):**
+  - **When `--website-mode` is Disabled (Default):**
 
     - If the size is known (`Content-Length >= 0`), the entry is confirmed as
       `LINK_FILE` (or `LINK_DIR` if `Content-Length == 0` and
@@ -116,7 +116,7 @@ entries concurrently using HTTP `HEAD` requests (`CURLOPT_NOBODY`) via
       - Any other known non-HTML content type is hidden (`LINK_INVALID`), since
         a file whose size we cannot report is not exposed.
 
-  - **When `--html-is-directory` is Enabled:**
+  - **When `--website-mode` is Enabled:**
 
     - The `Content-Type` header is parsed using `is_html_content_type()`.
     - **`text/html`** (e.g. `text/html`, `text/html; charset=utf-8`):
@@ -142,7 +142,7 @@ entries concurrently using HTTP `HEAD` requests (`CURLOPT_NOBODY`) via
 The rules above reduce to the following matrix for `LINK_UNINITIALISED_FILE`
 entries that receive `HTTP 200 OK`:
 
-| Content-Type    | Content-Length                   | `--html-is-directory` OFF (default)             | ON                                              |
+| Content-Type    | Content-Length                   | `--website-mode` OFF (default)                  | ON                                              |
 | --------------- | -------------------------------- | ----------------------------------------------- | ----------------------------------------------- |
 | `text/html`     | known, `0 < cl <= max_html_size` | `LINK_FILE`                                     | `LINK_DIR` (promoted)                           |
 | `text/html`     | known, `cl > max_html_size`      | `LINK_FILE`                                     | `LINK_FILE`                                     |
@@ -165,7 +165,7 @@ Pre-conditions (both modes):
 Matrix notes:
 
 - The unknown-size rows (`cl < 0`) are identical in both modes and are resolved
-  on content type alone **before** the `--html-is-directory` flag is consulted
+  on content type alone **before** the `--website-mode` flag is consulted
   (`Link_classify_response()`, `src/transfer.c`): a concrete non-HTML type is
   hidden, while HTML or a missing/empty `Content-Type` is a tentative directory.
 - Only two rows change with the flag: `text/html` with `0 < cl <= max_html_size`
@@ -173,19 +173,19 @@ Matrix notes:
   regardless of `--zero-len-is-dir`, since the HTML check runs first). The
   `cl > max_html_size` row stays `LINK_FILE` in both modes.
 - **Tentative `LINK_DIR`** (unknown size): parsed on first browse; degrades to
-  an empty folder if the listing fails, or (with `--html-is-directory` enabled)
+  an empty folder if the listing fails, or (with `--website-mode` enabled)
   exceeds `max_html_size` (Phase 3) — never demoted to a file.
 - **Promoted `LINK_DIR`** (flag enabled, HTML): the download is capped at
   `max_html_size` on first browse, with the same empty-folder degradation if it
   exceeds the cap or fails.
 - `max_html_size` is `--max-html-size` (default `2M`); it is consulted only when
-  `--html-is-directory` is enabled.
+  `--website-mode` is enabled.
 
 ### Phase 3: Oversized / Failed Directory → Empty Folder
 
 A link classified as a directory is **never** turned into a file: a directory
-stays a directory for the lifetime of the mount. When `--html-is-directory`
-exposes a page as a directory (a promoted `text/html` page, or a page with no
+stays a directory for the lifetime of the mount. When `--website-mode` exposes a
+page as a directory (a promoted `text/html` page, or a page with no
 `Content-Type` and an unknown size), the listing is fetched in `LinkTable_new()`
 via `Link_download_full()`, which caps the body at `CONFIG.max_html_size`. If,
 on first browse, the listing could not be fetched (HTTP non-200 / empty body) or
@@ -199,7 +199,7 @@ than being parsed as a partial listing or demoted to a file:
 - The same `max_html_size` gate is re-applied to a cached body, so a listing
   cached under a larger limit is treated as an empty folder after the limit is
   lowered (and the now-inconsistent container is deleted).
-- The cap (and the cached-body gate) only applies when `--html-is-directory` is
+- The cap (and the cached-body gate) only applies when `--website-mode` is
   enabled. With the flag disabled, a tentative `LINK_DIR` (unknown size) is
   downloaded in full without a cap and parsed normally on first browse.
 - **Exemption from the cap** is decided purely by URL syntax: any URL whose path
@@ -413,9 +413,9 @@ ______________________________________________________________________
 
 ## 6. Configuration Flags Reference
 
-- **`--html-is-directory`** (default: disabled) Enables dynamic directory
-  promotion. Resources returning `Content-Type: text/html` within
-  `--max-html-size` are exposed as virtual directories instead of regular files.
+- **`--website-mode`** (default: disabled) Enables dynamic directory promotion.
+  Resources returning `Content-Type: text/html` within `--max-html-size` are
+  exposed as virtual directories instead of regular files.
 - **`--allow-external-origin`** (default: disabled) Permits traversal of links
   pointing to cross-origin servers. When disabled, all links pointing outside
   the mounted server origin are filtered out.

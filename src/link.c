@@ -571,8 +571,7 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
                 const char *qf = strpbrk(eff_url, "?#");
                 size_t tlen = qf ? (size_t)(qf - eff_url) : strlen(eff_url);
                 int real_dir = (tlen > 0 && eff_url[tlen - 1] == '/');
-                if (!real_dir && CONFIG.html_is_directory
-                    && CONFIG.max_html_size > 0
+                if (!real_dir && CONFIG.website_mode && CONFIG.max_html_size > 0
                     && (off_t)payload_len > CONFIG.max_html_size) {
                     lprintf(warning,
                             "cached listing for %s is %zu bytes, exceeding "

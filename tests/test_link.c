@@ -43,7 +43,7 @@ void setUp(void)
 void tearDown(void)
 {
     CONFIG.allow_external_origin = 0;
-    CONFIG.html_is_directory = 0;
+    CONFIG.website_mode = 0;
     CONFIG.ignore_anchors = 0;
     if (ROOT_LINK_TBL != NULL) {
         LinkTable_free(ROOT_LINK_TBL);
@@ -1225,8 +1225,8 @@ void test_Link_classify_response(void)
 {
     size_t out_len = 0;
 
-    // 1. Default mode (html_is_directory = 0)
-    CONFIG.html_is_directory = 0;
+    // 1. Default mode (website_mode = 0)
+    CONFIG.website_mode = 0;
     CONFIG.zero_len_is_dir = 0;
     TEST_ASSERT_EQUAL_INT(LINK_FILE,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
@@ -1259,8 +1259,8 @@ void test_Link_classify_response(void)
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
                                                  0, "text/html", &out_len));
 
-    // 2. HTML as directory mode (html_is_directory = 1)
-    CONFIG.html_is_directory = 1;
+    // 2. HTML as directory mode (website_mode = 1)
+    CONFIG.website_mode = 1;
     CONFIG.max_html_size = 2097152; // 2 MiB
 
     // HTML <= max_html_size -> LINK_DIR
@@ -1306,7 +1306,7 @@ void test_Link_classify_response(void)
                                                  "text/html", &out_len));
 
     // Reset config
-    CONFIG.html_is_directory = 0;
+    CONFIG.website_mode = 0;
     CONFIG.zero_len_is_dir = 0;
 }
 

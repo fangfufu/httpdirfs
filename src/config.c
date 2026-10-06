@@ -107,7 +107,7 @@ void Config_init(void)
     CONFIG.sonic_insecure = 0;
 
     /*--------- Directory promotion & traversal related --------*/
-    CONFIG.html_is_directory = 0;
+    CONFIG.website_mode = 0;
     CONFIG.max_html_size = (off_t)2 * 1024 * 1024;
 
     atexit(mem_cleanup);

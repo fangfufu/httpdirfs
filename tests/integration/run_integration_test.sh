@@ -1128,12 +1128,12 @@ EOF
 
     ADV_TEST_URL="${BASE_URL}adv_test_dir/"
 
-    # --- Test 8a: Mount with --html-is-directory and --allow-external-origin ---
-    log_info "Subgroup: --html-is-directory with --allow-external-origin"
+    # --- Test 8a: Mount with --website-mode and --allow-external-origin ---
+    log_info "Subgroup: --website-mode with --allow-external-origin"
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --allow-external-origin \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1145,14 +1145,14 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--html-is-directory --allow-external-origin) failed to mount"
+        fail "httpdirfs (--website-mode --allow-external-origin) failed to mount"
         kill "${ADV_PID}" 2>/dev/null || true
     else
         # Subdirectory promotion: sub_page has text/html content-type, should be a directory
         if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "html_is_directory: sub_page promoted to directory"
+            pass "website_mode: sub_page promoted to directory"
         else
-            fail "html_is_directory: sub_page was not promoted to directory"
+            fail "website_mode: sub_page was not promoted to directory"
         fi
 
         # Early deduplication: only one Disc Subdir-sub_page exists
@@ -1198,15 +1198,15 @@ EOF
 
         # Traversing promoted directory and reading nested file
         if [[ -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" ]]; then
-            pass "html_is_directory: promoted directory traversal and nested file present"
+            pass "website_mode: promoted directory traversal and nested file present"
             content=$(cat "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" 2>/dev/null || true)
             if [[ "${content}" == "nested file content" ]]; then
-                pass "html_is_directory: nested file content OK"
+                pass "website_mode: nested file content OK"
             else
-                fail "html_is_directory: nested file content mismatch"
+                fail "website_mode: nested file content mismatch"
             fi
         else
-            fail "html_is_directory: promoted directory contents missing"
+            fail "website_mode: promoted directory contents missing"
         fi
 
         # Cross-origin link present with --allow-external-origin
@@ -1263,7 +1263,7 @@ EOF
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
     SAME_ORIGIN_PID=$!
@@ -1274,7 +1274,7 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--html-is-directory) failed to mount"
+        fail "httpdirfs (--website-mode) failed to mount"
         kill "${SAME_ORIGIN_PID}" 2>/dev/null || true
     else
         if [[ ! -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
@@ -1284,9 +1284,9 @@ EOF
         fi
 
         if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "html_is_directory: same-origin directory preserved"
+            pass "website_mode: same-origin directory preserved"
         else
-            fail "html_is_directory: same-origin directory missing"
+            fail "website_mode: same-origin directory missing"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"
@@ -1298,7 +1298,7 @@ EOF
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --max-html-size 1024 \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1310,7 +1310,7 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--html-is-directory --max-html-size) failed to mount"
+        fail "httpdirfs (--website-mode --max-html-size) failed to mount"
         kill "${MAX_SIZE_PID}" 2>/dev/null || true
     else
         # large_page exceeds 1024 bytes, so it is not promoted to a directory and remains a regular file
@@ -1366,7 +1366,7 @@ EOF
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --max-html-size 1024 \
         "${CHUNKED_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1485,10 +1485,10 @@ EOF
         fi
     }
 
-    # Flag on (--html-is-directory)
+    # Flag on (--website-mode)
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --max-html-size 1024 \
         "${NOTYPE_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1503,7 +1503,7 @@ EOF
         fail "httpdirfs (no-Content-Type) failed to mount"
         kill "${NOTYPE_PID}" 2>/dev/null || true
     else
-        check_notype "html-is-directory"
+        check_notype "website-mode"
         do_unmount "${ADV_MOUNT_DIR}"
         wait "${NOTYPE_PID}" 2>/dev/null || true
 
@@ -1531,8 +1531,8 @@ EOF
         fi
     fi
 
-    # --- Test 8d: Default mode without --html-is-directory ---
-    log_info "Subgroup: Default mode without --html-is-directory"
+    # --- Test 8d: Default mode without --website-mode ---
+    log_info "Subgroup: Default mode without --website-mode"
 
     "${HTTPDIRFS_BIN}" \
         -f \
@@ -1549,11 +1549,11 @@ EOF
         fail "httpdirfs (default mode) failed to mount"
         kill "${VANILLA_PID}" 2>/dev/null || true
     else
-        # Without --html-is-directory, sub_page is NOT promoted to a directory; it remains a regular file
+        # Without --website-mode, sub_page is NOT promoted to a directory; it remains a regular file
         if [[ ! -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" && -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "html_is_directory: sub_page not promoted to directory in default mode (correct)"
+            pass "website_mode: sub_page not promoted to directory in default mode (correct)"
         else
-            fail "html_is_directory: sub_page unexpectedly promoted or missing in default mode"
+            fail "website_mode: sub_page unexpectedly promoted or missing in default mode"
         fi
 
         # Anchor text and naming are universally applied

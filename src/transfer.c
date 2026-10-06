@@ -550,7 +550,7 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
         /*
          * Unknown size (chunked / no Content-Length): we cannot report a size
          * without downloading the whole body, so decide purely on content
-         * type (both --html-is-directory modes).
+         * type (both --website-mode modes).
          *   - A concrete non-HTML type (e.g. image/png, application/zip) is
          *     trusted to be a plain file, not a listing, so parsing it is
          *     pointless; and its size is unknown, so it cannot be presented
@@ -566,7 +566,7 @@ LinkType Link_classify_response(LinkType current_type, long http_resp,
         return LINK_DIR;
     }
 
-    if (CONFIG.html_is_directory && is_html) {
+    if (CONFIG.website_mode && is_html) {
         if ((off_t)cl > CONFIG.max_html_size) {
             if (content_len_out) {
                 *content_len_out = (size_t)cl;
@@ -647,7 +647,7 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
     ts.transferring = 1;
 
     /*
-     * When --html-is-directory is active, cap the full-body download at
+     * When --website-mode is active, cap the full-body download at
      * max_html_size so an oversized *promoted* directory (a no-trailing-slash
      * HTML page that we tentatively exposed as a directory) does not buffer
      * its entire body in memory. The callback aborts the transfer once the
@@ -659,7 +659,7 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
      * max_html_size, so it is downloaded in full.
      */
     int capped = 0;
-    if (CONFIG.html_is_directory && CONFIG.max_html_size > 0) {
+    if (CONFIG.website_mode && CONFIG.max_html_size > 0) {
         const char *qf = strpbrk(url, "?#");
         size_t tlen = qf ? (size_t)(qf - url) : strlen(url);
         int real_dir = (tlen > 0 && url[tlen - 1] == '/');

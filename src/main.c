@@ -362,7 +362,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
            {"cache-min-size", required_argument, NULL, 'L'},   /* 31 */
            {"cache-max-size", required_argument, NULL, 'L'},   /* 32 */
            {"ignore-anchors", no_argument, NULL, 'L'},         /* 33 */
-           {"html-is-directory", no_argument, NULL, 'L'},      /* 34 */
+           {"website-mode", no_argument, NULL, 'L'},           /* 34 */
            {"max-html-size", required_argument, NULL, 'L'},    /* 35 */
            {"allow-external-origin", no_argument, NULL, 'L'},  /* 36 */
            {"cache-clear-host", required_argument, NULL, 'L'}, /* 37 */
@@ -522,7 +522,7 @@ static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                 CONFIG.ignore_anchors = 1;
                 break;
             case 34:
-                CONFIG.html_is_directory = 1;
+                CONFIG.website_mode = 1;
                 break;
             case 35: {
                 off_t size = parse_size_with_suffix(optarg, "--max-html-size");
@@ -690,7 +690,7 @@ static void print_long_help(void)
         "        --ignore-anchors    Ignore intra-page HTML anchor/fragment "
         "links\n"
         "                            starting with '#' (default: off)\n"
-        "        --html-is-directory Promote resources with Content-Type "
+        "        --website-mode      Promote resources with Content-Type "
         "text/html to\n"
         "                            directories (default: off)\n"
         "        --max-html-size     Set maximum HTML size for directory "

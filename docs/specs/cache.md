@@ -50,8 +50,8 @@ The cache engine is designed around seven core architectural tenets:
      `video/...`, etc.) are all standard HTTP resources.
    - The cache engine treats all resources uniformly. If a URL is initially
      cached as a file and subsequently accessed as a directory (e.g., via
-     `--html-is-directory`), HTTPDirFS parses the existing cached payload
-     directly in memory with zero file conversion or data migration.
+     `--website-mode`), HTTPDirFS parses the existing cached payload directly in
+     memory with zero file conversion or data migration.
 
 1. **Single-Level Hash Sharding (`<origin>/ab/<hash>`):**
 

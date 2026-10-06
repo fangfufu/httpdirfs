@@ -108,7 +108,7 @@ HTTPDirFS options:
                             servers (default: off)
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links
                             starting with '#' (default: off)
-        --html-is-directory Promote resources with Content-Type text/html to
+        --website-mode      Promote resources with Content-Type text/html to
                             directories (default: off)
         --max-html-size     Set maximum HTML size for directory listing
                             promotion (default: 2M)
@@ -129,15 +129,15 @@ HTTPDirFS options:
 
 ______________________________________________________________________
 
-#### `--html-is-directory`
+#### `--website-mode`
 
 - **Description:** By default, resources whose URLs do not end with a trailing
-  slash (`/`) are treated as regular files. When `--html-is-directory` is
-  enabled, HTTPDirFS inspects the HTTP `Content-Type` response header of linked
-  resources during link initialization. Any resource returning
-  `Content-Type: text/html` (with a size within `--max-html-size`) is promoted
-  to a virtual directory, allowing you to browse into it as a subdirectory.
-  Non-HTML resources remain regular files.
+  slash (`/`) are treated as regular files. When `--website-mode` is enabled,
+  HTTPDirFS inspects the HTTP `Content-Type` response header of linked resources
+  during link initialization. Any resource returning `Content-Type: text/html`
+  (with a size within `--max-html-size`) is promoted to a virtual directory,
+  allowing you to browse into it as a subdirectory. Non-HTML resources remain
+  regular files.
 - **Media and asset references:** When an HTML page is parsed (promoted pages,
   tentative directories, or regular listings), media and asset references are
   materialized as files in the same directory: `<img src>` / `srcset` (named
