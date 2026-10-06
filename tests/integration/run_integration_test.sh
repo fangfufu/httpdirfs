@@ -1094,10 +1094,23 @@ with open('${ADV_TEST_DIR}/large_page', 'w') as f:
     f.write('</body></html>\n')
 "
 
+    # Media / asset resources referenced from the index page
+    python3 -c "
+with open('${ADV_TEST_DIR}/logo.png', 'wb') as f:
+    f.write(b'\x89PNG\r\n\x1a\n' + b'LOGO-BYTES')
+with open('${ADV_TEST_DIR}/movie.mp4', 'wb') as f:
+    f.write(b'\x00\x00\x00\x18ftypmp42' + b'MOVIE-BYTES')
+with open('${ADV_TEST_DIR}/style.css', 'wb') as f:
+    f.write(b'body { color: red; }')
+"
+
     # Root index for adv_test_dir
     cat > "${ADV_TEST_DIR}/index.html" <<EOF
 <!DOCTYPE html>
 <html>
+<head>
+<link rel="stylesheet" href="style.css">
+</head>
 <body>
 <a href="sub_page">Disc Subdir</a>
 <a href="sub_page">Duplicate Link to Subdir</a>
@@ -1106,6 +1119,9 @@ with open('${ADV_TEST_DIR}/large_page', 'w') as f:
 <a href="nested/file2.txt">My File</a>
 <a href="large_page">Large HTML Dir</a>
 <a href="http://localhost:${ACTUAL_PORT}/adv_test_dir/file1.txt">Cross File</a>
+<img src="logo.png" alt="Site Logo">
+<img src="data:image/png;base64,AAAA">
+<video src="movie.mp4"></video>
 </body>
 </html>
 EOF
@@ -1204,6 +1220,38 @@ EOF
             fi
         else
             fail "allow_external_origin: cross-origin link missing"
+        fi
+
+        # Resource extraction: <img src> materialized with alt-based naming
+        if [[ -f "${ADV_MOUNT_DIR}/Site Logo-logo.png" ]]; then
+            pass "resource_parser: img src extracted (Site Logo-logo.png present)"
+            if cmp -s "${ADV_MOUNT_DIR}/Site Logo-logo.png" "${ADV_TEST_DIR}/logo.png"; then
+                pass "resource_parser: img content OK"
+            else
+                fail "resource_parser: img content mismatch"
+            fi
+        else
+            fail "resource_parser: img src not extracted"
+        fi
+
+        # Resource extraction: <video src> and <link rel=stylesheet> materialized
+        if [[ -f "${ADV_MOUNT_DIR}/movie.mp4" && -f "${ADV_MOUNT_DIR}/style.css" ]]; then
+            pass "resource_parser: video src and stylesheet extracted"
+            if cmp -s "${ADV_MOUNT_DIR}/movie.mp4" "${ADV_TEST_DIR}/movie.mp4"; then
+                pass "resource_parser: video content OK"
+            else
+                fail "resource_parser: video content mismatch"
+            fi
+        else
+            fail "resource_parser: video src and/or stylesheet not extracted"
+        fi
+
+        # data: URIs must not be materialized into the tree
+        data_entries=$(find "${ADV_MOUNT_DIR}" -maxdepth 1 -name "*data:image*" 2>/dev/null | wc -l)
+        if [[ "${data_entries}" -eq 0 ]]; then
+            pass "resource_parser: data: URI not materialized"
+        else
+            fail "resource_parser: data: URI was materialized"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"

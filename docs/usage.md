@@ -138,6 +138,14 @@ ______________________________________________________________________
   `Content-Type: text/html` (with a size within `--max-html-size`) is promoted
   to a virtual directory, allowing you to browse into it as a subdirectory.
   Non-HTML resources remain regular files.
+- **Media and asset references:** When an HTML page is parsed (promoted pages,
+  tentative directories, or regular listings), media and asset references are
+  materialized as files in the same directory: `<img src>` / `srcset` (named
+  from the `alt` text when it is unique and non-empty), `<video src>`,
+  `<audio src>`, `<source src>`, `<track src>`, `<script src>`, `<link href>`
+  (stylesheets, favicons), `<iframe src>`, `<frame src>`, `<object data>`,
+  `<embed src>`, `<input type="image" src>`, and `<area href>`. References with
+  non-`http(s)` schemes (`data:`, `javascript:`, `mailto:`, ...) are skipped.
 
 #### `--max-html-size <size>`
 

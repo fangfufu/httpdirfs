@@ -1555,6 +1555,265 @@ void test_discard_ancestor_links_relative_parent(void)
     LinkTable_free(tbl_a);
 }
 
+/* ========================================================================= */
+/* Non-http(s) scheme rejection in resolve_target_url()                      */
+/* ========================================================================= */
+
+void test_resolve_target_url_non_http_schemes(void)
+{
+    char out[1024];
+    const char *page = "https://example.com/dir/";
+
+    TEST_ASSERT_EQUAL_INT(0,
+                          resolve_target_url(page, "data:image/png;base64,AAAA",
+                                             out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url(page, "javascript:alert(1)", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url(page, "mailto:foo@example.com",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url(page,
+                                                "blob:https://example.com/uuid",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url(page, "tel:+123456", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url(page, "FTP://example.com/f.iso",
+                                                out, sizeof(out)));
+
+    /* http(s) stays resolvable, scheme check is case-insensitive */
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url(page, "http://other.org/f.iso",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("http://other.org/f.iso", out);
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url(page, "HTTPS://other.org/f.iso",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("HTTPS://other.org/f.iso", out);
+
+    /* A colon after the first '/' is not a scheme */
+    TEST_ASSERT_EQUAL_INT(
+        1, resolve_target_url(page, "sub/file:copy.iso", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/sub/file:copy.iso", out);
+}
+
+/* ========================================================================= */
+/* Media resource extraction tests (img / srcset / video / css / ...)        */
+/* ========================================================================= */
+
+static const Link *find_link_by_url(LinkTable *tbl, const char *url)
+{
+    for (int i = 1; i < tbl->size; i++) {
+        if (strcmp(tbl->links[i]->f_url, url) == 0) {
+            return tbl->links[i];
+        }
+    }
+    return NULL;
+}
+
+void test_resource_img_basic(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"cat.png\" alt=\"My Cat\">"
+                         "</body></html>");
+
+    /* 1 head + 1 image link, named from the alt text */
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("My Cat-cat.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/cat.png",
+                             tbl->links[1]->f_url);
+    TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_FILE, tbl->links[1]->type);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_img_no_alt_and_empty_alt(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"cat.png\">"
+                         "<img src=\"dog.png\" alt=\"   \">"
+                         "</body></html>");
+
+    /* Without usable alt text the names fall back to the URL filename */
+    TEST_ASSERT_EQUAL_INT(3, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("cat.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("dog.png", tbl->links[2]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_img_duplicate_alt_falls_back(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    /* alt "Image" is reused -> generic filler, both fall back to filenames */
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"a.png\" alt=\"Image\">"
+                         "<img src=\"b.png\" alt=\"Image\">"
+                         "</body></html>");
+
+    TEST_ASSERT_EQUAL_INT(3, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("a.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("b.png", tbl->links[2]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_img_unique_anchors(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    /* Distinct alt texts are used as naming anchors */
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"a.png\" alt=\"First\">"
+                         "<img src=\"b.png\" alt=\"Second\">"
+                         "</body></html>");
+
+    TEST_ASSERT_EQUAL_INT(3, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("First-a.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("Second-b.png", tbl->links[2]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_srcset_candidates(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img srcset=\"small.jpg 480w, large.jpg 1024w, "
+                         "https://example.com/abs/extra.jpg 2x\">"
+                         "</body></html>");
+
+    /* 1 head + 3 srcset candidates (descriptors stripped) */
+    TEST_ASSERT_EQUAL_INT(4, tbl->size);
+    const Link *l1 = find_link_by_url(tbl, "https://example.com/dir/small.jpg");
+    TEST_ASSERT_NOT_NULL(l1);
+    TEST_ASSERT_EQUAL_STRING("small.jpg", l1->linkname);
+    const Link *l2 = find_link_by_url(tbl, "https://example.com/dir/large.jpg");
+    TEST_ASSERT_NOT_NULL(l2);
+    TEST_ASSERT_EQUAL_STRING("large.jpg", l2->linkname);
+    const Link *l3 = find_link_by_url(tbl, "https://example.com/abs/extra.jpg");
+    TEST_ASSERT_NOT_NULL(l3);
+    TEST_ASSERT_EQUAL_STRING("extra.jpg", l3->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_media_and_asset_tags(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(
+        tbl, "https://example.com/dir/",
+        "<html><head>"
+        "<link rel=\"stylesheet\" href=\"style.css\">"
+        "<link rel=\"icon\" href=\"favicon.ico\">"
+        "<script src=\"app.js\"></script>"
+        "</head><body>"
+        "<video src=\"movie.mp4\"></video>"
+        "<audio src=\"song.mp3\"></audio>"
+        "<source src=\"alt.webm\">"
+        "<iframe src=\"frame.html\"></iframe>"
+        "<object data=\"plugin.swf\"></object>"
+        "<embed src=\"widget.swf\">"
+        "<track src=\"subs.vtt\">"
+        "<input type=\"image\" src=\"button.png\">"
+        "<map name=\"m\"><area href=\"area_target.html\" shape=\"rect\"></map>"
+        /* Not resource references: must not be extracted */
+        "<input type=\"text\" src=\"ignored.png\">"
+        "<form action=\"form_target.html\"></form>"
+        "</body></html>");
+
+    const char *expected[] = {
+        "https://example.com/dir/style.css",
+        "https://example.com/dir/favicon.ico",
+        "https://example.com/dir/app.js",
+        "https://example.com/dir/movie.mp4",
+        "https://example.com/dir/song.mp3",
+        "https://example.com/dir/alt.webm",
+        "https://example.com/dir/frame.html",
+        "https://example.com/dir/plugin.swf",
+        "https://example.com/dir/widget.swf",
+        "https://example.com/dir/subs.vtt",
+        "https://example.com/dir/button.png",
+        "https://example.com/dir/area_target.html",
+    };
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+        TEST_ASSERT_NOT_NULL(find_link_by_url(tbl, expected[i]));
+    }
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/ignored.png"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/form_target.html"));
+
+    /* 1 head + 12 extracted resources */
+    TEST_ASSERT_EQUAL_INT(13, tbl->size);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_dedup_shared_with_anchor(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    /* Same target via <a> and <img>: one entry, first anchor text wins */
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<a href=\"cat.png\">The Cat</a>"
+                         "<img src=\"cat.png\" alt=\"Also Cat\">"
+                         "</body></html>");
+
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("The Cat-cat.png", tbl->links[1]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_non_http_schemes_skipped(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"data:image/png;base64,AAAA\">"
+                         "<a href=\"mailto:foo@example.com\">Mail</a>"
+                         "<a href=\"javascript:doit()\">JS</a>"
+                         "</body></html>");
+
+    /* Only the head link remains */
+    TEST_ASSERT_EQUAL_INT(1, tbl->size);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_cross_origin_filtered(void)
+{
+    CONFIG.allow_external_origin = 0;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"https://other.example/img.png\">"
+                         "</body></html>");
+    TEST_ASSERT_EQUAL_INT(1, tbl->size);
+    LinkTable_free(tbl);
+
+    CONFIG.allow_external_origin = 1;
+    tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"https://other.example/img.png\">"
+                         "</body></html>");
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("img.png", tbl->links[1]->linkname);
+    LinkTable_free(tbl);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1636,6 +1895,20 @@ int main(void)
     RUN_TEST(test_is_ancestor_head_link_hierarchy);
     RUN_TEST(test_discard_ancestor_links_in_parse_html);
     RUN_TEST(test_discard_ancestor_links_relative_parent);
+
+    /* Non-http(s) scheme rejection */
+    RUN_TEST(test_resolve_target_url_non_http_schemes);
+
+    /* Media resource extraction */
+    RUN_TEST(test_resource_img_basic);
+    RUN_TEST(test_resource_img_no_alt_and_empty_alt);
+    RUN_TEST(test_resource_img_duplicate_alt_falls_back);
+    RUN_TEST(test_resource_img_unique_anchors);
+    RUN_TEST(test_resource_srcset_candidates);
+    RUN_TEST(test_resource_media_and_asset_tags);
+    RUN_TEST(test_resource_dedup_shared_with_anchor);
+    RUN_TEST(test_resource_non_http_schemes_skipped);
+    RUN_TEST(test_resource_cross_origin_filtered);
 
     return UNITY_END();
 }

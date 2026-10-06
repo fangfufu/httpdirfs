@@ -13,7 +13,8 @@ HTTPDirFS models remote web server directory listings and HTML index pages as a
 virtual local filesystem. Unlike traditional FTP or WebDAV protocols, HTTP does
 not provide a native directory enumeration API. Instead, HTTPDirFS parses HTML
 documents using the Gumbo HTML5 parser and discovers resources via `<a href>`
-anchor tags.
+anchor tags and media/asset references (`<img src>`, `<video src>`,
+`<link href>`, `srcset`, ...) as described in Section 4.
 
 The system is designed around two core tenets:
 
@@ -310,7 +311,63 @@ When constructing candidates and appending numeric suffixes:
 
 ______________________________________________________________________
 
-## 4. Concrete Walkthrough Examples
+## 4. Resource Reference Extraction
+
+Besides `<a href>` anchors, HTML documents reference media and asset resources
+through dedicated elements and attributes. To make such resources (images,
+videos, stylesheets, scripts, ...) visible in the mounted tree,
+`LinkTable_parse_html()` materializes them as links through the same pipeline as
+anchors (URL resolution, cross-origin filtering, target deduplication, name
+generation).
+
+### 4.1 Supported Elements and Attributes
+
+| Element                             | Attribute       | Naming anchor   |
+| ----------------------------------- | --------------- | --------------- |
+| `a`, `area`                         | `href`          | anchor text     |
+| `img`                               | `src`, `srcset` | `alt` (see 4.3) |
+| `source`                            | `src`, `srcset` | none            |
+| `video`, `audio`                    | `src`           | none            |
+| `script`                            | `src`           | none            |
+| `link` (stylesheet / icon / ...)    | `href`          | none            |
+| `iframe`, `frame`, `embed`, `track` | `src`           | none            |
+| `object`                            | `data`          | none            |
+| `input` (`type="image"` only)       | `src`           | none            |
+
+All other elements and attributes (e.g. `form action`, `input type="text"`) are
+ignored.
+
+- **`srcset`:** every comma-separated candidate is expanded into its own link;
+  width (`480w`) and scale (`2x`) descriptors are stripped.
+- **Duplicated targets:** an anchor and a resource reference to the same URL
+  produce a single entry; the first reference in document order wins the name.
+- Extraction is unconditional: it applies to every parsed HTML body (promoted
+  pages, tentative directories, regular listings), exactly like anchor
+  extraction.
+
+### 4.2 Scheme Filtering
+
+`resolve_target_url()` accepts only the `http` and `https` schemes
+(case-insensitive). References carrying any other URI scheme (`data:`,
+`javascript:`, `blob:`, `mailto:`, `tel:`, ...) are rejected and never
+materialized. A colon before the first `/` identifies a scheme (RFC 3986); a
+colon that appears only after the first `/` (e.g. `sub/file:copy.iso`) is not a
+scheme and resolves as a relative path.
+
+### 4.3 `<img>` Naming (alt Text)
+
+An `<img>` element uses its `alt` attribute as the naming anchor, subject to the
+same collision rules as anchor text. The alt text is ignored and the name falls
+back to the URL filename when:
+
+- it is empty or whitespace-only, or
+- the same non-empty alt text is used by two or more images on the same page.
+  Detection runs as a pre-pass over the whole page, so *all* images carrying a
+  duplicated alt fall back — not only the later ones.
+
+______________________________________________________________________
+
+## 5. Concrete Walkthrough Examples
 
 ### Example A: Standard Autoindex Link (Redundancy Omission)
 
@@ -354,7 +411,7 @@ ______________________________________________________________________
 
 ______________________________________________________________________
 
-## 5. Configuration Flags Reference
+## 6. Configuration Flags Reference
 
 - **`--html-is-directory`** (default: disabled) Enables dynamic directory
   promotion. Resources returning `Content-Type: text/html` within
