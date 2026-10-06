@@ -57,6 +57,16 @@ void transfer_blocking(CURL *curl);
 void transfer_nonblocking(CURL *curl);
 
 /**
+ * \brief Re-add a curl handle to the multi interface
+ * \details For following a redirect hop on the nonblocking path from within a
+ * transfer completion callback. The caller MUST already hold the network
+ * transfer lock (it is held by curl_multi_perform_once while invoking the
+ * callback), so this does not acquire it again.
+ * \return 0 on success, -1 if curl_multi_add_handle() failed
+ */
+int transfer_requeue_locked(CURL *curl);
+
+/**
  * \brief check if a HTTP response code corresponds to a temporary failure
  */
 int HTTP_temp_failure(HTTPResponseCode http_resp);

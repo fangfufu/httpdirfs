@@ -1,4 +1,4 @@
-# Developer Guide
+# HTTPDirFS Development Guideline
 
 This document outlines the coding standards, development workflows, and
 documentation practices for the `httpdirfs` project.
@@ -374,5 +374,4 @@ To generate the documentation:
 meson compile doxygen
 ```
 
-The documentation will be generated in the `doxygen` directory at the root of
-the repository.
+The documentation will be generated in the `docs/html` directory.

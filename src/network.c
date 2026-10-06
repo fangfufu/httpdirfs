@@ -29,9 +29,8 @@
 #include "network.h"
 
 #include "config.h"
-#include "link.h"
 #include "log.h"
-#include "memcache.h"
+#include "transfer.h"
 #include "util.h"
 
 #include <errno.h>
@@ -51,11 +50,11 @@ CURLSH *CURL_SHARE;
 /** \brief curl multi interface handle */
 static CURLM *curl_multi;
 /** \brief  mutex for transfer functions */
-static pthread_mutex_t transfer_lock;
+static pthread_mutex_t transfer_lock = PTHREAD_MUTEX_INITIALIZER;
 /** \brief the lock array for cryptographic functions */
 static pthread_mutex_t *crypto_lockarray;
 /** \brief mutex for curl share interface itself */
-static pthread_mutex_t curl_lock;
+static pthread_mutex_t curl_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * -------------------- Functions --------------------------
@@ -129,6 +128,89 @@ static void curl_callback_unlock(CURL *handle, curl_lock_data data,
     PTHREAD_MUTEX_UNLOCK(&curl_lock);
 }
 
+/*
+ * Easy handles currently attached to the multi interface. Tracked (under
+ * transfer_lock) so that a fatal curl_multi_perform() error can fail and detach
+ * every in-flight transfer before the multi handle is rebuilt, instead of
+ * leaving transfer_blocking() waiting on a transfer that can never complete.
+ */
+static CURL **active_handles;
+static size_t n_active;
+static size_t active_cap;
+
+static int active_add_handle(CURL *handle)
+{
+    if (n_active == active_cap) {
+        size_t new_cap = active_cap ? active_cap * 2 : 16;
+        CURL **tmp = (CURL **)realloc((void *)active_handles,
+                                      new_cap * sizeof(CURL *));
+        if (!tmp) {
+            lprintf(error, "out of memory tracking active curl handles\n");
+            return -1;
+        }
+        active_handles = tmp;
+        active_cap = new_cap;
+    }
+    active_handles[n_active++] = handle;
+    return 0;
+}
+
+static void active_remove_handle(CURL *handle)
+{
+    for (size_t i = 0; i < n_active; i++) {
+        if (active_handles[i] == handle) {
+            memmove((void *)&active_handles[i],
+                    (const void *)&active_handles[i + 1],
+                    (n_active - i - 1) * sizeof(CURL *));
+            n_active--;
+            return;
+        }
+    }
+}
+
+static void curl_multi_init_new(void)
+{
+    curl_multi = curl_multi_init();
+    if (!curl_multi) {
+        lprintf(fatal, "curl_multi_init() failed!\n");
+    }
+    curl_multi_setopt(curl_multi, CURLMOPT_MAX_TOTAL_CONNECTIONS,
+                      CONFIG.max_conns);
+    curl_multi_setopt(curl_multi, CURLMOPT_MAX_HOST_CONNECTIONS,
+                      CONFIG.max_conns);
+}
+
+/*
+ * Fail and detach every in-flight transfer, then rebuild the multi handle.
+ * Called (with transfer_lock held) when curl_multi_perform() reports a fatal
+ * CURLMcode. Each transfer is marked failed and cleared so a blocking waiter
+ * stops polling (no busy-spin); transfers with a completion callback are
+ * finalized through it. The multi handle is reset before it is used again.
+ */
+static void curl_multi_fail_all_and_reset(void)
+{
+    for (size_t i = 0; i < n_active; i++) {
+        CURL *h = active_handles[i];
+        curl_multi_remove_handle(curl_multi, h);
+        TransferStruct *ts = NULL;
+        if (!curl_easy_getinfo(h, CURLINFO_PRIVATE, &ts) && ts) {
+            ts->transferring = 0;
+            ts->failed = 1;
+            char *url = NULL;
+            curl_easy_getinfo(h, CURLINFO_EFFECTIVE_URL, &url);
+            if (ts->on_complete) {
+                ts->on_complete(ts, h, CURLE_ABORTED_BY_CALLBACK, url);
+            } else {
+                lprintf(error, "aborted transfer for <%s> after multi error\n",
+                        url ? url : "");
+            }
+        }
+    }
+    n_active = 0;
+    curl_multi_cleanup(curl_multi);
+    curl_multi_init_new();
+}
+
 /**
  * \brief Process a curl message
  * \details Adapted from:
@@ -154,32 +236,14 @@ static void curl_process_msgs(CURLMsg *curl_msg, int n_running_curl,
             lprintf(error, "%s\n", curl_easy_strerror(ret));
         }
 
-        if (!curl_msg->data.result) {
-            /*
-             * Transfer successful, set the file size
-             */
-            if (ts->type == FILESTAT) {
-                Link_set_file_stat(ts->link, curl);
-            }
-        } else {
-            lprintf(error, "%d - %s <%s>\n", curl_msg->data.result,
-                    curl_easy_strerror(curl_msg->data.result), url);
-            /*
-             * If the transfer failed, and we are querying the file size,
-             * we must mark the link as invalid so that the link table
-             * fill function can proceed.
-             */
-            if (ts->type == FILESTAT) {
-                ts->link->type = LINK_INVALID;
-            }
-        }
+        CURLcode result = curl_msg->data.result;
         curl_multi_remove_handle(curl_multi, curl);
-        /*
-         * clean up the handle, if we are querying the file size
-         */
-        if (ts->type == FILESTAT) {
-            curl_easy_cleanup(curl);
-            FREE(ts);
+        active_remove_handle(curl);
+        if (ts->on_complete) {
+            ts->on_complete(ts, curl, result, url);
+        } else if (result) {
+            lprintf(error, "%d - %s <%s>\n", result, curl_easy_strerror(result),
+                    url ? url : "");
         }
     } else {
         lprintf(warning, "curl_msg->msg: %d\n", curl_msg->msg);
@@ -199,10 +263,18 @@ int curl_multi_perform_once(void)
     /*
      * Get curl multi interface to perform pending tasks
      */
-    int n_running_curl = 1;
+    int n_running_curl = 0;
     CURLMcode mc = curl_multi_perform(curl_multi, &n_running_curl);
     if (mc) {
-        lprintf(error, "%s\n", curl_multi_strerror(mc));
+        /*
+         * Fatal multi error. Fail and detach every in-flight transfer and
+         * rebuild the multi handle so the failure propagates to each transfer
+         * owner (a blocking waiter stops polling instead of busy-spinning) and
+         * the handle is clean before it is used for new transfers.
+         */
+        lprintf(error, "curl_multi_perform: %s\n", curl_multi_strerror(mc));
+        curl_multi_fail_all_and_reset();
+        n_running_curl = 0;
     }
 
     if (n_running_curl) {
@@ -220,6 +292,14 @@ int curl_multi_perform_once(void)
     while ((curl_msg = curl_multi_info_read(curl_multi, &n_mesgs))) {
         curl_process_msgs(curl_msg, n_running_curl, n_mesgs);
     }
+
+    /*
+     * Completion callbacks may have requeued redirect hops after
+     * curl_multi_perform() computed n_running_curl; report every handle
+     * still attached so callers do not treat requeued transfers as
+     * finished.
+     */
+    n_running_curl = (int)n_active;
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
             (unsigned long)pthread_self());
@@ -249,8 +329,6 @@ void NetworkSystem_init(void)
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_DNS);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_SHARE, CURL_LOCK_DATA_SSL_SESSION);
 
-    PTHREAD_MUTEX_INIT(&curl_lock, NULL);
-
     curl_share_setopt(CURL_SHARE, CURLSHOPT_LOCKFUNC, curl_callback_lock);
     curl_share_setopt(CURL_SHARE, CURLSHOPT_UNLOCKFUNC, curl_callback_unlock);
 
@@ -265,11 +343,6 @@ void NetworkSystem_init(void)
                       CONFIG.max_conns);
     curl_multi_setopt(curl_multi, CURLMOPT_MAX_HOST_CONNECTIONS,
                       CONFIG.max_conns);
-
-    /*
-     * ------------ Initialise locks ---------
-     */
-    PTHREAD_MUTEX_INIT(&transfer_lock, NULL);
 
     /*
      * cryptographic lock functions were shamelessly copied from
@@ -293,6 +366,9 @@ void transfer_blocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "%d, %s\n", res, curl_multi_strerror(res));
+        ts->transferring = 0;
+    } else {
+        active_add_handle(curl);
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
@@ -313,11 +389,27 @@ void transfer_nonblocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "%s\n", curl_multi_strerror(res));
+    } else {
+        active_add_handle(curl);
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
+}
+
+int transfer_requeue_locked(CURL *curl)
+{
+    CURLMcode res = curl_multi_add_handle(curl_multi, curl);
+    if (res > 0) {
+        lprintf(error, "requeue: %s\n", curl_multi_strerror(res));
+        return -1;
+    }
+    if (active_add_handle(curl) != 0) {
+        curl_multi_remove_handle(curl_multi, curl);
+        return -1;
+    }
+    return 0;
 }
 
 int HTTP_temp_failure(HTTPResponseCode http_resp)

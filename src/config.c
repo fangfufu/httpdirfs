@@ -32,6 +32,7 @@
 #include "util.h"
 #include <stddef.h>
 #include <stdlib.h>
+#include <string.h>
 
 
 ConfigStruct CONFIG;
@@ -57,11 +58,11 @@ void Config_init(void)
 
     CONFIG.proxy_capath = NULL;
 
-    CONFIG.max_conns = DEFAULT_NETWORK_MAX_CONNS;
+    CONFIG.max_conns = 6;
 
-    CONFIG.user_agent = DEFAULT_USER_AGENT;
+    CONFIG.user_agent = "HTTPDirFS-" VERSION;
 
-    CONFIG.http_wait_sec = DEFAULT_HTTP_WAIT_SEC;
+    CONFIG.http_wait_sec = 5;
 
     CONFIG.http_headers = NULL;
 
@@ -75,19 +76,26 @@ void Config_init(void)
 
     CONFIG.capath = NULL;
 
-    CONFIG.refresh_timeout = DEFAULT_REFRESH_TIMEOUT;
+    CONFIG.refresh_timeout = 3600;
 
     CONFIG.invalid_refresh = 0;
+
+    CONFIG.allow_external_origin = 0;
+
+    CONFIG.ignore_anchors = 0;
 
     /*--------------- Cache related ---------------*/
     CONFIG.cache_enabled = 0;
 
     CONFIG.cache_dir = NULL;
 
-    CONFIG.data_blksz = DEFAULT_DATA_BLKSZ;
+    CONFIG.data_blksz = 8 * 1024 * 1024;
 
     CONFIG.cache_min_size = -1;
     CONFIG.cache_max_size = -1;
+
+    CONFIG.cache_clear = 0;
+    CONFIG.cache_clear_host = NULL;
 
     /*-------------- Sonic related -------------*/
     CONFIG.sonic_username = NULL;
@@ -97,6 +105,11 @@ void Config_init(void)
     CONFIG.sonic_id3 = 0;
 
     CONFIG.sonic_insecure = 0;
+
+    /*--------- Directory promotion & traversal related --------*/
+    CONFIG.html_is_directory = 0;
+    CONFIG.max_html_size = (off_t)2 * 1024 * 1024;
+
     atexit(mem_cleanup);
 }
 
@@ -110,12 +123,13 @@ void Config_cleanup(void)
     FREE(CONFIG.proxy_cafile);
     FREE(CONFIG.proxy_capath);
     if (CONFIG.user_agent
-        && strcmp(CONFIG.user_agent, DEFAULT_USER_AGENT) != 0) {
+        && strcmp(CONFIG.user_agent, "HTTPDirFS-" VERSION) != 0) {
         FREE(CONFIG.user_agent);
     }
     FREE(CONFIG.cafile);
     FREE(CONFIG.capath);
     FREE(CONFIG.cache_dir);
+    FREE(CONFIG.cache_clear_host);
     FREE(CONFIG.sonic_username);
     FREE(CONFIG.sonic_password);
 }
