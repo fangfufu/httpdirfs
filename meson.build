@@ -1,5 +1,5 @@
 project('httpdirfs', 'c',
-    version: '1.3.3',
+    version: '2.0.0', # x-release-please-version
     license: 'GPL-3.0-or-later',
     default_options: [
         'buildtype=release',
@@ -17,7 +17,9 @@ lib_srcs = [
     'src/sonic.c',
     'src/log.c',
     'src/config.c',
-    'src/memcache.c'
+    'src/transfer.c',
+    'src/url.c',
+    'src/link_parser.c'
 ]
 
 c_args = [

@@ -6,7 +6,78 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [2.0.0](https://github.com/fangfufu/httpdirfs/compare/1.3.3...2.0.0) (2026-10-06)
+
+
+### ⚠ BREAKING CHANGES
+
+* **config:** --dl-seg-size 8 previously meant 8 MB and now means 8 bytes. Use --dl-seg-size 8M for the old behavior.
+* **cache:** --cache-location previously used the given path verbatim as the cache directory of the mounted server; it is now a root under which each server origin gets its own subdirectory. Caches written by the old verbatim layout are no longer recognized; remove them manually.
+* **transfer:** redirect following is now manual and restricted to same-origin targets by default, capped at 5 hops. 1.3.3 relied on libcurl's automatic following, which also allowed cross-origin redirects and up to 50 hops. Cross-origin redirects now fail the transfer unless --allow-external-origin is set.
+* **parsing:** the --external-links flag is removed; use --allow-external-origin to include cross-origin links from directory listings. The default parsing pipeline is also unified: directory entry naming now uses universal anchor-text extraction with collision-free progressive URL path escalation, so mounted entry names may differ from 1.3.3.
+* **cache:** the on-disk cache format changes from the multi-file layout (.LinkTable, .meta, .data) to a single container file per URL. Caches written by 1.3.3 are no longer recognized and are ignored on upgrade; remove them manually (e.g. --cache-clear) and expect a full re-download.
+
+### Features
+
+* add --ignore-anchors and fix relative links ([a2fdf2a](https://github.com/fangfufu/httpdirfs/commit/a2fdf2a1866dc741cb0a7b61c8dbdb1b53940a57))
+* add .httpdirfs diagnostics directory ([99dacd0](https://github.com/fangfufu/httpdirfs/commit/99dacd04c959e9cdf5c7121c9f57a2b70da4c1e6))
+* **cache:** implement unified single-file cache architecture ([87653b9](https://github.com/fangfufu/httpdirfs/commit/87653b9b5914cd6aeccf654852e10ff421078305))
+* **cache:** make --cache-location the cache location root ([fa48b8c](https://github.com/fangfufu/httpdirfs/commit/fa48b8c035323a276747a58913eaa3171584df62))
+* **config:** add K/M/G suffix support to size flags ([092260c](https://github.com/fangfufu/httpdirfs/commit/092260c1af68459e10d269133f8f5da922ab8938))
+* implement advanced parsing mode ([5ec481a](https://github.com/fangfufu/httpdirfs/commit/5ec481a4e7e5bc6dcf3f9b262edb23b7165851ba))
+* **parsing:** unify HTML link parsing, drop --external-links ([9129063](https://github.com/fangfufu/httpdirfs/commit/9129063ad11ee530d6e4d6c504c916b3a15d2c39))
+
+
+### Bug Fixes
+
+* address PR review findings in util, cache, and transfer ([0b55b02](https://github.com/fangfufu/httpdirfs/commit/0b55b0226bf6823b6173858fb8facc2548f56a0a))
+* **cache:** make cache clearing order-independent and XDG-spec compliant ([ec0b320](https://github.com/fangfufu/httpdirfs/commit/ec0b3206bf63e79a4fe7538995e67b2f7da01bcd))
+* **cache:** reject header_size larger than file in Cache_open ([46954f8](https://github.com/fangfufu/httpdirfs/commit/46954f825da62c34b8983f12769052abe443d4ce))
+* correct handle lifetime and cache write errors on HTTP failures ([aefd895](https://github.com/fangfufu/httpdirfs/commit/aefd895fd0c0830ee852f97bd6932f2a5b5e1ba0))
+* handle out-of-root URLs in cache path ([6b2dbed](https://github.com/fangfufu/httpdirfs/commit/6b2dbedb71ff6cc6f1cf5bf39d9c1b10013668f7))
+* **link:** retry root-table refresh after failed init ([21994ec](https://github.com/fangfufu/httpdirfs/commit/21994ec0029154489b57a9e14a32cda93cc7a4ac))
+* **network:** fail in-flight transfers on fatal multi error ([8ad4cca](https://github.com/fangfufu/httpdirfs/commit/8ad4cca5de48135b5709ba554cefdd987195db6f))
+* **network:** handle requeue failure in filestat_on_complete ([01f0d2f](https://github.com/fangfufu/httpdirfs/commit/01f0d2f8c6bc2a66f2b463fdac948edfffe3cd16))
+* resolve listing links against effective URL and handle refresh failures ([15ca197](https://github.com/fangfufu/httpdirfs/commit/15ca19755d3d591cc1d3d780141cf7ea2847065f))
+* resolve sonar findings in cache, util, and tests ([7e0e56d](https://github.com/fangfufu/httpdirfs/commit/7e0e56dce7be6ce988ca8e9f1e27cc60d3e90f02))
+* statically init network mutexes and relax sparse-block assert on macOS ([c9b6402](https://github.com/fangfufu/httpdirfs/commit/c9b6402f56eac4dbb6782f33913ef6e06e75d3d3))
+* **transfer:** gate redirect hops on origin and stop short-response retry ([08d268c](https://github.com/fangfufu/httpdirfs/commit/08d268ce2698451c071aab9ad7be858da68c8d1c))
+* **transfer:** reject cross-origin redirects when external origins disabled ([dbbaf5d](https://github.com/fangfufu/httpdirfs/commit/dbbaf5d9e9e68d1479dab8ebcbe4953f00a7f80d))
+* **transfer:** restrict manually followed redirects to http/https ([e78289b](https://github.com/fangfufu/httpdirfs/commit/e78289b1cf31a780f0004afb8604ba5666ce873d))
+* **transfer:** return per-read error on rejected range-request redirect ([5783b54](https://github.com/fangfufu/httpdirfs/commit/5783b54171f1bc4f93751504a8bb5a8bcc2110d7))
+
+
+### Documentation
+
+* add single-file cache architecture spec ([9b7495c](https://github.com/fangfufu/httpdirfs/commit/9b7495ca370e855588599d7d7e8ab0c72b9c889c))
+* convert cache plan to architectural spec ([830cbbd](https://github.com/fangfufu/httpdirfs/commit/830cbbd0e9b946ecda5c8752270880511c4b7e0a))
+* document advanced parsing mode and update help ([6fb2f05](https://github.com/fangfufu/httpdirfs/commit/6fb2f05075016d24b5f00cb407e56b8af8296f8e))
+* document non-directory listing website mounting ([866b297](https://github.com/fangfufu/httpdirfs/commit/866b297ee04e85718b62679700781c39a4c7408b))
+* **readme:** relocate range-request note to Architecture section ([7efd936](https://github.com/fangfufu/httpdirfs/commit/7efd936be9f4696b44cc05d677eaae79f27e063e))
+* reorganize documentation under docs directory ([b5fcb5e](https://github.com/fangfufu/httpdirfs/commit/b5fcb5e3063782d9821a8dbbbcdf39956c96d59d))
+* restructure README/USAGE sections and add 1.4.x cache warning ([f8d1119](https://github.com/fangfufu/httpdirfs/commit/f8d1119a381c6f8b04fe6b84d889aface79a347f))
+* **specs:** add classification matrix and align spec with code ([0f49a2a](https://github.com/fangfufu/httpdirfs/commit/0f49a2ae74f24517f24559fac3142d6b51be4fc3))
+* **specs:** rewrite formulae backslash-free for KaTeX on GitHub ([2ef5776](https://github.com/fangfufu/httpdirfs/commit/2ef5776140c32ff5ab4ed050d11a04050c194e43))
+* sync README, USAGE, and cache spec with code ([995054d](https://github.com/fangfufu/httpdirfs/commit/995054da763cdd641e5833aa1488b93315c1b488))
+* synchronize cache docs with unified spec ([c129a07](https://github.com/fangfufu/httpdirfs/commit/c129a07534376169c48b32f07f7824c069af64e5))
+* trim architecture block from cache.c ([3503edc](https://github.com/fangfufu/httpdirfs/commit/3503edc844b17a229da3d81db6ccf60a75b551af))
+
+
+### Continuous Integration
+
+* configure Google Release Please action ([24164c4](https://github.com/fangfufu/httpdirfs/commit/24164c41a27a5e004d9a0eebe2e972ba14b8c679))
+
+
+### Build System
+
+* stop ignoring docs/planning in .gitignore ([bdfb994](https://github.com/fangfufu/httpdirfs/commit/bdfb99422a8cb9e9303fb47c609b7a8e40a564f6))
+
+
+### Code Refactoring
+
+* **config:** fold defaults into Config_init ([c509779](https://github.com/fangfufu/httpdirfs/commit/c5097798257760c7c65cd0f95c8a51fafae5b3e0))
+* resolve remaining sonar findings in src ([cc11d81](https://github.com/fangfufu/httpdirfs/commit/cc11d81da5d1c3ba89f14d75524137cacc6ae1aa))
+* **transfer:** hoist unknown-size classification above html-is-directory branch ([08df8d7](https://github.com/fangfufu/httpdirfs/commit/08df8d774ee9679093a64d394ba4752f36b6f497))
 
 ## [1.3.3] - 2026-06-11
 
@@ -1052,4 +1123,3 @@ Creating a new minor release, because of the following major changes:
 [1.3.1]: https://github.com/fangfufu/httpdirfs/compare/1.3.0...1.3.1
 [1.3.2]: https://github.com/fangfufu/httpdirfs/compare/1.3.1...1.3.2
 [1.3.3]: https://github.com/fangfufu/httpdirfs/compare/1.3.2...1.3.3
-[unreleased]: https://github.com/fangfufu/httpdirfs/compare/1.3.3...master
