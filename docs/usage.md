@@ -128,47 +128,6 @@ HTTPDirFS options:
 
 ______________________________________________________________________
 
-### Universal Link Parsing and Directory Detection
-
-HTTPDirFS parses HTML listing documents using the Gumbo HTML5 parser. It
-extracts descriptive filenames from anchor text, resolves name collisions, and
-identifies directories. For complete technical specifications, please refer to
-[docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
-
-#### Allowed characters in filenames
-
-The intended allowed character in filenames is the following:
-
-Filenames must:
-
-- Consists of printable characters
-- Must not contain '/' in the middle of the filename.
-- Must not end with '/'.
-
-Without the `--html-is-directory` flag, directories must:
-
-- Consists of printable characters
-- Must not contain '/' in the middle of the directory name.
-- Must end with '/'.
-
-#### Universal Parsing Mechanics
-
-- **Anchor Text Filename Extraction:** The text inside `<a>...</a>` tags is
-  extracted, sanitized, and used as the virtual file or directory name.
-  Whitespace is normalized, slashes (`/`) are converted to underscores (`_`),
-  and leading dots and spaces are stripped to avoid hidden Unix files.
-- **Progressive Collision Resolution:** If multiple links share identical anchor
-  text, HTTPDirFS disambiguates names by combining anchor text with URL path
-  segments (e.g., `Readme-readme.txt`, `Readme-38601-readme.txt`). If the anchor
-  text already matches the URL segment case-insensitively, redundant prefixing
-  is omitted. If all segments are exhausted and collisions persist, numeric
-  suffixes (`-1`, `-2`, ...) are appended.
-- **Early Duplicate Removal:** If the exact same target URL appears multiple
-  times on a page, only the first encountered link and anchor text are kept.
-- **Ancestor Loop Prevention:** Links pointing back to the current directory or
-  any of its parent directories are discarded to prevent infinite recursive
-  loops.
-
 #### `--html-is-directory`
 
 - **Description:** By default, resources whose URLs do not end with a trailing
@@ -191,20 +150,6 @@ For the comprehensive architectural specification, see
 [docs/specs/directory_detection_and_naming.md](docs/specs/directory_detection_and_naming.md).
 
 ______________________________________________________________________
-
-### Diagnostics (`.httpdirfs` directory)
-
-Every directory listing in the mounted filesystem exposes a hidden virtual
-`.httpdirfs` directory. It contains:
-
-- **`CONTENT`**: The raw HTML payload of the directory listing page as served by
-  the web server.
-- **`HEADER`**: The raw HTTP response headers of the directory listing request.
-
-These virtual files are useful for debugging how a web server presents a
-directory, for example when HTTPDirFS appears to misparse a listing. The
-`.httpdirfs` directory is virtual only: it does not exist on the remote server
-and is never stored in the cache.
 
 ______________________________________________________________________
 

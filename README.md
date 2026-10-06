@@ -55,7 +55,7 @@ man httpdirfs
 Please note that the man page only works if you have installed HTTPDirFS
 properly.
 
-The full usage flags is also documented in the [usage](USAGE.md) page.
+The full usage flags is also documented in the [usage](docs/usage.md) page.
 
 ### Single file mode
 
@@ -81,6 +81,12 @@ For more information on how to use it, please refer to the
 [usage](USAGE.md#airsonic--subsonic-mounting-options) page.
 
 ### The cache system
+
+> [!WARNING]
+> HTTPDirFS 1.4.x contains a breaking change to the format of the cache system.
+> Please delete your existing cache with `--cache-clear` or remove
+> `~/.cache/httpdirfs` (this is the default location) before using HTTPDirFS
+> 1.4.x.
 
 You can cache the files you have accessed on your storage device by using the
 `--cache` flag. The files it caches persist across sessions. You can clear the
@@ -132,10 +138,24 @@ of log that are supported, please refer to
 [log.h](https://github.com/fangfufu/httpdirfs/blob/master/src/log.h) and
 [log.c](https://github.com/fangfufu/httpdirfs/blob/master/src/log.c).
 
+### Diagnostics directory (`.httpdirfs` directory)
+
+Every directory listing in the mounted filesystem exposes a hidden virtual
+`.httpdirfs` directory. It contains:
+
+- **`CONTENT`**: The raw HTML payload of the directory listing page as served by
+  the web server.
+- **`HEADER`**: The raw HTTP response headers of the directory listing request.
+
+These virtual files are useful for debugging how a web server presents a
+directory, for example when HTTPDirFS appears to misparse a listing. The
+`.httpdirfs` directory is virtual only: it does not exist on the remote server
+and is never stored in the cache.
+
 ## Compilation
 
-For important development related documentation, please refer
-[src/README.md](src/README.md).
+For important development related documentation, please refer to
+[the Development Guideline](docs/development.md).
 
 ### Debian 13 "Trixie"
 
@@ -231,39 +251,10 @@ Please note if you install HTTDirFS from a repository, it may be outdated.
 
 [![Packaging status](https://repology.org/badge/vertical-allrepos/fusefs%3Ahttpdirfs.svg)](https://repology.org/project/fusefs%3Ahttpdirfs/versions)
 
-## The Technical Details
+## The technical details
 
-For the normal HTTP directories, this program downloads the HTML web pages/files
-using [libcurl](https://curl.haxx.se/libcurl/), then parses the listing pages
-using [Gumbo](https://github.com/google/gumbo-parser), and presents them using
-[libfuse](https://github.com/libfuse/libfuse).
-
-For \*sonic servers parses \*sonic servers' XML responses using
-[expat](https://github.com/libexpat/libexpat).
-
-The filesystem read requests are received by libfuse, are then translated to
-HTTP requests by libcurl.
-
-The OS reads files in blocks, therefore the corresponding HTTP download requests
-are ranged requests in chunks. Because of these reasons, HTTPDirFS by default
-expects the server to support HTTP Range Request. The server can indicate this
-feature by presenting `"Accept-Ranges: bytes` in the header responses. You can
-disable this check by using the `--no-range-check` flag, however HTTPDirFS will
-have to download the entire file before serving you.
-
-> [!WARNING]
-> HTTPDirFS 1.4.x contains a breaking change to the format of the cache system.
-> Please delete your existing cache with `--cache-clear` or remove
-> `~/.cache/httpdirfs` (this is the default location) before using HTTPDirFS
-> 1.4.x.
-
-The cache system uses a unified single-file container architecture. Each URL
-maps to exactly one container file storing its binary header, canonical URL, raw
-HTTP response headers, segment download bitmap, and payload data. Each HTTP
-server origin gets its own cache directory beneath the cache location root,
-named using the escaped server root URL. Within each origin, files are sharded
-into 256 subdirectories using the first two hex characters of their canonical
-URL's MD5 hash.
+The technical details are documented in the [technical.md](docs/technical.md)
+page.
 
 ## Press Coverage
 
