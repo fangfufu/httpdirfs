@@ -1609,6 +1609,7 @@ static const Link *find_link_by_url(LinkTable *tbl, const char *url)
 
 void test_resource_img_basic(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     LinkTable_parse_html(tbl, "https://example.com/dir/",
@@ -1628,6 +1629,7 @@ void test_resource_img_basic(void)
 
 void test_resource_img_no_alt_and_empty_alt(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     LinkTable_parse_html(tbl, "https://example.com/dir/",
@@ -1646,6 +1648,7 @@ void test_resource_img_no_alt_and_empty_alt(void)
 
 void test_resource_img_duplicate_alt_falls_back(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     /* alt "Image" is reused -> generic filler, both fall back to filenames */
@@ -1664,6 +1667,7 @@ void test_resource_img_duplicate_alt_falls_back(void)
 
 void test_resource_img_unique_anchors(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     /* Distinct alt texts are used as naming anchors */
@@ -1682,6 +1686,7 @@ void test_resource_img_unique_anchors(void)
 
 void test_resource_srcset_candidates(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     LinkTable_parse_html(tbl, "https://example.com/dir/",
@@ -1707,6 +1712,7 @@ void test_resource_srcset_candidates(void)
 
 void test_resource_media_and_asset_tags(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     LinkTable_parse_html(
@@ -1760,6 +1766,7 @@ void test_resource_media_and_asset_tags(void)
 
 void test_resource_dedup_shared_with_anchor(void)
 {
+    CONFIG.website_mode = 1;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
 
     /* Same target via <a> and <img>: one entry, first anchor text wins */
@@ -1794,6 +1801,7 @@ void test_resource_non_http_schemes_skipped(void)
 
 void test_resource_cross_origin_filtered(void)
 {
+    CONFIG.website_mode = 1;
     CONFIG.allow_external_origin = 0;
     LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
     LinkTable_parse_html(tbl, "https://example.com/dir/",
@@ -1811,6 +1819,53 @@ void test_resource_cross_origin_filtered(void)
                          "</body></html>");
     TEST_ASSERT_EQUAL_INT(2, tbl->size);
     TEST_ASSERT_EQUAL_STRING("img.png", tbl->links[1]->linkname);
+    LinkTable_free(tbl);
+}
+
+void test_resource_extraction_requires_website_mode(void)
+{
+    const char *html = "<html><head>"
+                       "<link rel=\"stylesheet\" href=\"style.css\">"
+                       "</head><body>"
+                       "<a href=\"page.html\">The Page</a>"
+                       "<img src=\"cat.png\" alt=\"My Cat\">"
+                       "<video src=\"movie.mp4\"></video>"
+                       "<map name=\"m\"><area href=\"area_target.html\" "
+                       "shape=\"rect\"></map>"
+                       "</body></html>";
+
+    /* Normal mode: only <a href> hyperlinks are extracted */
+    CONFIG.website_mode = 0;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/", html);
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("The Page-page.html", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/page.html",
+                             tbl->links[1]->f_url);
+    TEST_ASSERT_NULL(find_link_by_url(tbl, "https://example.com/dir/cat.png"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/movie.mp4"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/style.css"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/area_target.html"));
+    LinkTable_free(tbl);
+
+    /* Website mode: anchors and media resources are all extracted */
+    CONFIG.website_mode = 1;
+    tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/", html);
+    TEST_ASSERT_EQUAL_INT(6, tbl->size);
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/page.html"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/cat.png"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/movie.mp4"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/style.css"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/area_target.html"));
     LinkTable_free(tbl);
 }
 
@@ -1909,6 +1964,7 @@ int main(void)
     RUN_TEST(test_resource_dedup_shared_with_anchor);
     RUN_TEST(test_resource_non_http_schemes_skipped);
     RUN_TEST(test_resource_cross_origin_filtered);
+    RUN_TEST(test_resource_extraction_requires_website_mode);
 
     return UNITY_END();
 }

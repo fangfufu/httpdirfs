@@ -314,17 +314,18 @@ ______________________________________________________________________
 ## 4. Resource Reference Extraction
 
 Besides `<a href>` anchors, HTML documents reference media and asset resources
-through dedicated elements and attributes. To make such resources (images,
-videos, stylesheets, scripts, ...) visible in the mounted tree,
-`LinkTable_parse_html()` materializes them as links through the same pipeline as
-anchors (URL resolution, cross-origin filtering, target deduplication, name
-generation).
+through dedicated elements and attributes. When `--website-mode` is enabled,
+`LinkTable_parse_html()` materializes such resources (images, videos,
+stylesheets, scripts, ...) as links through the same pipeline as anchors (URL
+resolution, cross-origin filtering, target deduplication, name generation).
+Without `--website-mode`, only `<a href>` hyperlinks are extracted and presented
+in the mounted tree.
 
 ### 4.1 Supported Elements and Attributes
 
 | Element                             | Attribute       | Naming anchor   |
 | ----------------------------------- | --------------- | --------------- |
-| `a`, `area`                         | `href`          | anchor text     |
+| `a` / `area`\*                      | `href`          | anchor text     |
 | `img`                               | `src`, `srcset` | `alt` (see 4.3) |
 | `source`                            | `src`, `srcset` | none            |
 | `video`, `audio`                    | `src`           | none            |
@@ -337,22 +338,27 @@ generation).
 All other elements and attributes (e.g. `form action`, `input type="text"`) are
 ignored.
 
+\* `a` is extracted in all modes; `area` (image map regions) only under
+`--website-mode`, together with the rest of the table.
+
 - **`srcset`:** every comma-separated candidate is expanded into its own link;
   width (`480w`) and scale (`2x`) descriptors are stripped.
 - **Duplicated targets:** an anchor and a resource reference to the same URL
   produce a single entry; the first reference in document order wins the name.
-- Extraction is unconditional: it applies to every parsed HTML body (promoted
-  pages, tentative directories, regular listings), exactly like anchor
-  extraction.
+- Extraction applies to every parsed HTML body (promoted pages, tentative
+  directories, regular listings), exactly like anchor extraction — but only
+  while `--website-mode` is enabled.
 
 ### 4.2 Scheme Filtering
 
 `resolve_target_url()` accepts only the `http` and `https` schemes
 (case-insensitive). References carrying any other URI scheme (`data:`,
 `javascript:`, `blob:`, `mailto:`, `tel:`, ...) are rejected and never
-materialized. A colon before the first `/` identifies a scheme (RFC 3986); a
-colon that appears only after the first `/` (e.g. `sub/file:copy.iso`) is not a
-scheme and resolves as a relative path.
+materialized. This filtering applies in both normal mode and `--website-mode`
+(it guards `<a href>` anchors as well as resource references). A colon before
+the first `/` identifies a scheme (RFC 3986); a colon that appears only after
+the first `/` (e.g. `sub/file:copy.iso`) is not a scheme and resolves as a
+relative path.
 
 ### 4.3 `<img>` Naming (alt Text)
 

@@ -109,7 +109,8 @@ HTTPDirFS options:
         --ignore-anchors    Ignore intra-page HTML anchor/fragment links
                             starting with '#' (default: off)
         --website-mode      Promote resources with Content-Type text/html to
-                            directories (default: off)
+                            directories and materialize media/asset
+                            references (default: off)
         --max-html-size     Set maximum HTML size for directory listing
                             promotion (default: 2M)
         --single-file-mode  Single file mode - rather than mounting a whole
@@ -138,14 +139,16 @@ ______________________________________________________________________
   (with a size within `--max-html-size`) is promoted to a virtual directory,
   allowing you to browse into it as a subdirectory. Non-HTML resources remain
   regular files.
-- **Media and asset references:** When an HTML page is parsed (promoted pages,
-  tentative directories, or regular listings), media and asset references are
-  materialized as files in the same directory: `<img src>` / `srcset` (named
-  from the `alt` text when it is unique and non-empty), `<video src>`,
-  `<audio src>`, `<source src>`, `<track src>`, `<script src>`, `<link href>`
-  (stylesheets, favicons), `<iframe src>`, `<frame src>`, `<object data>`,
-  `<embed src>`, `<input type="image" src>`, and `<area href>`. References with
-  non-`http(s)` schemes (`data:`, `javascript:`, `mailto:`, ...) are skipped.
+- **Media and asset references:** Only when `--website-mode` is enabled. When an
+  HTML page is parsed (promoted pages, tentative directories, or regular
+  listings), media and asset references are materialized as files in the same
+  directory: `<img src>` / `srcset` (named from the `alt` text when it is unique
+  and non-empty), `<video src>`, `<audio src>`, `<source src>`, `<track src>`,
+  `<script src>`, `<link href>` (stylesheets, favicons), `<iframe src>`,
+  `<frame src>`, `<object data>`, `<embed src>`, `<input type="image" src>`, and
+  `<area href>`. Without `--website-mode`, only `<a href>` hyperlinks appear in
+  the mounted tree. References with non-`http(s)` schemes (`data:`,
+  `javascript:`, `mailto:`, ...) are skipped in both modes.
 
 #### `--max-html-size <size>`
 

@@ -670,23 +670,17 @@ static void collect_duplicate_alts(GumboNode *node, LinkHashSet *alt_seen,
 }
 
 /**
- * Recursively walk the HTML DOM tree to extract anchor links and media
- * resource references into the link table.
+ * \brief Process the link-bearing attributes of a non-anchor resource
+ * element (<area>, <img>, <video>, <script>, <link>, ...).
  */
-static void HTML_to_LinkTable(const char *url, GumboNode *node,
-                              LinkTable *linktbl, LinkHashSet *set,
-                              LinkHashSet *target_url_set,
-                              LinkHashSet *alt_dups)
+static void process_resource_node(const char *url, const GumboNode *node,
+                                  const GumboElement *el, LinkTable *linktbl,
+                                  LinkHashSet *set, LinkHashSet *target_url_set,
+                                  LinkHashSet *alt_dups)
 {
-    if (node->type != GUMBO_NODE_ELEMENT) {
-        return;
-    }
-
-    const GumboElement *el = &node->v.element;
     GumboAttribute *attr = NULL;
 
     switch (el->tag) {
-    case GUMBO_TAG_A:
     case GUMBO_TAG_AREA:
         attr = gumbo_get_attribute(&el->attributes, "href");
         if (attr && attr->value) {
@@ -741,6 +735,39 @@ static void HTML_to_LinkTable(const char *url, GumboNode *node,
     default:
         break;
     }
+}
+
+/**
+ * Recursively walk the HTML DOM tree to extract anchor links and media
+ * resource references into the link table.
+ */
+static void HTML_to_LinkTable(const char *url, GumboNode *node,
+                              LinkTable *linktbl, LinkHashSet *set,
+                              LinkHashSet *target_url_set,
+                              LinkHashSet *alt_dups)
+{
+    if (node->type != GUMBO_NODE_ELEMENT) {
+        return;
+    }
+
+    const GumboElement *el = &node->v.element;
+    GumboAttribute *attr = NULL;
+
+    /* Only <a href> hyperlinks are extracted in normal mode; media and
+     * asset references (img / video / script / ...) are materialized only
+     * under --website-mode. */
+    if (el->tag == GUMBO_TAG_A) {
+        attr = gumbo_get_attribute(&el->attributes, "href");
+        if (attr && attr->value) {
+            char *anchor = extract_anchor_text(node);
+            process_link_ref(url, attr->value, anchor, linktbl, set,
+                             target_url_set);
+            FREE(anchor);
+        }
+    } else if (CONFIG.website_mode) {
+        process_resource_node(url, node, el, linktbl, set, target_url_set,
+                              alt_dups);
+    }
 
     const GumboVector *children = &el->children;
     for (unsigned int i = 0; i < children->length; ++i) {
@@ -756,10 +783,15 @@ void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
     LinkHashSet *target_url_set = LinkHashSet_new(linktbl->size * 2);
 
     /* First pass: find img alt texts that are reused on the page, so that
-     * duplicated alts are not used as naming anchors by any image. */
-    LinkHashSet *alt_seen = LinkHashSet_new(16);
-    LinkHashSet *alt_dups = LinkHashSet_new(16);
-    collect_duplicate_alts(output->root, alt_seen, alt_dups);
+     * duplicated alts are not used as naming anchors by any image. Only
+     * needed in --website-mode, where <img> references are extracted. */
+    LinkHashSet *alt_seen = NULL;
+    LinkHashSet *alt_dups = NULL;
+    if (CONFIG.website_mode) {
+        alt_seen = LinkHashSet_new(16);
+        alt_dups = LinkHashSet_new(16);
+        collect_duplicate_alts(output->root, alt_seen, alt_dups);
+    }
 
     HTML_to_LinkTable(url, output->root, linktbl, set, target_url_set,
                       alt_dups);

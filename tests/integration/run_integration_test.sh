@@ -1563,6 +1563,14 @@ EOF
             fail "link_parser: naming unexpectedly missing in default mode"
         fi
 
+        # Media / asset resources referenced from index.html must NOT be
+        # materialized without --website-mode (only <a href> hyperlinks show)
+        if [[ ! -e "${ADV_MOUNT_DIR}/Site Logo-logo.png" && ! -e "${ADV_MOUNT_DIR}/movie.mp4" && ! -e "${ADV_MOUNT_DIR}/style.css" ]]; then
+            pass "resource_parser: media/asset resources hidden in default mode (correct)"
+        else
+            fail "resource_parser: media/asset resources unexpectedly present in default mode"
+        fi
+
         do_unmount "${ADV_MOUNT_DIR}"
         wait "${VANILLA_PID}" 2>/dev/null || true
     fi
