@@ -58,7 +58,7 @@ properly.
 The full usage flags and more details on how to use this program can be found in
 the [usage](docs/usage.md) page.
 
-### Mounting non-directory listing websites.
+### Mounting generic websites
 
 There are plenty websites that are not directory listing. You can still
 technically mount them with the `--website-mode` flag.
@@ -71,11 +71,11 @@ within `--max-html-size`) is promoted to a virtual directory, allowing you to
 browse into it as a subdirectory. Non-HTML resources remain regular files.
 
 > [!WARNING]
-> If you mount a non-directory listing website that had not been previously
-> cached, and you decide to browse it using a graphical file browser, the file
-> browser will likely to respond very slowly, as if it has hung up. This is
-> because most graphical file browsers tend to read into every subdirectory
-> within. This causes massive amount of HTTP requests.
+> If you mount a generic website that had not been previously cached, and you
+> decide to browse it using a graphical file browser, the file browser will
+> likely to respond very slowly, as if it has hung up. This is because most
+> graphical file browsers tend to read into every subdirectory within. This
+> causes massive amount of HTTP requests.
 
 ### Single file mode
 
