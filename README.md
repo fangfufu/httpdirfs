@@ -8,7 +8,7 @@
 
 HTTPDirFS is a filesystem that allows you to mount arbitrary websites using the
 FUSE framework. It comes with a cache system, and Airsonic / Subsonic server
-support
+support.
 
 HTTPDirFS parses HTML directory listings using the Gumbo HTML5 parser. It
 extracts descriptive filenames from anchor text (`<a>`), resolves name
