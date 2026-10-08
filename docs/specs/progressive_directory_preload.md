@@ -252,13 +252,20 @@ branch the fresh table is freed immediately via `LinkTable_free()`
 threads pointers into freed memory.
 
 **Deliberately omitted site:** the new-table branch of
-`path_to_Link_recursive()` also creates intermediate tables for deep direct-path
-access, but its win/lose decision is made under `link_lock` while the hook must
-run unlocked; supporting it would require an accumulator threaded through the
-recursion. The gap only affects *direct deep path access without a prior
-`opendir` of the intermediate directories* (e.g. typing a full path in the
-address bar). GUI browsing is fully covered by site 3, and the gap degrades to
-the current on-demand loading. See Section 13.
+`path_to_Link_recursive()` also creates intermediate `LinkTable`s — but only
+while resolving a *deep direct path* (e.g. typing `/a/b/c/file.iso` in the
+address bar), with no prior `opendir` of the intermediate directories. Its
+win/lose attach decision is made under `link_lock`, whereas
+`Link_preload_directories()` must run unlocked; supporting it would require an
+accumulator threaded through the recursion to collect the winning tables and
+invoke the hook once, after the lock is released. Omitting it means those
+intermediate tables are never swept: their `LINK_DIR` children are neither
+hidden nor enqueued, so no one-level-ahead preload is scheduled for them. The
+target path still resolves and reads normally (direct access is unaffected by
+the flag); the only effect is that those intermediate directories' listings are
+fetched on demand (synchronously, as without the flag) instead of being
+preloaded. GUI browsing — the common case — always goes through `opendir`, so it
+is fully covered by site 3. See Section 13.
 
 Tables that are merely **reused** (a `next_table` already existed, or an
 `--invalid-refresh` refill of an existing table) are never re-swept: nothing
@@ -476,8 +483,15 @@ ______________________________________________________________________
 
 1. **No appearance notification:** entries surface on the next `readdir`
    (Section 10).
-1. **Deep direct-path access** (Section 5, omitted site) does not schedule
-   preloads for the intermediate tables it loads; degrades to on-demand.
+1. **Deep direct-path access** (Section 5, omitted site): resolving a full path
+   directly (e.g. typing `/a/b/c/file.iso` in the address bar) without first
+   `opendir`-ing the intermediate directories loads those tables via
+   `path_to_Link_recursive()`, which never calls `Link_preload_directories()`.
+   Their `LINK_DIR` children are therefore not hidden or enqueued, and no
+   one-level-ahead preload is scheduled for them. The path still resolves and
+   reads normally; the intermediate directories' listings are simply fetched on
+   demand (synchronously, as without the flag) rather than preloaded. GUI
+   browsing is unaffected (always via `opendir` → site 3).
 1. **Unbounded queue depth:** a listing page with thousands of subdirectories
    enqueues all of them in one batch. Connection concurrency is capped by the
    shared multi handle (`--max-conns`), and total work equals what the GUI would
