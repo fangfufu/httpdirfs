@@ -608,9 +608,12 @@ void LinkTable_finish_listing(LinkTable *linktbl, const char *url,
     FREE(ts->eff_url);
 }
 
-LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
+LinkTable *LinkTable_try_load_cached(const char *url, LinkTable *parent_tbl)
 {
     LinkTable *linktbl = NULL;
+    if (!CACHE_SYSTEM_INIT) {
+        return NULL;
+    }
 
     /*
      * Attempt to load the LinkTable from the disk. The unified single-file
@@ -618,101 +621,104 @@ LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
      * of the directory listing; the LinkTable is regenerated in memory
      * on-the-fly with LinkTable_parse_html(), in well under a millisecond.
      */
-    if (CACHE_SYSTEM_INIT) {
-        char *payload = NULL;
-        size_t payload_len = 0;
-        char *http_header = NULL;
-        size_t http_header_len = 0;
-        time_t cache_time = 0;
-        char *resolved_url = NULL;
-        int loaded = CacheContainer_read_with_time(
-            url, &payload, &payload_len, &http_header, &http_header_len,
-            &cache_time, &resolved_url);
-        if (loaded == 1) {
+    char *payload = NULL;
+    size_t payload_len = 0;
+    char *http_header = NULL;
+    size_t http_header_len = 0;
+    time_t cache_time = 0;
+    char *resolved_url = NULL;
+    int loaded = CacheContainer_read_with_time(url, &payload, &payload_len,
+                                               &http_header, &http_header_len,
+                                               &cache_time, &resolved_url);
+    if (loaded == 1) {
+        /*
+         * Relative links in the cached listing must resolve against the
+         * effective URL the listing was actually served from, not the
+         * originally requested URL (a redirect /dir -> /dir/ changes the
+         * base path).
+         */
+        const char *eff_url
+            = (resolved_url && resolved_url[0]) ? resolved_url : url;
+        if (!CONFIG.allow_external_origin && strcmp(eff_url, url) != 0
+            && is_cross_origin(url, eff_url)) {
             /*
-             * Relative links in the cached listing must resolve against the
-             * effective URL the listing was actually served from, not the
-             * originally requested URL (a redirect /dir -> /dir/ changes the
-             * base path).
+             * A fresh cross-origin redirect is rejected by the transfer
+             * layer when --allow-external-origin is disabled, so a cached
+             * listing served from an external origin (cached while the
+             * option was enabled) must not be parsed: the parser would
+             * compare its links against the original URL and drop them.
+             * Invalidate the entry and refetch, letting the current
+             * policy apply to the fresh redirect.
              */
-            const char *eff_url
-                = (resolved_url && resolved_url[0]) ? resolved_url : url;
-            if (!CONFIG.allow_external_origin && strcmp(eff_url, url) != 0
-                && is_cross_origin(url, eff_url)) {
-                /*
-                 * A fresh cross-origin redirect is rejected by the transfer
-                 * layer when --allow-external-origin is disabled, so a cached
-                 * listing served from an external origin (cached while the
-                 * option was enabled) must not be parsed: the parser would
-                 * compare its links against the original URL and drop them.
-                 * Invalidate the entry and refetch, letting the current
-                 * policy apply to the fresh redirect.
-                 */
+            lprintf(warning,
+                    "cached redirect %s -> %s is blocked by the current "
+                    "origin policy; invalidating and refetching\n",
+                    url, eff_url);
+            CacheContainer_delete(url);
+            CacheContainer_delete(eff_url);
+            FREE(payload);
+            FREE(http_header);
+            FREE(resolved_url);
+            payload = NULL;
+        } else {
+            /*
+             * Re-apply the max_html_size gate to a cached body. A cached
+             * listing for a promoted (no-trailing-slash) directory that now
+             * exceeds max_html_size (e.g. the limit was lowered after it
+             * was cached) is treated as an empty folder, not parsed. Real
+             * directories (trailing slash) are exempt, as at download time.
+             */
+            const char *qf = strpbrk(eff_url, "?#");
+            size_t tlen = qf ? (size_t)(qf - eff_url) : strlen(eff_url);
+            int real_dir = (tlen > 0 && eff_url[tlen - 1] == '/');
+            if (!real_dir && CONFIG.website_mode && CONFIG.max_html_size > 0
+                && (off_t)payload_len > CONFIG.max_html_size) {
                 lprintf(warning,
-                        "cached redirect %s -> %s is blocked by the current "
-                        "origin policy; invalidating and refetching\n",
-                        url, eff_url);
-                CacheContainer_delete(url);
-                CacheContainer_delete(eff_url);
+                        "cached listing for %s is %zu bytes, exceeding "
+                        "max_html_size (%ld bytes); leaving it as an empty "
+                        "folder\n",
+                        url, payload_len, (long)CONFIG.max_html_size);
                 FREE(payload);
                 FREE(http_header);
-                FREE(resolved_url);
-                payload = NULL;
-            } else {
-                /*
-                 * Re-apply the max_html_size gate to a cached body. A cached
-                 * listing for a promoted (no-trailing-slash) directory that now
-                 * exceeds max_html_size (e.g. the limit was lowered after it
-                 * was cached) is treated as an empty folder, not parsed. Real
-                 * directories (trailing slash) are exempt, as at download time.
-                 */
-                const char *qf = strpbrk(eff_url, "?#");
-                size_t tlen = qf ? (size_t)(qf - eff_url) : strlen(eff_url);
-                int real_dir = (tlen > 0 && eff_url[tlen - 1] == '/');
-                if (!real_dir && CONFIG.website_mode && CONFIG.max_html_size > 0
-                    && (off_t)payload_len > CONFIG.max_html_size) {
-                    lprintf(warning,
-                            "cached listing for %s is %zu bytes, exceeding "
-                            "max_html_size (%ld bytes); leaving it as an empty "
-                            "folder\n",
-                            url, payload_len, (long)CONFIG.max_html_size);
-                    FREE(payload);
-                    FREE(http_header);
-                    linktbl = LinkTable_alloc(url);
-                    linktbl->parent_tbl = parent_tbl;
-                    linktbl->index_time = time(NULL);
-                    CacheContainer_delete(url);
-                    if (strcmp(eff_url, url) != 0) {
-                        CacheContainer_delete(eff_url);
-                    }
-                    FREE(resolved_url);
-                    return linktbl;
-                }
-                lprintf(info,
-                        "loaded cached directory listing for %s in < 1 ms\n",
-                        url);
                 linktbl = LinkTable_alloc(url);
                 linktbl->parent_tbl = parent_tbl;
-                linktbl->index_time = cache_time ? cache_time : time(NULL);
-                LinkTable_parse_html(linktbl, eff_url, payload);
-                LinkTable_fill(linktbl);
-                LinkTable_add_diagnostics(linktbl, payload, payload_len,
-                                          http_header, http_header_len);
-                FREE(payload);
-                FREE(http_header);
+                linktbl->index_time = time(NULL);
+                CacheContainer_delete(url);
+                if (strcmp(eff_url, url) != 0) {
+                    CacheContainer_delete(eff_url);
+                }
                 FREE(resolved_url);
+                return linktbl;
             }
-        } else if (loaded == -1) {
-            lprintf(error,
-                    "Failed to read the cached directory listing "
-                    "for %s!\n",
+            lprintf(info, "loaded cached directory listing for %s in < 1 ms\n",
                     url);
-            FREE(resolved_url);
-        } else {
-            lprintf(info, "cached directory listing not found for %s\n", url);
+            linktbl = LinkTable_alloc(url);
+            linktbl->parent_tbl = parent_tbl;
+            linktbl->index_time = cache_time ? cache_time : time(NULL);
+            LinkTable_parse_html(linktbl, eff_url, payload);
+            LinkTable_fill(linktbl);
+            LinkTable_add_diagnostics(linktbl, payload, payload_len,
+                                      http_header, http_header_len);
+            FREE(payload);
+            FREE(http_header);
             FREE(resolved_url);
         }
+    } else if (loaded == -1) {
+        lprintf(error,
+                "Failed to read the cached directory listing "
+                "for %s!\n",
+                url);
+        FREE(resolved_url);
+    } else {
+        lprintf(info, "cached directory listing not found for %s\n", url);
+        FREE(resolved_url);
     }
+    return linktbl;
+}
+
+LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl)
+{
+    LinkTable *linktbl = LinkTable_try_load_cached(url, parent_tbl);
 
     /*
      * Download a new LinkTable because we didn't manage to load it from the

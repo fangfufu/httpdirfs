@@ -43,8 +43,9 @@ With `--progressive-directory-preload` enabled (NORMAL mode):
    time by client-initiated code** (mount, root refresh, or `opendir`), every
    `LINK_DIR` child link in that table is marked hidden and enqueued for
    background preloading.
-1. The worker fetches the listing of each queued directory (all fetches in a
-   batch in flight at once on the shared curl multi handle), attaches the child
+1. The worker loads the listing of each queued directory — from the on-disk
+   container cache if it is still fresh, otherwise by fetching (all fetches in a
+   batch in flight at once on the shared curl multi handle) — attaches the child
    `LinkTable`, and clears the hidden flag on success.
 1. `readdir` reports only links for which `type != LINK_INVALID` **and**
    `hidden == 0`.
@@ -134,10 +135,16 @@ attached:
 `path_to_LinkTable()` is refactored to use this helper (it keeps its
 `--invalid-refresh` handling and its parent-table unref).
 
-The download-then-attach sequence that both loaders perform is split into three
-shared halves, so the synchronous NORMAL loader and the asynchronous preload
-path (Section 4.5) reuse exactly the same code:
+The load-then-attach sequence that both loaders perform is split into shared
+pieces, so the synchronous NORMAL loader and the asynchronous preload path
+(Section 4.5) reuse exactly the same code:
 
+- `LinkTable_try_load_cached(url, parent_tbl)` — build a table from a *fresh*
+  cached container: read the raw response (headers + HTML payload) from the
+  on-disk cache, re-apply the current origin policy and the `max_html_size` gate
+  to the cached body (invalidating the entry when they no longer hold), and
+  parse it. Returns NULL when the cache system is off or the listing is not
+  cached / expired, in which case the caller downloads.
 - `LinkTable_begin_listing(url, parent_tbl)` — allocate the table (fresh
   `index_time`, head link) and link it to its parent. The listing download runs
   under the table's head link.
@@ -150,9 +157,10 @@ path (Section 4.5) reuse exactly the same code:
   internal helper `attach_new_table()`); frees a failed table and leaves the
   entry without one so the next access retries.
 
-`LinkTable_new()` (the synchronous NORMAL loader) is `begin` +
-`Link_download_full()` + `finish`; the preload worker (Section 4.5) is `begin` +
-`Link_setup_full_download()` + `finish` + `attach_loaded`, driving the download
+`LinkTable_new()` (the synchronous NORMAL loader) is `try_load_cached`, then
+`begin` + `Link_download_full()` + `finish` on a cache miss; the preload worker
+(Section 4.5) is `try_load_cached`, then `begin`, `Link_setup_full_download`,
+`finish`, and `attach_loaded` on a cache miss, driving the download
 asynchronously instead of calling `Link_download_full()`.
 
 ### 4.4 `Link_preload_directories(LinkTable *tbl)`
@@ -183,14 +191,19 @@ Preload_enqueue(link);
   before the worker starts are drained once it does. If the worker cannot be
   spawned, `Preload_start()` unhides every queued link so the entries degrade to
   on-demand loading.
+- **Cache check.** Before starting a fetch for a queued link, the worker calls
+  `LinkTable_try_load_cached()`. A fresh cached listing is built into a table
+  from the container and finalized (attach, unhide, release) in place with no
+  network round-trip, exactly as the synchronous loader would serve it; only a
+  cache miss falls through to the download below.
 - **Asynchronous fetches.** The worker pops the whole queue as one batch and
   starts every fetch in it *concurrently* on the shared curl multi handle (no
-  thread per fetch; I/O concurrency is libcurl's). For each queued link it
-  begins a listing table (`LinkTable_begin_listing`), configures the head link's
-  download (`Link_setup_full_download`), and adds the easy handle with
-  `transfer_nonblocking()`. A per-fetch `PreloadFetch` carries the state
-  machine: `TransferStruct` body + header, the in-flight `CURL *`, a `retry_at`
-  deadline, and a `finished` flag. The worker then pumps
+  thread per fetch; I/O concurrency is libcurl's). For each queued link that
+  missed the cache it begins a listing table (`LinkTable_begin_listing`),
+  configures the head link's download (`Link_setup_full_download`), and adds the
+  easy handle with `transfer_nonblocking()`. A per-fetch `PreloadFetch` carries
+  the state machine: `TransferStruct` body + header, the in-flight `CURL *`, a
+  `retry_at` deadline, and a `finished` flag. The worker then pumps
   `curl_multi_perform_once()` (a ≤100 ms blocking poll, not a busy loop) until
   every fetch in the batch is finished, requeuing handles whose
   temporary-failure deadline has come due.
@@ -272,11 +285,13 @@ FIFO queue (mutex + condvar)
    │
    ▼
 Worker (single thread; fetches run concurrently on the shared curl multi)
-   │  pop the whole queue as one batch
-   │  per L in the batch:                no locks held
-   │     tbl = LinkTable_begin_listing(L)
-   │     start the head-link download, transfer_nonblocking(curl)
-   │  pump curl_multi_perform_once()     callbacks run under transfer_lock:
+    │  pop the whole queue as one batch
+    │  per L in the batch:                no locks held
+    │     tbl = LinkTable_try_load_cached(L)
+    │     fresh hit: finalize L (attach/unhide/unref), no fetch
+    │     miss:      tbl = LinkTable_begin_listing(L)
+    │                start the head-link download, transfer_nonblocking(curl)
+    │  pump curl_multi_perform_once()     callbacks run under transfer_lock:
    │     until every fetch is finished        redirects / retries / cap / 200
    │     (requeue due retry deadlines)
    │  per finished fetch:
@@ -438,6 +453,12 @@ ______________________________________________________________________
   real asynchronous completion path.
 - `LinkTable_load_and_attach()`: an already-attached `next_table` is returned
   with `*created_new == 0` and no re-download.
+- `LinkTable_try_load_cached()`: NULL with the cache system off or when no
+  container exists; on a fresh container a table is built with the parsed links
+  and `index_time` set to the container's `cache_time`; an expired container
+  returns NULL (the caller downloads).
+- Worker cached path: a queued directory whose listing is already cached fresh
+  is unhidden with its cached listing attached and no network fetch issued.
 
 **Integration tests (`tests/integration`):**
 
@@ -463,12 +484,6 @@ ______________________________________________________________________
    eventually stat anyway, but a per-table batch cap (e.g.
    `--preload-max-batch`) is a possible future refinement for hostile/very large
    listings.
-1. **Preloaded listings skip the cache read:** the synchronous loader checks the
-   on-disk container cache before downloading; the asynchronous preload path
-   always downloads (its fetch is the thing that eventually writes the cache
-   entry). A preloaded directory therefore makes one request even when a cached
-   listing exists; a later on-demand load of the same directory still serves
-   from cache.
 1. **Root refresh sweep** happens at refresh time (site 2); if a refresh reuses
    the existing root (no expiry), no sweep occurs — consistent with the "fresh
    table only" rule.

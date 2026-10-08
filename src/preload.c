@@ -28,9 +28,10 @@
  * asynchronously through the shared curl multi handle. The transfer state
  * machine (redirects, temporary-failure retries, cap handling) runs in the
  * completion callback; the worker pumps the multi handle, requeues due
- * retries, and finally parses and attaches each finished listing.
- * Workers never schedule further preloads, so background work is bounded to
- * one level ahead of whatever the client code loaded.
+ * retries, and finally parses and attaches each finished listing. A fresh
+ * cached listing is loaded from the container cache instead of being
+ * fetched. Workers never schedule further preloads, so background work is
+ * bounded to one level ahead of whatever the client code loaded.
  */
 
 #include "preload.h"
@@ -210,12 +211,27 @@ static void preload_on_complete(TransferStruct *ts, CURL *curl, CURLcode result,
     f->finished = 1;
 }
 
+static void finalize_listing(Link *link, LinkTable *table, CURL *curl,
+                             PreloadFetch *fetch);
+
 /*
  * Begin the asynchronous fetch of one queued link. On failure the link is
  * unhidden so the entry degrades to on-demand loading.
  */
 static void start_fetch(Link *link)
 {
+    /*
+     * A fresh cached listing needs no network round-trip: build the table
+     * from the container, exactly as the synchronous loader does, and
+     * finalize it in place.
+     */
+    LinkTable *cached
+        = LinkTable_try_load_cached(link->f_url, link->parent_table);
+    if (cached) {
+        finalize_listing(link, cached, NULL, NULL);
+        return;
+    }
+
     PreloadFetch *f = CALLOC(1, sizeof(PreloadFetch));
     LinkTable *parent = link->parent_table;
     if (!f) {
@@ -295,18 +311,16 @@ static void requeue_due_retries(void)
 }
 
 /*
- * Parse and attach a finished fetch, then release everything.
+ * Attach a fully built listing table to its link, then release everything.
  * link->hidden and the queue-lifetime reference are released last, after the
- * link has been written to.
+ * link has been written to. Shared by the cache-hit fast path (curl and
+ * fetch are NULL) and the download path.
  */
-static void finalize_fetch(PreloadFetch *f)
+static void finalize_listing(Link *link, LinkTable *table, CURL *curl,
+                             PreloadFetch *fetch)
 {
-    Link *link = f->link;
-    LinkTable *parent = link->parent_table;
-
-    LinkTable_finish_listing(f->table, link->f_url, &f->ts, &f->header);
-    if (f->table->index_time > 0) {
-        LinkTable *attached = LinkTable_attach_loaded(link, f->table);
+    if (table->index_time > 0) {
+        LinkTable *attached = LinkTable_attach_loaded(link, table);
         if (attached) {
             LinkTable_unref(attached);
         }
@@ -315,14 +329,25 @@ static void finalize_fetch(PreloadFetch *f)
                 "failed to preload directory listing for %s; "
                 "showing it anyway\n",
                 link->f_url);
-        LinkTable_free(f->table);
+        LinkTable_free(table);
     }
     link->hidden = 0;
-    LinkTable_unref(parent);
-    if (f->curl) {
-        curl_easy_cleanup(f->curl);
+    LinkTable_unref(link->parent_table);
+    if (curl) {
+        curl_easy_cleanup(curl);
     }
-    FREE(f);
+    if (fetch) {
+        FREE(fetch);
+    }
+}
+
+/*
+ * Parse and attach a finished download fetch, then release everything.
+ */
+static void finalize_fetch(PreloadFetch *f)
+{
+    LinkTable_finish_listing(f->table, f->link->f_url, &f->ts, &f->header);
+    finalize_listing(f->link, f->table, f->curl, f);
 }
 
 static void *preload_worker(void *arg)

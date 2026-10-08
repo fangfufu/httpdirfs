@@ -118,6 +118,21 @@ Link *Link_new(const char *linkname, LinkType type);
 LinkTable *LinkSystem_init(const char *raw_url);
 
 /**
+ * \brief try to build a LinkTable from a fresh cached listing container
+ * \details The unified single-file cache stores the raw HTTP response
+ * (response headers + HTML payload) of a directory listing; on a fresh hit
+ * the LinkTable is regenerated in memory with LinkTable_parse_html(). The
+ * current origin policy and the max_html_size gate are re-applied to the
+ * cached body, invalidating the entry when they no longer hold.
+ * Shared by the synchronous loader (LinkTable_new) and the asynchronous
+ * preload path, so both serve identical cached listings.
+ * \return a fully populated table carrying exactly one reference for the
+ * caller, or NULL when the cache system is off, the listing is not cached or
+ * is expired, or the cached entry was rejected (the caller then downloads).
+ */
+LinkTable *LinkTable_try_load_cached(const char *url, LinkTable *parent_tbl);
+
+/**
  * \brief create a new LinkTable
  */
 LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl);

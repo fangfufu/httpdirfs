@@ -26,6 +26,7 @@
  * \brief Unit tests for link.c, including external-link helper functions
  */
 
+#include "../src/cache.h"
 #include "../src/config.h"
 #include "../src/link.h"
 #include "../src/network.h"
@@ -33,8 +34,13 @@
 #include "../src/transfer.h"
 #include "../src/util.h"
 
+#include <dirent.h>
+#include <ftw.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
 #include <unistd.h>
 #include <unity.h>
 
@@ -2070,6 +2076,218 @@ void test_LinkTable_load_and_attach_failure_not_attached(void)
     LinkTable_free(root);
 }
 
+/* Recursively remove a temp cache directory (and its contents). */
+static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
+                   struct FTW *ftwbuf)
+{
+    (void)sb;
+    (void)typeflag;
+    (void)ftwbuf;
+    return remove(fpath);
+}
+
+static void cleanup_temp_dir(const char *tmp_cache_dir)
+{
+    char filepath[512];
+    DIR *dir = opendir(tmp_cache_dir);
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) {
+                continue;
+            }
+            snprintf(filepath, sizeof(filepath), "%s/%s", tmp_cache_dir,
+                     entry->d_name);
+            nftw(filepath, ntfw_cb, 32, FTW_DEPTH | FTW_PHYS);
+        }
+        closedir(dir);
+    }
+    (void)rmdir(tmp_cache_dir);
+}
+
+static void setup_temp_cache_dir(const char *tmp_cache_dir)
+{
+    cleanup_temp_dir(tmp_cache_dir);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tmp_cache_dir, S_IRWXU));
+}
+
+void test_LinkTable_try_load_cached_cache_system_off(void)
+{
+    /* The cache system is not initialised in this test binary unless a
+     * later test turns it on; run this first so the off path is covered. */
+    TEST_ASSERT_EQUAL_INT(0, CACHE_SYSTEM_INIT);
+    LinkTable *parent = LinkTable_alloc("https://example.com/");
+    TEST_ASSERT_NULL(
+        LinkTable_try_load_cached("https://example.com/sub/", parent));
+    LinkTable_free(parent);
+}
+
+void test_LinkTable_try_load_cached_miss(void)
+{
+    char tmp_cache_dir[] = "./test_try_load_cached_miss_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("https://example.com/");
+
+    LinkTable *parent = LinkTable_alloc("https://example.com/");
+    /* No container written: a miss returns NULL, the caller downloads */
+    TEST_ASSERT_NULL(
+        LinkTable_try_load_cached("https://example.com/missing/", parent));
+
+    LinkTable_free(parent);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_LinkTable_try_load_cached_hit(void)
+{
+    char tmp_cache_dir[] = "./test_try_load_cached_hit_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("http://127.0.0.1:1/");
+
+    /* Loopback port 1 refuses instantly: the fill's HEAD probes fail fast
+     * without touching the network. */
+    const char *url = "http://127.0.0.1:1/sub/";
+    const char *html = "<html><body><a href=\"inner.html\">inner.html</a>"
+                       "<a href=\"file.txt\">file.txt</a></body></html>";
+    const char *headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    LinkTable *parent = LinkTable_alloc("http://127.0.0.1:1/");
+    LinkTable *got = LinkTable_try_load_cached(url, parent);
+
+    /* A fresh container yields a fully populated table */
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_TRUE(got->index_time > 0);
+    TEST_ASSERT_EQUAL_PTR(parent, got->parent_tbl);
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(got, "http://127.0.0.1:1/sub/inner.html"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(got, "http://127.0.0.1:1/sub/file.txt"));
+
+    LinkTable_free(got);
+    LinkTable_free(parent);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_LinkTable_try_load_cached_expired(void)
+{
+    char tmp_cache_dir[] = "./test_try_load_cached_expired_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("https://example.com/");
+
+    const char *url = "https://example.com/expired/";
+    const char *html = "<html><body></body></html>";
+    const char *headers = "HTTP/1.1 200 OK\r\n\r\n";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    /* Tamper with the container header to simulate an old download */
+    char *cache_key = string_to_cache_path(url);
+    TEST_ASSERT_NOT_NULL(cache_key);
+    char full_path[PATH_MAX];
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
+    FILE *f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
+    CacheHeader hdr;
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    LinkTable *parent = LinkTable_alloc("https://example.com/");
+    /* An expired container is a miss: the caller downloads */
+    TEST_ASSERT_NULL(LinkTable_try_load_cached(url, parent));
+
+    LinkTable_free(parent);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    FREE(cache_key);
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_preload_worker_cached_listing(void)
+{
+    char tmp_cache_dir[] = "./test_preload_cached_listing_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("http://127.0.0.1:1/");
+
+    CONFIG.progressive_dir_preload = 1;
+
+    /*
+     * Port 1 on loopback refuses connections instantly: if the worker took
+     * the download path the fetch would fail and attach nothing, so a
+     * populated table proves the listing came from the container cache.
+     */
+    const char *sub_url = "http://127.0.0.1:1/sub/";
+    const char *html
+        = "<html><body><a href=\"inner.html\">inner.html</a></body></html>";
+    const char *headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(sub_url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    LinkTable *tbl = LinkTable_alloc("http://127.0.0.1:1/");
+    Link *dir = make_test_link(tbl, "sub", LINK_DIR, sub_url, 0);
+
+    int baseline_depth = Preload_queue_depth();
+    Link_preload_directories(tbl);
+    Preload_start();
+
+    TEST_ASSERT_EQUAL_INT(1, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(baseline_depth + 1, Preload_queue_depth());
+    TEST_ASSERT_EQUAL_INT(1, tbl->refcount);
+
+    for (int i = 0; i < 5000 && dir->hidden; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_NOT_NULL(dir->next_table);
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(dir->next_table, "http://127.0.0.1:1/sub/inner.html"));
+
+    for (int i = 0; i < 5000 && Preload_queue_depth() > baseline_depth; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(baseline_depth, Preload_queue_depth());
+    /*
+     * hidden == 0 is only set after the attach, so once it is visible the
+     * queue-lifetime reference (the one taken at enqueue) is the only
+     * release still pending: the refcount settles at 1, the attach
+     * reference that roots the attached child table in its parent, exactly
+     * as on the synchronous load path.
+     */
+    for (int i = 0; i < 5000 && tbl->refcount != 1; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(1, tbl->refcount);
+
+    LinkTable_free(tbl);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 int main(void)
 {
     /*
@@ -2180,6 +2398,11 @@ int main(void)
     RUN_TEST(test_preload_directories_noop_in_single_mode);
     RUN_TEST(test_preload_directories_noop_on_failed_table);
     RUN_TEST(test_preload_directories_sweep_and_worker);
+    RUN_TEST(test_LinkTable_try_load_cached_cache_system_off);
+    RUN_TEST(test_LinkTable_try_load_cached_miss);
+    RUN_TEST(test_LinkTable_try_load_cached_hit);
+    RUN_TEST(test_LinkTable_try_load_cached_expired);
+    RUN_TEST(test_preload_worker_cached_listing);
     RUN_TEST(test_LinkTable_load_and_attach_existing_table);
     RUN_TEST(test_LinkTable_load_and_attach_null_link);
     RUN_TEST(test_LinkTable_load_and_attach_failure_not_attached);
