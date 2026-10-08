@@ -82,9 +82,8 @@ Scheduling could in principle be hooked in two places:
   terminal by construction, because worker code simply never calls the function.
 
 The load-time design was selected because it achieves the same cascade cut with
-no per-table state, no `LinkTable_new()` signature change, and no modifications
-to `src/transfer.c`. The only per-link state introduced is a single `int hidden`
-field.
+no per-table state and no `LinkTable_new()` signature change. The only per-link
+state introduced is a single `int hidden` field.
 
 ______________________________________________________________________
 
@@ -113,11 +112,12 @@ link->type != LINK_INVALID && !link->hidden
 Centralizing the filter here keeps `fs_readdir` unchanged apart from the call
 and makes the listing rule unit-testable.
 
-### 4.3 `LinkTable_load_and_attach(Link *link, int *created_new)`
+### 4.3 The table loaders
 
-Extracted from the "no `next_table`" branch of `path_to_LinkTable()`
-(src/link.c:869-931) so that client code and worker code share one
-implementation of *download a directory listing and attach it to its link*:
+`LinkTable_load_and_attach(Link *link, int *created_new)` is the on-demand
+(client-side) loader used by `path_to_LinkTable()`. Given a link, it returns a
+`LinkTable` for the directory the link names, downloading one if none is already
+attached:
 
 1. Under `link_lock`: check `link->next_table`; if present, return it (with the
    existing expiry/retirement handling), `*created_new = 0`.
@@ -134,8 +134,9 @@ implementation of *download a directory listing and attach it to its link*:
 `path_to_LinkTable()` is refactored to use this helper (it keeps its
 `--invalid-refresh` handling and its parent-table unref).
 
-The download-then-attach sequence is further split into three shared halves so
-the asynchronous preload path (Section 4.5) reuses exactly the same code:
+The download-then-attach sequence that both loaders perform is split into three
+shared halves, so the synchronous NORMAL loader and the asynchronous preload
+path (Section 4.5) reuse exactly the same code:
 
 - `LinkTable_begin_listing(url, parent_tbl)` — allocate the table (fresh
   `index_time`, head link) and link it to its parent. The listing download runs
@@ -144,12 +145,15 @@ the asynchronous preload path (Section 4.5) reuses exactly the same code:
   a begun table: a failed fetch marks the table failed (`index_time == 0`), an
   empty or capped body keeps it an empty folder, otherwise parse, fill, and save
   the raw response to the container cache. Consumes the transfer buffers.
-- `LinkTable_attach_loaded(link, tbl)` — the attach-under-`link_lock` tail
-  shared with `LinkTable_load_and_attach()`; frees a failed table and leaves the
+- `LinkTable_attach_loaded(link, tbl)` — the attach-under-`link_lock` tail,
+  shared with `LinkTable_load_and_attach()` (both run it through the small
+  internal helper `attach_new_table()`); frees a failed table and leaves the
   entry without one so the next access retries.
 
 `LinkTable_new()` (the synchronous NORMAL loader) is `begin` +
-`Link_download_full()` + `finish`.
+`Link_download_full()` + `finish`; the preload worker (Section 4.5) is `begin` +
+`Link_setup_full_download()` + `finish` + `attach_loaded`, driving the download
+asynchronously instead of calling `Link_download_full()`.
 
 ### 4.4 `Link_preload_directories(LinkTable *tbl)`
 
@@ -223,11 +227,11 @@ ______________________________________________________________________
 `Link_preload_directories()` is called from exactly three client-side completion
 points, all outside `link_lock`:
 
-| #   | Location                                                    | Fires when                                                                                                                                                                                |
-| --- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | `LinkSystem_init()` (src/link.c:227)                        | The root table finished loading at mount. Runs in `main()` pre-FUSE; items are queued then, and the worker (started from the FUSE `init` callback) drains them before any client request. |
-| 2   | `check_and_refresh_root_table()` (src/link.c:~813)          | A background root refresh produced and attached a *new* root table.                                                                                                                       |
-| 3   | New-table branch of `path_to_LinkTable()` (src/link.c:~926) | An `opendir`/path resolution downloaded and attached a fresh table, **and** this call won the attach race (`created_new == 1`).                                                           |
+| #   | Location                                  | Fires when                                                                                                                                                                                |
+| --- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `LinkSystem_init()`                       | The root table finished loading at mount. Runs in `main()` pre-FUSE; items are queued then, and the worker (started from the FUSE `init` callback) drains them before any client request. |
+| 2   | `check_and_refresh_root_table()`          | A background root refresh produced and attached a *new* root table.                                                                                                                       |
+| 3   | New-table branch of `path_to_LinkTable()` | An `opendir`/path resolution downloaded and attached a fresh table, **and** this call won the attach race (`created_new == 1`).                                                           |
 
 The winner-only condition at site 3 is mandatory, not cosmetic: in the loser
 branch the fresh table is freed immediately via `LinkTable_free()`
@@ -235,13 +239,13 @@ branch the fresh table is freed immediately via `LinkTable_free()`
 threads pointers into freed memory.
 
 **Deliberately omitted site:** the new-table branch of
-`path_to_Link_recursive()` (src/link.c:1004-1069) also creates intermediate
-tables for deep direct-path access, but its win/lose decision is made under
-`link_lock` while the hook must run unlocked; supporting it would require an
-accumulator threaded through the recursion. The gap only affects *direct deep
-path access without a prior `opendir` of the intermediate directories* (e.g.
-typing a full path in the address bar). GUI browsing is fully covered by site 3,
-and the gap degrades to the current on-demand loading. See Section 13.
+`path_to_Link_recursive()` also creates intermediate tables for deep direct-path
+access, but its win/lose decision is made under `link_lock` while the hook must
+run unlocked; supporting it would require an accumulator threaded through the
+recursion. The gap only affects *direct deep path access without a prior
+`opendir` of the intermediate directories* (e.g. typing a full path in the
+address bar). GUI browsing is fully covered by site 3, and the gap degrades to
+the current on-demand loading. See Section 13.
 
 Tables that are merely **reused** (a `next_table` already existed, or an
 `--invalid-refresh` refill of an existing table) are never re-swept: nothing
@@ -321,7 +325,7 @@ Three locks are involved, none nested across types:
 - `link_lock` (existing): table tree and `next_table`/refcount/orphaned state.
   Held briefly inside `LinkTable_load_and_attach()` and inside
   `LinkTable_ref()`; never held while performing network I/O.
-- `q_lock` + condvars (new): preload queue only. Held only for enqueue/ dequeue
+- `q_lock` + condvars (new): preload queue only. Held only for enqueue/dequeue
   bookkeeping, never across the load.
 - `transfer_lock` (existing): around `curl_multi_perform_once()`; taken by the
   worker exactly like by FUSE threads — preloads and on-demand loads share the
