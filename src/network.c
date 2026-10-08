@@ -380,7 +380,7 @@ void transfer_blocking(CURL *curl)
     }
 }
 
-void transfer_nonblocking(CURL *curl)
+int transfer_nonblocking(CURL *curl)
 {
     lprintf(network_lock_debug, "thread %lx: locking transfer_lock;\n",
             (unsigned long)pthread_self());
@@ -389,13 +389,19 @@ void transfer_nonblocking(CURL *curl)
     CURLMcode res = curl_multi_add_handle(curl_multi, curl);
     if (res > 0) {
         lprintf(error, "%s\n", curl_multi_strerror(res));
-    } else {
-        active_add_handle(curl);
+        PTHREAD_MUTEX_UNLOCK(&transfer_lock);
+        return -1;
+    }
+    if (active_add_handle(curl) != 0) {
+        curl_multi_remove_handle(curl_multi, curl);
+        PTHREAD_MUTEX_UNLOCK(&transfer_lock);
+        return -1;
     }
 
     lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
             (unsigned long)pthread_self());
     PTHREAD_MUTEX_UNLOCK(&transfer_lock);
+    return 0;
 }
 
 int transfer_requeue_locked(CURL *curl)

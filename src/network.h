@@ -53,8 +53,11 @@ void NetworkSystem_init(void);
 /** \brief blocking file transfer */
 void transfer_blocking(CURL *curl);
 
-/** \brief non blocking file transfer */
-void transfer_nonblocking(CURL *curl);
+/**
+ * \brief add a curl handle to the multi interface without waiting for it
+ * \return 0 on success, -1 if the handle could not be added
+ */
+int transfer_nonblocking(CURL *curl);
 
 /**
  * \brief Re-add a curl handle to the multi interface

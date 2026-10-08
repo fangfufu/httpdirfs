@@ -77,6 +77,26 @@ browse into it as a subdirectory. Non-HTML resources remain regular files.
 > graphical file browsers tend to read into every subdirectory within. This
 > causes massive amount of HTTP requests.
 
+### Progressive directory preloading
+
+When browsing a large directory listing, HTTPDirFS can hide subdirectory entries
+from the listing until their contents have been preloaded in the background.
+Enable it with `--progressive-directory-preload` (normal mode only): directory
+entries appear in a listing only after a background worker has loaded their own
+listing, which avoids a flood of on-demand HTTP requests when a GUI file browser
+stats every entry. New entries appear on the directory's next re-read. Failed
+preloads degrade to the default on-demand behavior.
+
+The listings are fetched by a single background worker thread, with the
+individual fetches running concurrently on the shared libcurl multi handle. It
+works in both foreground (`-f`) and daemon (background) mode: the worker is
+started when the FUSE session initializes, after any daemonizing fork, so it is
+never orphaned.
+
+```
+./httpdirfs -f --progressive-directory-preload https://example.com/files/ mnt
+```
+
 ### Single file mode
 
 If you just want to access a single file, you can specify `--single-file-mode`.

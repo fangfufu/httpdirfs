@@ -28,11 +28,14 @@
 
 #include "../src/config.h"
 #include "../src/link.h"
+#include "../src/network.h"
+#include "../src/preload.h"
 #include "../src/transfer.h"
 #include "../src/util.h"
 
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <unity.h>
 
 void setUp(void)
@@ -45,10 +48,26 @@ void tearDown(void)
     CONFIG.allow_external_origin = 0;
     CONFIG.website_mode = 0;
     CONFIG.ignore_anchors = 0;
+    CONFIG.progressive_dir_preload = 0;
+    CONFIG.max_conns = 6;
+    CONFIG.mode = NORMAL;
     if (ROOT_LINK_TBL != NULL) {
         LinkTable_free(ROOT_LINK_TBL);
         ROOT_LINK_TBL = NULL;
     }
+}
+
+/* Build a bare link of the given type with a name and URL, added to tbl. */
+static Link *make_test_link(LinkTable *tbl, const char *name, int type,
+                            const char *url, int is_virtual)
+{
+    Link *link = CALLOC(1, sizeof(Link));
+    strncpy(link->linkname, name, NAME_MAX);
+    strncpy(link->f_url, url, PATH_MAX);
+    link->type = type;
+    link->is_virtual = is_virtual;
+    LinkTable_add(tbl, link);
+    return link;
 }
 
 /* ========================================================================= */
@@ -1869,8 +1888,197 @@ void test_resource_extraction_requires_website_mode(void)
     LinkTable_free(tbl);
 }
 
+/* ========================================================================= */
+/* Progressive directory preload tests                                       */
+/* ========================================================================= */
+
+void test_Link_should_list_matrix(void)
+{
+    Link link = {0};
+
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(NULL));
+
+    link.type = LINK_FILE;
+    link.hidden = 0;
+    TEST_ASSERT_EQUAL_INT(1, Link_should_list(&link));
+
+    link.type = LINK_DIR;
+    TEST_ASSERT_EQUAL_INT(1, Link_should_list(&link));
+
+    link.type = LINK_DIR;
+    link.hidden = 1;
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(&link));
+
+    link.type = LINK_INVALID;
+    link.hidden = 0;
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(&link));
+
+    link.type = LINK_INVALID;
+    link.hidden = 1;
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(&link));
+}
+
+void test_preload_directories_noop_when_disabled(void)
+{
+    CONFIG.progressive_dir_preload = 0;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://localhost/sub/", 0);
+
+    Link_preload_directories(tbl);
+
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_NULL(dir->next_table);
+    TEST_ASSERT_EQUAL_INT(0, Preload_queue_depth());
+    LinkTable_free(tbl);
+}
+
+void test_preload_directories_noop_in_single_mode(void)
+{
+    CONFIG.progressive_dir_preload = 1;
+    CONFIG.mode = SINGLE;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://localhost/sub/", 0);
+
+    Link_preload_directories(tbl);
+
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(0, Preload_queue_depth());
+    LinkTable_free(tbl);
+}
+
+void test_preload_directories_noop_on_failed_table(void)
+{
+    CONFIG.progressive_dir_preload = 1;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://localhost/sub/", 0);
+    tbl->index_time = 0; /* a failed load is never swept */
+
+    Link_preload_directories(tbl);
+
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(0, Preload_queue_depth());
+    LinkTable_free(tbl);
+}
+
+void test_preload_directories_sweep_and_worker(void)
+{
+    CONFIG.progressive_dir_preload = 1;
+    CONFIG.max_conns = 1;
+
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *file = make_test_link(tbl, "file.txt", LINK_FILE,
+                                "http://localhost/file.txt", 0);
+    Link *vdir = make_test_link(tbl, ".httpdirfs", LINK_DIR,
+                                "http://localhost/.httpdirfs/", 1);
+    /* Port 1 on loopback refuses connections instantly: the worker's load
+     * fails fast, exercises the "unhide anyway" policy, and attaches nothing.
+     */
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://127.0.0.1:1/sub/", 0);
+
+    int baseline_depth = Preload_queue_depth();
+    Link_preload_directories(tbl);
+    /* Spawn the worker (in the real binary this happens from the FUSE
+     * init callback, after any daemonizing fork). */
+    Preload_start();
+
+    /* Only the plain directory was hidden and enqueued */
+    TEST_ASSERT_EQUAL_INT(0, file->hidden);
+    TEST_ASSERT_EQUAL_INT(0, vdir->hidden);
+    TEST_ASSERT_EQUAL_INT(1, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(baseline_depth + 1, Preload_queue_depth());
+    /* The queue-lifetime reference is held until the worker finishes */
+    TEST_ASSERT_EQUAL_INT(1, tbl->refcount);
+
+    /* Wait for the worker to process the item (5 s deadline) */
+    for (int i = 0; i < 5000 && dir->hidden; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    /* The failed load attached no table */
+    TEST_ASSERT_NULL(dir->next_table);
+
+    /* Queue drained and the queue-lifetime reference released */
+    for (int i = 0; i < 5000 && Preload_queue_depth() > baseline_depth; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(baseline_depth, Preload_queue_depth());
+    for (int i = 0; i < 5000 && tbl->refcount != 0; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(0, tbl->refcount);
+
+    LinkTable_free(tbl);
+}
+
+void test_LinkTable_load_and_attach_existing_table(void)
+{
+    LinkTable *root = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(root, "sub", LINK_DIR, "http://localhost/sub/", 0);
+
+    LinkTable *sub = LinkTable_alloc("http://localhost/sub/");
+    dir->next_table = sub;
+    sub->parent_tbl = root;
+    sub->parent_link = dir;
+    root->refcount++; /* the attachment's parent reference */
+
+    int created_new = -1;
+    LinkTable *got = LinkTable_load_and_attach(dir, &created_new);
+
+    /* The live table is returned as-is with one caller reference, no load */
+    TEST_ASSERT_EQUAL_PTR(sub, got);
+    TEST_ASSERT_EQUAL_INT(0, created_new);
+    TEST_ASSERT_EQUAL_INT(1, sub->refcount);
+
+    /* Releasing the caller ref leaves sub attached with refcount 0 (it is
+     * not orphaned, so it stays alive until releasedir or the root free) */
+    LinkTable_unref(got);
+    TEST_ASSERT_EQUAL_INT(0, sub->refcount);
+    LinkTable_free(root);
+}
+
+void test_LinkTable_load_and_attach_null_link(void)
+{
+    int created_new = -1;
+    TEST_ASSERT_NULL(LinkTable_load_and_attach(NULL, &created_new));
+    TEST_ASSERT_EQUAL_INT(0, created_new);
+    TEST_ASSERT_NULL(LinkTable_load_and_attach(NULL, NULL));
+}
+
+void test_LinkTable_load_and_attach_failure_not_attached(void)
+{
+    LinkTable *root = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(root, "sub", LINK_DIR, "http://127.0.0.1:1/sub/", 0);
+
+    int created_new = -1;
+    LinkTable *got = LinkTable_load_and_attach(dir, &created_new);
+
+    /* A failed listing is never attached; the link keeps no table, keeps its
+     * directory type (a failed load is not an invalidation), and the next
+     * access retries the download.
+     */
+    TEST_ASSERT_NULL(got);
+    TEST_ASSERT_EQUAL_INT(0, created_new);
+    TEST_ASSERT_NULL(dir->next_table);
+    TEST_ASSERT_EQUAL_INT(LINK_DIR, dir->type);
+
+    LinkTable_free(root);
+}
+
 int main(void)
 {
+    /*
+     * The preload tests drive the worker's asynchronous fetch through the
+     * shared curl multi handle, which requires the network sub-system to be
+     * initialised.
+     */
+    NetworkSystem_init();
+
     UNITY_BEGIN();
 
     /* is_external_url */
@@ -1965,6 +2173,16 @@ int main(void)
     RUN_TEST(test_resource_non_http_schemes_skipped);
     RUN_TEST(test_resource_cross_origin_filtered);
     RUN_TEST(test_resource_extraction_requires_website_mode);
+
+    /* Progressive directory preload */
+    RUN_TEST(test_Link_should_list_matrix);
+    RUN_TEST(test_preload_directories_noop_when_disabled);
+    RUN_TEST(test_preload_directories_noop_in_single_mode);
+    RUN_TEST(test_preload_directories_noop_on_failed_table);
+    RUN_TEST(test_preload_directories_sweep_and_worker);
+    RUN_TEST(test_LinkTable_load_and_attach_existing_table);
+    RUN_TEST(test_LinkTable_load_and_attach_null_link);
+    RUN_TEST(test_LinkTable_load_and_attach_failure_not_attached);
 
     return UNITY_END();
 }

@@ -109,6 +109,7 @@ void Config_init(void)
     /*--------- Directory promotion & traversal related --------*/
     CONFIG.website_mode = 0;
     CONFIG.max_html_size = (off_t)2 * 1024 * 1024;
+    CONFIG.progressive_dir_preload = 0;
 
     atexit(mem_cleanup);
 }

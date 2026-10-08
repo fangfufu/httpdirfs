@@ -113,6 +113,14 @@ HTTPDirFS options:
                             references (default: off)
         --max-html-size     Set maximum HTML size for directory listing
                             promotion (default: 2M)
+        --progressive-directory-preload
+                            Hide directory entries from listings until
+                            their file count is known, loading their
+                            listings in the background on a single worker
+                            thread (the fetches run concurrently on the
+                            shared curl multi handle). Normal mode only.
+                            Works in foreground and daemon (background)
+                            mode (default: off)
         --single-file-mode  Single file mode - rather than mounting a whole
                             directory, present a single file inside a virtual
                             directory.
@@ -160,6 +168,27 @@ ______________________________________________________________________
 
 For the comprehensive architectural specification, see
 [specs/directory_detection_and_naming.md](specs/directory_detection_and_naming.md).
+
+#### `--progressive-directory-preload`
+
+- **Description:** Hides directory entries from directory listings until their
+  own listings have been loaded in the background. When enabled, plain
+  (non-virtual) subdirectory entries are marked hidden as their parent listing
+  is loaded and enqueued for background loading by a single worker thread; the
+  individual fetches run concurrently on the shared libcurl multi handle. Once a
+  subdirectory's listing has been loaded, the entry becomes visible on the
+  directory's next re-read. Normal mode only. Background work is bounded to
+  browsed directories plus one level ahead.
+- **Failure behavior:** If a preload fetch fails, the entry is unhidden anyway
+  and degrades to the default on-demand loading behavior.
+- **Foreground and daemon mode:** Works in both modes. The worker is started
+  from the FUSE `init` callback, which runs in the process that serves the mount
+  — in daemon (background) mode that is the child created by the daemonizing
+  fork, so the worker is never orphaned by the fork. Preloads enqueued before
+  the fork are picked up by the worker once it starts.
+
+For the complete behavioral specification, see
+[specs/progressive_directory_preload.md](specs/progressive_directory_preload.md).
 
 ______________________________________________________________________
 

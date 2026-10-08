@@ -43,14 +43,6 @@
 #include <string.h>
 #include <unistd.h>
 
-/*
- * Maximum number of redirect hops we are willing to follow when resolving a
- * link. Redirects are followed manually (FOLLOWLOCATION is off) so each hop can
- * be re-checked against the mounted origin before headers / credentials are
- * sent to it.
- */
-#define MAX_REDIRECTS 5
-
 size_t write_memory_callback(void *recv_data, size_t size, size_t nmemb,
                              void *userp)
 {
@@ -113,7 +105,7 @@ size_t write_memory_capped_callback(void *recv_data, size_t size, size_t nmemb,
  * table construction, before the root table is published. Returns NULL if no
  * valid reference URL is available.
  */
-static const char *origin_base_url(Link *link)
+const char *origin_base_url(Link *link)
 {
     if (ROOT_LINK_TBL && ROOT_LINK_TBL->links && ROOT_LINK_TBL->links[0]) {
         return ROOT_LINK_TBL->links[0]->f_url;
@@ -383,6 +375,11 @@ static int follow_one_redirect(CURL *curl, const char *base_url)
     return 1;
 }
 
+int Transfer_follow_redirect(CURL *curl, const char *base_url)
+{
+    return follow_one_redirect(curl, base_url);
+}
+
 static void filestat_on_complete(TransferStruct *ts, CURL *curl,
                                  CURLcode result, const char *url)
 {
@@ -637,14 +634,14 @@ void Link_set_file_stat(Link *this_link, CURL *curl)
     }
 }
 
-TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
+CURL *Link_setup_full_download(Link *link, TransferStruct *ts,
+                               TransferStruct *header)
 {
     char *url = link->f_url;
     CURL *curl = Link_to_curl(link);
-
-    TransferStruct ts = {0};
-    ts.type = DATA;
-    ts.transferring = 1;
+    if (!curl) {
+        return NULL;
+    }
 
     /*
      * When --website-mode is active, cap the full-body download at
@@ -658,41 +655,60 @@ TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
      * unambiguously a directory listing and may legitimately exceed
      * max_html_size, so it is downloaded in full.
      */
-    int capped = 0;
     if (CONFIG.website_mode && CONFIG.max_html_size > 0) {
         const char *qf = strpbrk(url, "?#");
         size_t tlen = qf ? (size_t)(qf - url) : strlen(url);
         int real_dir = (tlen > 0 && url[tlen - 1] == '/');
         if (!real_dir) {
-            ts.size_cap = (size_t)CONFIG.max_html_size;
-            capped = 1;
+            ts->size_cap = (size_t)CONFIG.max_html_size;
         }
     }
 
-    TransferStruct header_local = {0};
-    TransferStruct *header_ptr = header_out ? header_out : &header_local;
-    header_ptr->curr_size = 0;
-    header_ptr->data = NULL;
-    header_ptr->type = DATA;
+    header->curr_size = 0;
+    header->data = NULL;
+    header->type = DATA;
 
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION,
-                                    capped ? write_memory_capped_callback
-                                           : write_memory_callback);
+                                    ts->size_cap ? write_memory_capped_callback
+                                                 : write_memory_callback);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
-    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&ts);
+    ret = curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)ts);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
-    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)&ts);
+    ret = curl_easy_setopt(curl, CURLOPT_PRIVATE, (void *)ts);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
-    ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header_ptr);
+    ret = curl_easy_setopt(curl, CURLOPT_HEADERDATA, (void *)header);
     if (ret) {
         lprintf(error, "%s\n", curl_easy_strerror(ret));
     }
+
+    return curl;
+}
+
+TransferStruct Link_download_full(Link *link, TransferStruct *header_out)
+{
+    TransferStruct ts = {0};
+    ts.type = DATA;
+    ts.transferring = 1;
+
+    TransferStruct header_local = {0};
+    TransferStruct *header_ptr = header_out ? header_out : &header_local;
+
+    CURL *curl = Link_setup_full_download(link, &ts, header_ptr);
+    if (!curl) {
+        lprintf(error, "failed to set up the full download for %s\n",
+                link->f_url);
+        ts.failed = 1;
+        return ts;
+    }
+
+    char *url = link->f_url;
+    CURLcode ret = 0;
 
     /*
      * If we get temporary HTTP failure, wait for 5 seconds before retry

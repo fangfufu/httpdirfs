@@ -45,6 +45,14 @@ typedef struct TransferStruct TransferStruct;
  */
 typedef enum { FILESTAT = 's', DATA = 'd' } TransferType;
 
+/*
+ * Maximum number of redirect hops we are willing to follow when resolving a
+ * link. Redirects are followed manually (FOLLOWLOCATION is off) so each hop
+ * can be re-checked against the mounted origin before headers / credentials
+ * are sent to it.
+ */
+#define MAX_REDIRECTS 5
+
 /**
  * \brief Callback for asynchronous transfer completion
  */
@@ -71,6 +79,8 @@ struct TransferStruct {
     ActiveDownload *ad_ptr;
     /** \brief Optional completion callback for asynchronous transfers */
     TransferCompleteCb on_complete;
+    /** \brief Opaque owner pointer for the transfer (async state machine) */
+    void *user_data;
     /** \brief Abort the transfer once curr_size exceeds this (0 = no cap) */
     size_t size_cap;
     /** \brief Set to 1 by the capped callback if the transfer was aborted */
@@ -121,6 +131,36 @@ void Link_set_file_stat(Link *this_link, CURL *curl);
 LinkType Link_classify_response(LinkType current_type, long http_resp,
                                 curl_off_t cl, const char *content_type,
                                 size_t *content_len_out);
+
+/**
+ * \brief Configure an easy handle for a full-body (no RANGE) download
+ * \details Attaches the body and header write callbacks (with the
+ * max_html_size cap when --website-mode caps the URL) and points the
+ * handle at head_link's URL. The handle is NOT added to the multi
+ * interface: the caller adds it (transfer_blocking() or a requeue) and
+ * owns its lifetime.
+ */
+CURL *Link_setup_full_download(Link *head_link, TransferStruct *ts,
+                               TransferStruct *header);
+
+/**
+ * \brief Manually follow one redirect hop of a completed transfer
+ * \details Runs with transfer_lock held (completion-callback context).
+ * Re-checks the target against the mounted origin and re-applies the
+ * per-origin headers/credentials before re-pointing the handle.
+ * \return 1 if the handle was re-pointed at the next hop, 0 if there is
+ * no redirect, -1 if the redirect was rejected (cross-origin)
+ */
+int Transfer_follow_redirect(CURL *curl, const char *base_url);
+
+/**
+ * \brief the mounted origin's reference URL for same-origin checks
+ * \details Prefer the published root table's head link; fall back to the
+ * link's own parent table head link (available during table construction,
+ * before the root table is published). Returns NULL if no valid reference
+ * URL is available.
+ */
+const char *origin_base_url(Link *link);
 
 /**
  * \brief Download a link's content to memory

@@ -39,6 +39,7 @@
 typedef struct Cache Cache;
 typedef struct Link Link;
 typedef struct LinkTable LinkTable;
+struct TransferStruct;
 
 /**
  * \brief the link type
@@ -94,6 +95,10 @@ struct Link {
     char *virtual_content;
     /** \brief Whether this link is a virtual link (not backed by network) */
     int is_virtual;
+    /** \brief Whether this directory link is hidden from readdir output
+     *  because its file count is not known yet (background preloading)
+     */
+    int hidden;
 };
 
 /**
@@ -116,6 +121,29 @@ LinkTable *LinkSystem_init(const char *raw_url);
  * \brief create a new LinkTable
  */
 LinkTable *LinkTable_new(const char *url, LinkTable *parent_tbl);
+
+/**
+ * \brief begin building a NORMAL-mode listing table for url
+ * \details Allocates the table (fresh index_time, head link) and links it
+ * to its parent; the listing download runs under the table's head link.
+ * Shared by the synchronous path (LinkTable_new) and the asynchronous
+ * preload path.
+ */
+LinkTable *LinkTable_begin_listing(const char *url, LinkTable *parent_tbl);
+
+/**
+ * \brief apply a downloaded listing body to a begun table
+ * \details The synchronous and asynchronous download paths funnel through
+ * here. A failed fetch (non-200, non-temporary) marks the table as failed
+ * (index_time == 0) so callers do not cache or attach it; an empty body or
+ * a capped download keeps the table as an empty folder; otherwise the body
+ * is parsed, the table is filled, and the raw response is saved to the
+ * container cache. Consumes the transfer: all of ts's and header's buffers
+ * (including ts->eff_url) are freed.
+ */
+void LinkTable_finish_listing(LinkTable *linktbl, const char *url,
+                              struct TransferStruct *ts,
+                              struct TransferStruct *header);
 
 /**
  * \brief find the link associated with a path
@@ -152,6 +180,49 @@ void LinkTable_unref(LinkTable *tbl);
  * \brief mark a LinkTable as orphaned so it can be evicted
  */
 void LinkTable_mark_orphaned(LinkTable *tbl);
+
+/**
+ * \brief whether a link should be reported by readdir
+ * \details a link is listed unless it is LINK_INVALID or hidden because its
+ * directory listing has not been preloaded yet
+ */
+int Link_should_list(const Link *link);
+
+/**
+ * \brief download a directory listing and attach it to its link
+ * \details shared by client code and the background preload worker. If the
+ * link already has a live (non-expired) table it is returned as-is.
+ * Otherwise a fresh table is downloaded (mode-appropriate loader) and
+ * attached, racing safely with concurrent loaders.
+ * \param link the directory link to load
+ * \param created_new out parameter; set to 1 iff a fresh table was attached
+ * by this call, 0 if an existing table was returned. May be NULL.
+ * \return the table carrying exactly one reference for the caller, or NULL
+ * if the download failed (a failed table is never attached). On the rare
+ * allocation failure the link is marked LINK_INVALID.
+ */
+LinkTable *LinkTable_load_and_attach(Link *link, int *created_new);
+
+/**
+ * \brief attach a fully loaded table to its link (async preload path)
+ * \details Attaches exactly like the tail of LinkTable_load_and_attach(),
+ * racing safely with concurrent on-demand loaders. A failed table
+ * (index_time == 0) is freed and the entry left without a table so the
+ * next access retries the download.
+ * \return the table carrying exactly one reference for the caller, or NULL
+ * (failed table, already freed).
+ */
+LinkTable *LinkTable_attach_loaded(Link *link, LinkTable *new_table);
+
+/**
+ * \brief schedule background preloading of a freshly loaded table's
+ * directory children
+ * \details guarded no-op unless progressive preloading is enabled, the mode
+ * is NORMAL, and the table loaded successfully. Otherwise each plain
+ * (non-virtual) LINK_DIR child is hidden and enqueued, with one
+ * queue-lifetime reference on the table per enqueued link.
+ */
+void Link_preload_directories(LinkTable *tbl);
 
 /**
  * \brief print a LinkTable

@@ -98,11 +98,21 @@ cleanup() {
         do_unmount "${ADV_MOUNT_DIR}"
         sleep 1
     fi
+    if [[ -n "${PRELOAD_MOUNT_DIR:-}" ]] \
+        && mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+        do_unmount "${PRELOAD_MOUNT_DIR}"
+        sleep 1
+    fi
 
-    # Stop HTTP server
+    # Stop HTTP servers
     if [[ -n "${HTTP_PID:-}" ]] && kill -0 "${HTTP_PID}" 2>/dev/null; then
         kill "${HTTP_PID}" 2>/dev/null || true
         wait "${HTTP_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${PRELOAD_HTTP_PID:-}" ]] \
+        && kill -0 "${PRELOAD_HTTP_PID}" 2>/dev/null; then
+        kill "${PRELOAD_HTTP_PID}" 2>/dev/null || true
+        wait "${PRELOAD_HTTP_PID}" 2>/dev/null || true
     fi
 
     # Remove temp directories
@@ -1746,6 +1756,133 @@ for name, info in sorted(m.items()):
 
     done
 fi
+fi
+
+# ─── Progressive directory preload tests ────────────────────────────────────
+
+log_info "=== Progressive directory preload tests ==="
+
+PRELOAD_SERVE_DIR="${WORK_DIR}/preload_serve"
+PRELOAD_MOUNT_DIR="${WORK_DIR}/preload_mnt"
+PRELOAD_PORT_FILE="${WORK_DIR}/preload_port"
+PRELOAD_SUBDIRS=12
+mkdir -p "${PRELOAD_SERVE_DIR}" "${PRELOAD_MOUNT_DIR}"
+
+for i in $(seq 1 "${PRELOAD_SUBDIRS}"); do
+    mkdir -p "${PRELOAD_SERVE_DIR}/sub${i}"
+    echo "preload-${i}" > "${PRELOAD_SERVE_DIR}/sub${i}/f${i}.txt"
+done
+
+python3 "${SCRIPT_DIR}/range_http_server.py" \
+    "${PRELOAD_SERVE_DIR}" 0 "${PRELOAD_PORT_FILE}" &
+PRELOAD_HTTP_PID=$!
+
+for i in $(seq 1 10); do
+    if [[ -f "${PRELOAD_PORT_FILE}" ]]; then
+        break
+    fi
+    sleep 0.5
+done
+
+if [[ ! -f "${PRELOAD_PORT_FILE}" ]]; then
+    skip "Preload test: HTTP server did not start"
+else
+    PRELOAD_PORT="$(cat "${PRELOAD_PORT_FILE}")"
+    PRELOAD_URL="http://127.0.0.1:${PRELOAD_PORT}/"
+
+    # The preload worker pool is started before the FUSE session, so the
+    # mount must run in the foreground (-f); FUSE daemonization would
+    # terminate the workers.
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --progressive-directory-preload \
+        -o entry_timeout=0 \
+        "${PRELOAD_URL}" \
+        "${PRELOAD_MOUNT_DIR}" &
+    PRELOAD_HTTPDIRFS_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        if mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+        log_error "Preload mount failed."
+        skip "Preload tests (mount failed)"
+    else
+        # Poll until every subdirectory has been preloaded and unhidden.
+        visible=0
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            visible=$(ls "${PRELOAD_MOUNT_DIR}" 2>/dev/null | grep -c '^sub' || true)
+            if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+                break
+            fi
+            sleep 1
+        done
+
+        if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+            pass "Preload: all ${PRELOAD_SUBDIRS} subdirectories became visible"
+        else
+            fail "Preload: only ${visible}/${PRELOAD_SUBDIRS} subdirectories became visible"
+        fi
+
+        if [[ "$(cat "${PRELOAD_MOUNT_DIR}/sub1/f1.txt" 2>/dev/null)" == "preload-1" ]]; then
+            pass "Preload: preloaded subdirectory content readable"
+        else
+            fail "Preload: preloaded subdirectory content unreadable"
+        fi
+
+        do_unmount "${PRELOAD_MOUNT_DIR}"
+        wait "${PRELOAD_HTTPDIRFS_PID}" 2>/dev/null || true
+        log_info "Preload mount unmounted."
+    fi
+
+    # Daemon (background) mode: the worker pool is started from the FUSE
+    # init callback inside the daemon child (post daemonizing fork), so
+    # preloads must still complete without -f.
+    log_info "--- Preload test: daemon (background) mode ---"
+    "${HTTPDIRFS_BIN}" \
+        --progressive-directory-preload \
+        -o entry_timeout=0 \
+        "${PRELOAD_URL}" \
+        "${PRELOAD_MOUNT_DIR}" &
+    PRELOAD_DAEMON_ORIG_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        if mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+        log_error "Preload daemon mount failed."
+        skip "Preload daemon-mode tests (mount failed)"
+    else
+        visible=0
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            visible=$(ls "${PRELOAD_MOUNT_DIR}" 2>/dev/null | grep -c '^sub' || true)
+            if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+                break
+            fi
+            sleep 1
+        done
+
+        if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+            pass "Preload (daemon mode): all ${PRELOAD_SUBDIRS} subdirectories became visible"
+        else
+            fail "Preload (daemon mode): only ${visible}/${PRELOAD_SUBDIRS} subdirectories became visible"
+        fi
+
+        do_unmount "${PRELOAD_MOUNT_DIR}"
+        wait "${PRELOAD_DAEMON_ORIG_PID}" 2>/dev/null || true
+        log_info "Preload daemon mount unmounted."
+    fi
+
+    kill "${PRELOAD_HTTP_PID}" 2>/dev/null || true
+    wait "${PRELOAD_HTTP_PID}" 2>/dev/null || true
 fi
 
 

@@ -124,6 +124,10 @@ typedef struct {
     int website_mode;
     /** \brief Maximum HTML size for directory listing promotion */
     off_t max_html_size;
+    /** \brief Hide directory entries from listings until their file count
+     *  is known, loading their listings in the background (NORMAL mode)
+     */
+    int progressive_dir_preload;
 } ConfigStruct;
 
 /**
