@@ -63,7 +63,7 @@ the [usage](docs/usage.md) page.
 When browsing a large directory listing, HTTPDirFS can hide subdirectory entries
 from the listing until their contents have been preloaded in the background
 using a background worker. This can be enabled with
-`--progressive-directory-preload` This avoid the flood of read requests when a
+`--progressive-directory-preload`. This avoids the flood of read requests when a
 file browser tries to calculate the number of files in the subdirectories.
 
 ```
@@ -148,11 +148,11 @@ This can be useful if the web server does not present a HTTP directory listing.
 
 ### Airsonic / Subsonic server support
 
-The Airsonic / Subsonic server support is dedicated the my Debian package
-maintainer Jerome Charaoui.You can mount the music collection on your Airsonic /
-Subsonic server (\*sonic), and browse them using your favourite file browser.
+The Airsonic / Subsonic server support is dedicated to my Debian package
+maintainer Jerome Charaoui. You can mount the music collection on your Airsonic
+/ Subsonic server (\*sonic), and browse them using your favourite file browser.
 For more information on how to use it, please refer to the
-[usage](USAGE.md#airsonic--subsonic-mounting-options) page.
+[usage](docs/usage.md#airsonic--subsonic-mounting-options) page.
 
 ### Configuration file support
 
