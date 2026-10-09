@@ -70,6 +70,15 @@ int transfer_nonblocking(CURL *curl);
 int transfer_requeue_locked(CURL *curl);
 
 /**
+ * \brief Remove a nonblocking curl handle from the multi interface
+ * \details Removes the handle from curl_multi and active_handles under
+ * transfer_lock.
+ * \return 0 if the handle was active and removed, 1 if it was not found,
+ * -1 on invalid argument
+ */
+int transfer_abort_nonblocking(CURL *curl);
+
+/**
  * \brief check if a HTTP response code corresponds to a temporary failure
  */
 int HTTP_temp_failure(HTTPResponseCode http_resp);

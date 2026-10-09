@@ -418,6 +418,33 @@ int transfer_requeue_locked(CURL *curl)
     return 0;
 }
 
+int transfer_abort_nonblocking(CURL *curl)
+{
+    if (!curl) {
+        return -1;
+    }
+    lprintf(network_lock_debug, "thread %lx: locking transfer_lock;\n",
+            (unsigned long)pthread_self());
+    PTHREAD_MUTEX_LOCK(&transfer_lock);
+
+    int found = 0;
+    for (size_t i = 0; i < n_active; i++) {
+        if (active_handles[i] == curl) {
+            found = 1;
+            break;
+        }
+    }
+    if (found) {
+        curl_multi_remove_handle(curl_multi, curl);
+        active_remove_handle(curl);
+    }
+
+    lprintf(network_lock_debug, "thread %lx: unlocking transfer_lock;\n",
+            (unsigned long)pthread_self());
+    PTHREAD_MUTEX_UNLOCK(&transfer_lock);
+    return found ? 0 : 1;
+}
+
 int HTTP_temp_failure(HTTPResponseCode http_resp)
 {
     switch (http_resp) {

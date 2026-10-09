@@ -229,9 +229,9 @@ Preload_enqueue(link);
   idempotently with concurrent on-demand loads. The link is then unhidden and
   its queue-lifetime reference released.
 - At process exit an `atexit` handler sets a stopping flag, broadcasts, and
-  joins the worker; pending retry deadlines are aborted (not waited out) so the
-  process can exit, and the worker finalizes its in-flight batch before
-  returning.
+  joins the worker; in-flight fetches and pending retry deadlines are aborted
+  (not waited out) so the process can exit, and the worker finalizes its
+  in-flight batch before returning.
 
 ______________________________________________________________________
 

@@ -2288,6 +2288,21 @@ void test_preload_worker_cached_listing(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_transfer_abort_nonblocking(void)
+{
+    TEST_ASSERT_EQUAL_INT(-1, transfer_abort_nonblocking(NULL));
+
+    CURL *curl = curl_easy_init();
+    TEST_ASSERT_NOT_NULL(curl);
+    TEST_ASSERT_EQUAL_INT(1, transfer_abort_nonblocking(curl));
+
+    curl_easy_setopt(curl, CURLOPT_URL, "http://127.0.0.1:1/");
+    TEST_ASSERT_EQUAL_INT(0, transfer_nonblocking(curl));
+    TEST_ASSERT_EQUAL_INT(0, transfer_abort_nonblocking(curl));
+    TEST_ASSERT_EQUAL_INT(1, transfer_abort_nonblocking(curl));
+    curl_easy_cleanup(curl);
+}
+
 int main(void)
 {
     /*
@@ -2403,6 +2418,7 @@ int main(void)
     RUN_TEST(test_LinkTable_try_load_cached_hit);
     RUN_TEST(test_LinkTable_try_load_cached_expired);
     RUN_TEST(test_preload_worker_cached_listing);
+    RUN_TEST(test_transfer_abort_nonblocking);
     RUN_TEST(test_LinkTable_load_and_attach_existing_table);
     RUN_TEST(test_LinkTable_load_and_attach_null_link);
     RUN_TEST(test_LinkTable_load_and_attach_failure_not_attached);

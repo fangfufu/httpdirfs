@@ -78,7 +78,7 @@ static pthread_cond_t q_not_empty = PTHREAD_COND_INITIALIZER;
 static PreloadItem *q_head = NULL;
 static PreloadItem *q_tail = NULL;
 static int q_depth = 0;
-static int stopping = 0;
+static volatile int stopping = 0;
 static pthread_t worker;
 static int worker_started = 0;
 /** \brief the batch currently in flight; touched by the worker only */
@@ -278,6 +278,32 @@ static int all_fetches_finished(void)
     }
     return 1;
 }
+/*
+ * Abort all in-flight fetches when stopping. Removes active handles from the
+ * multi handle under transfer_lock, cancels any pending retry deadlines, and
+ * marks every fetch as failed and finished so the shutdown loop can exit
+ * immediately.
+ */
+static void abort_inflight_fetches(void)
+{
+    for (PreloadFetch *f = inflight; f; f = f->next) {
+        if (f->finished) {
+            continue;
+        }
+        if (f->retry_at) {
+            f->retry_at = 0;
+        } else if (f->curl) {
+            transfer_abort_nonblocking(f->curl);
+        }
+        if (f->curl) {
+            curl_easy_cleanup(f->curl);
+            f->curl = NULL;
+        }
+        f->ts.transferring = 0;
+        f->ts.failed = 1;
+        f->finished = 1;
+    }
+}
 
 /*
  * Re-add handles whose temporary-failure retry deadline has come due.
@@ -358,12 +384,20 @@ static void *preload_worker(void *arg)
         while (q_head == NULL && !stopping) {
             PTHREAD_COND_WAIT(&q_not_empty, &q_lock);
         }
-        if (q_head == NULL) {
+        if (stopping) {
             /*
-             * Queue empty and we are stopping: exit. The loop only
-             * re-enters while work remains, so every in-flight fetch was
-             * finalized before the last batch finished.
+             * Queue empty or stopping: discard any queued items without
+             * fetching and exit.
              */
+            while (q_head) {
+                PreloadItem *item = q_head;
+                q_head = item->next;
+                item->link->hidden = 0;
+                LinkTable_unref(item->link->parent_table);
+                FREE(item);
+            }
+            q_tail = NULL;
+            q_depth = 0;
             PTHREAD_MUTEX_UNLOCK(&q_lock);
             return NULL;
         }
@@ -380,18 +414,29 @@ static void *preload_worker(void *arg)
         PreloadItem *item = batch;
         while (item) {
             PreloadItem *next = item->next;
-            start_fetch(item->link);
+            if (stopping) {
+                item->link->hidden = 0;
+                LinkTable_unref(item->link->parent_table);
+            } else {
+                start_fetch(item->link);
+            }
             FREE(item);
             item = next;
         }
 
         /*
          * Pump until every fetch in the batch reaches a terminal state.
+         * When stopping is set, abort unfinished in-flight transfers
+         * immediately so shutdown is not blocked by stalled connections.
          * curl_multi_perform_once() blocks up to 100 ms waiting for
          * I/O, so this is not a busy loop; completion callbacks may run on
          * any thread that pumps the shared multi handle.
          */
         while (!all_fetches_finished()) {
+            if (stopping) {
+                abort_inflight_fetches();
+                break;
+            }
             curl_multi_perform_once();
             requeue_due_retries();
         }
@@ -417,6 +462,8 @@ static void preload_shutdown(void)
         while (q_head) {
             PreloadItem *item = q_head;
             q_head = item->next;
+            item->link->hidden = 0;
+            LinkTable_unref(item->link->parent_table);
             FREE(item);
         }
         q_tail = NULL;
@@ -429,8 +476,8 @@ static void preload_shutdown(void)
     PTHREAD_MUTEX_UNLOCK(&q_lock);
 
     /*
-     * The worker finalizes its in-flight batch and drains the queue before
-     * exiting, so after the join the queue is empty.
+     * The worker aborts any unfinished in-flight fetches, drains the queue,
+     * and exits, so after the join the queue is empty.
      */
     pthread_join(worker, NULL);
     worker_started = 0;
@@ -465,6 +512,11 @@ int Preload_enqueue(Link *link)
     item->link = link;
 
     PTHREAD_MUTEX_LOCK(&q_lock);
+    if (stopping) {
+        PTHREAD_MUTEX_UNLOCK(&q_lock);
+        FREE(item);
+        return -1;
+    }
     if (q_tail) {
         q_tail->next = item;
     } else {
