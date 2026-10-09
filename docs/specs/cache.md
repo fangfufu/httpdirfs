@@ -831,18 +831,18 @@ ______________________________________________________________________
 
 ## 7. Configuration & CLI Options
 
-| Option                      | Config field              | Default  | Effect                                                                        |
-| --------------------------- | ------------------------- | -------- | ----------------------------------------------------------------------------- |
-| `--cache`                   | `cache_enabled`           | off      | Enables the entire cache subsystem                                            |
-| `--cache-location <dir>`    | `cache_dir`               | —        | Uses `<dir>` as the cache root (origin subdirs appended)                      |
-| `--dl-seg-size <size>`      | `data_blksz`              | `8M`     | Segment/block size; must be ≥ 1 MiB                                           |
-| `--refresh-timeout <sec>`   | `refresh_timeout`         | `3600`   | Freshness limit for all three domains (Section 4)                             |
-| `--cache-min-size <size>`   | `cache_min_size`          | −1 (off) | Skip caching files smaller than this                                          |
-| `--cache-max-size <size>`   | `cache_max_size`          | −1 (off) | Skip caching files larger than this                                           |
-| `--max-conns <n>`           | `max_conns`               | `6`      | Caps background download workers: `max(1, n/2)` per file                      |
-| `--cache-clear`             | `cache_clear`             | —        | Purge the whole cache root, then exit                                         |
-| `--cache-clear-host <h>`    | `cache_clear_host`        | —        | Purge one origin's cache, then exit                                           |
-| `--progressive-dir-preload` | `progressive_dir_preload` | off      | Background listing preloader; a consumer of the container cache (Section 6.8) |
+| Option                            | Config field              | Default  | Effect                                                                        |
+| --------------------------------- | ------------------------- | -------- | ----------------------------------------------------------------------------- |
+| `--cache`                         | `cache_enabled`           | off      | Enables the entire cache subsystem                                            |
+| `--cache-location <dir>`          | `cache_dir`               | —        | Uses `<dir>` as the cache root (origin subdirs appended)                      |
+| `--dl-seg-size <size>`            | `data_blksz`              | `8M`     | Segment/block size; must be ≥ 1 MiB                                           |
+| `--refresh-timeout <sec>`         | `refresh_timeout`         | `3600`   | Freshness limit for all three domains (Section 4)                             |
+| `--cache-min-size <size>`         | `cache_min_size`          | −1 (off) | Skip caching files smaller than this                                          |
+| `--cache-max-size <size>`         | `cache_max_size`          | −1 (off) | Skip caching files larger than this                                           |
+| `--max-conns <n>`                 | `max_conns`               | `6`      | Caps background download workers: `max(1, n/2)` per file                      |
+| `--cache-clear`                   | `cache_clear`             | —        | Purge the whole cache root, then exit                                         |
+| `--cache-clear-host <h>`          | `cache_clear_host`        | —        | Purge one origin's cache, then exit                                           |
+| `--progressive-directory-preload` | `progressive_dir_preload` | off      | Background listing preloader; a consumer of the container cache (Section 6.8) |
 
 Size options accept suffixes (e.g. `1M`, `8M`, `1G`). `--cache-clear` and
 `--cache-clear-host` are executed after the full argument list is parsed (so
