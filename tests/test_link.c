@@ -731,6 +731,24 @@ void test_ignore_anchors_enabled(void)
     LinkTable_free(table);
 }
 
+void test_LinkTable_parse_html_long_anchor(void)
+{
+    LinkTable *table = LinkTable_alloc("https://example.com/dir/");
+    char expected[300];
+    memset(expected, 'A', 256);
+    expected[256] = '\0';
+    char html[512];
+    snprintf(html, sizeof(html),
+             "<html><body><a href=\"file.txt\">%s</a></body></html>", expected);
+
+    LinkTable_parse_html(table, "https://example.com/dir/", html);
+
+    TEST_ASSERT_EQUAL_INT(2, table->size);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/file.txt",
+                             table->links[1]->f_url);
+    LinkTable_free(table);
+}
+
 void test_diagnostics_add(void)
 {
     LinkTable *tbl = LinkTable_alloc("http://localhost/");
@@ -1089,6 +1107,47 @@ void test_extract_anchor_text(void)
     text = extract_anchor_text(NULL);
     TEST_ASSERT_EQUAL_STRING("", text);
     FREE(text);
+
+    // Anchor text boundary tests (issue #308: 255, 256, 257, 1024 bytes)
+    size_t test_lens[] = {255, 256, 257, 1024};
+    for (size_t i = 0; i < sizeof(test_lens) / sizeof(test_lens[0]); i++) {
+        size_t t_len = test_lens[i];
+        char *expected = CALLOC(1, t_len + 1);
+        memset(expected, 'A', t_len);
+        expected[t_len] = '\0';
+        char *html = CALLOC(1, t_len + 64);
+        snprintf(html, t_len + 64, "<a href='/test'>%s</a>", expected);
+        out = gumbo_parse(html);
+        text = extract_anchor_text(find_anchor_node(out->root));
+        TEST_ASSERT_EQUAL_STRING(expected, text);
+        FREE(text);
+        gumbo_destroy_output(&kGumboDefaultOptions, out);
+        FREE(html);
+        FREE(expected);
+    }
+
+    // Cumulative text across multiple nested tags crossing initial capacity
+    out = gumbo_parse("<a href='/test'>"
+                      "<span>"
+                      "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+                      "AAAAAAAA</span>"
+                      "<span>"
+                      "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB"
+                      "BBBBBBBB</span>"
+                      "<span>"
+                      "CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC"
+                      "CCCCCCCC</span>"
+                      "<span>"
+                      "DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD"
+                      "DDDDDDDD</span>"
+                      "<span>"
+                      "EEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE"
+                      "EEEEEEEE</span>"
+                      "</a>");
+    text = extract_anchor_text(find_anchor_node(out->root));
+    TEST_ASSERT_EQUAL_INT(320, strlen(text));
+    FREE(text);
+    gumbo_destroy_output(&kGumboDefaultOptions, out);
 }
 
 void test_extract_url_path_segments(void)
@@ -2366,6 +2425,7 @@ int main(void)
     RUN_TEST(test_link_hash_str);
     RUN_TEST(test_LinkHashSet);
     RUN_TEST(test_LinkTable_parse_html_duplicates);
+    RUN_TEST(test_LinkTable_parse_html_long_anchor);
 
     /* ignore_anchors */
     RUN_TEST(test_ignore_anchors_default);
