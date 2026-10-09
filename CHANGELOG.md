@@ -6,6 +6,107 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0](https://github.com/fangfufu/httpdirfs/compare/1.3.3...2.0.0) (2026-10-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* the --html-is-directory flag is removed. Use --website-mode instead to promote linked text/html resources into virtual directories. The internal CONFIG.html_is_directory field is renamed to CONFIG.website_mode.
+* **config:** --dl-seg-size 8 previously meant 8 MB and now means 8 bytes. Use --dl-seg-size 8M for the old behavior.
+* **cache:** --cache-location previously used the given path verbatim as the cache directory of the mounted server; it is now a root under which each server origin gets its own subdirectory. Caches written by the old verbatim layout are no longer recognized; remove them manually.
+* **transfer:** redirect following is now manual and restricted to same-origin targets by default, capped at 5 hops. 1.3.3 relied on libcurl's automatic following, which also allowed cross-origin redirects and up to 50 hops. Cross-origin redirects now fail the transfer unless --allow-external-origin is set.
+* **parsing:** the --external-links flag is removed; use --allow-external-origin to include cross-origin links from directory listings. The default parsing pipeline is also unified: directory entry naming now uses universal anchor-text extraction with collision-free progressive URL path escalation, so mounted entry names may differ from 1.3.3.
+* **cache:** the on-disk cache format changes from the multi-file layout (.LinkTable, .meta, .data) to a single container file per URL. Caches written by 1.3.3 are no longer recognized and are ignored on upgrade; remove them manually (e.g. --cache-clear) and expect a full re-download.
+
+### Features
+
+* add --ignore-anchors and fix relative links ([a2fdf2a](https://github.com/fangfufu/httpdirfs/commit/a2fdf2a1866dc741cb0a7b61c8dbdb1b53940a57))
+* add .httpdirfs diagnostics directory ([99dacd0](https://github.com/fangfufu/httpdirfs/commit/99dacd04c959e9cdf5c7121c9f57a2b70da4c1e6))
+* **cache:** implement unified single-file cache architecture ([87653b9](https://github.com/fangfufu/httpdirfs/commit/87653b9b5914cd6aeccf654852e10ff421078305))
+* **cache:** make --cache-location the cache location root ([fa48b8c](https://github.com/fangfufu/httpdirfs/commit/fa48b8c035323a276747a58913eaa3171584df62))
+* **config:** add K/M/G suffix support to size flags ([092260c](https://github.com/fangfufu/httpdirfs/commit/092260c1af68459e10d269133f8f5da922ab8938))
+* implement advanced parsing mode ([5ec481a](https://github.com/fangfufu/httpdirfs/commit/5ec481a4e7e5bc6dcf3f9b262edb23b7165851ba))
+* **parser:** gate media/asset resource extraction behind --website-mode ([051fcc7](https://github.com/fangfufu/httpdirfs/commit/051fcc701220aa49f2fdf8010c069aa14feced7a))
+* **parser:** materialize media and asset references from HTML pages ([5b94d27](https://github.com/fangfufu/httpdirfs/commit/5b94d27dc7d4e388c840bb61afe484165a3b5795))
+* **parsing:** unify HTML link parsing, drop --external-links ([9129063](https://github.com/fangfufu/httpdirfs/commit/9129063ad11ee530d6e4d6c504c916b3a15d2c39))
+* **preload:** add --progressive-directory-preload ([bd7e465](https://github.com/fangfufu/httpdirfs/commit/bd7e46519cf3b1bb78642b9753ced0b5283defb9))
+* **preload:** load cached listings in the worker ([192ef60](https://github.com/fangfufu/httpdirfs/commit/192ef60da5a51af26f97e75fd8f8bc4faab017f8))
+* rename --html-is-directory to --website-mode ([4dd815e](https://github.com/fangfufu/httpdirfs/commit/4dd815e5c93b895fc800f18d97505b7ecc3c725b))
+
+
+### Bug Fixes
+
+* address PR [#306](https://github.com/fangfufu/httpdirfs/issues/306) review findings ([25e4067](https://github.com/fangfufu/httpdirfs/commit/25e40673e6944c80bd8128ed46cc48f9d06de767))
+* address PR review findings in util, cache, and transfer ([0b55b02](https://github.com/fangfufu/httpdirfs/commit/0b55b0226bf6823b6173858fb8facc2548f56a0a))
+* **cache:** make cache clearing order-independent and XDG-spec compliant ([ec0b320](https://github.com/fangfufu/httpdirfs/commit/ec0b3206bf63e79a4fe7538995e67b2f7da01bcd))
+* **cache:** reject header_size larger than file in Cache_open ([46954f8](https://github.com/fangfufu/httpdirfs/commit/46954f825da62c34b8983f12769052abe443d4ce))
+* correct handle lifetime and cache write errors on HTTP failures ([aefd895](https://github.com/fangfufu/httpdirfs/commit/aefd895fd0c0830ee852f97bd6932f2a5b5e1ba0))
+* handle out-of-root URLs in cache path ([6b2dbed](https://github.com/fangfufu/httpdirfs/commit/6b2dbedb71ff6cc6f1cf5bf39d9c1b10013668f7))
+* **link:** retry root-table refresh after failed init ([21994ec](https://github.com/fangfufu/httpdirfs/commit/21994ec0029154489b57a9e14a32cda93cc7a4ac))
+* **network:** fail in-flight transfers on fatal multi error ([8ad4cca](https://github.com/fangfufu/httpdirfs/commit/8ad4cca5de48135b5709ba554cefdd987195db6f))
+* **network:** handle requeue failure in filestat_on_complete ([01f0d2f](https://github.com/fangfufu/httpdirfs/commit/01f0d2f8c6bc2a66f2b463fdac948edfffe3cd16))
+* **parser:** prevent heap overflow in gumbo text ([b933a5d](https://github.com/fangfufu/httpdirfs/commit/b933a5d6d93e4c87669854e475b03aec4f15bdf8)), closes [#308](https://github.com/fangfufu/httpdirfs/issues/308)
+* **preload:** abort in-flight transfers on shutdown ([72f1193](https://github.com/fangfufu/httpdirfs/commit/72f1193aa7234232072433f165df3ec0d31da182))
+* resolve listing links against effective URL and handle refresh failures ([15ca197](https://github.com/fangfufu/httpdirfs/commit/15ca19755d3d591cc1d3d780141cf7ea2847065f))
+* resolve sonar findings in cache, util, and tests ([7e0e56d](https://github.com/fangfufu/httpdirfs/commit/7e0e56dce7be6ce988ca8e9f1e27cc60d3e90f02))
+* statically init network mutexes and relax sparse-block assert on macOS ([c9b6402](https://github.com/fangfufu/httpdirfs/commit/c9b6402f56eac4dbb6782f33913ef6e06e75d3d3))
+* **tests:** hold a single file handle in head-to-data promotion test ([a5acbfe](https://github.com/fangfufu/httpdirfs/commit/a5acbfe9a4f0eb2e8bcf4fe1055417754f174b85))
+* **transfer:** gate redirect hops on origin and stop short-response retry ([08d268c](https://github.com/fangfufu/httpdirfs/commit/08d268ce2698451c071aab9ad7be858da68c8d1c))
+* **transfer:** reject cross-origin redirects when external origins disabled ([dbbaf5d](https://github.com/fangfufu/httpdirfs/commit/dbbaf5d9e9e68d1479dab8ebcbe4953f00a7f80d))
+* **transfer:** restrict manually followed redirects to http/https ([e78289b](https://github.com/fangfufu/httpdirfs/commit/e78289b1cf31a780f0004afb8604ba5666ce873d))
+* **transfer:** return per-read error on rejected range-request redirect ([5783b54](https://github.com/fangfufu/httpdirfs/commit/5783b54171f1bc4f93751504a8bb5a8bcc2110d7))
+
+
+### Performance Improvements
+
+* track HEAD freshness separately from payload download time ([dc523c6](https://github.com/fangfufu/httpdirfs/commit/dc523c6ae5f41a2a93a829b8459d46d290acbec3))
+
+
+### Documentation
+
+* add single-file cache architecture spec ([9b7495c](https://github.com/fangfufu/httpdirfs/commit/9b7495ca370e855588599d7d7e8ab0c72b9c889c))
+* convert cache plan to architectural spec ([830cbbd](https://github.com/fangfufu/httpdirfs/commit/830cbbd0e9b946ecda5c8752270880511c4b7e0a))
+* document advanced parsing mode and update help ([6fb2f05](https://github.com/fangfufu/httpdirfs/commit/6fb2f05075016d24b5f00cb407e56b8af8296f8e))
+* document non-directory listing website mounting ([866b297](https://github.com/fangfufu/httpdirfs/commit/866b297ee04e85718b62679700781c39a4c7408b))
+* **readme:** add missing period to intro sentence ([eef230e](https://github.com/fangfufu/httpdirfs/commit/eef230e5d85d4b587d5166a397291091fa0188bb))
+* **readme:** fix typos and broken usage link ([3b66eb3](https://github.com/fangfufu/httpdirfs/commit/3b66eb36b5426c67518f3c8a9e7136d7d8fb49f2))
+* **readme:** move preloading section up, demote warning to tip ([7b16f9e](https://github.com/fangfufu/httpdirfs/commit/7b16f9e4e9891b7b50b0fb305d12265ff4d6da97))
+* **readme:** relocate range-request note to Architecture section ([7efd936](https://github.com/fangfufu/httpdirfs/commit/7efd936be9f4696b44cc05d677eaae79f27e063e))
+* **readme:** rename 'non-directory listing websites' to 'generic websites' ([2a2a492](https://github.com/fangfufu/httpdirfs/commit/2a2a4928bcc5a4949e8fe27b3cd25734d23e9783))
+* reorganize documentation under docs directory ([b5fcb5e](https://github.com/fangfufu/httpdirfs/commit/b5fcb5e3063782d9821a8dbbbcdf39956c96d59d))
+* restructure README/USAGE sections and add 1.4.x cache warning ([f8d1119](https://github.com/fangfufu/httpdirfs/commit/f8d1119a381c6f8b04fe6b84d889aface79a347f))
+* spec, usage, and README; unit + integration coverage. ([bd7e465](https://github.com/fangfufu/httpdirfs/commit/bd7e46519cf3b1bb78642b9753ced0b5283defb9))
+* **spec:** align preload spec with the final implementation ([b080ad4](https://github.com/fangfufu/httpdirfs/commit/b080ad4efef6ee3327fdcfbe89e6201b58d8127a))
+* **spec:** clarify the deep direct-path access preload gap ([36a5229](https://github.com/fangfufu/httpdirfs/commit/36a522921f2a12165e25dd2703ecf575e900f803))
+* **spec:** fix preload CLI option in cache table ([9bd8db4](https://github.com/fangfufu/httpdirfs/commit/9bd8db45ec232d5795669bfb7cf41b877917f32c))
+* **spec:** rewrite cache spec to match the implementation ([e782fc4](https://github.com/fangfufu/httpdirfs/commit/e782fc40ae7f5c5df73fef14450b76d1817c2181))
+* **specs:** add classification matrix and align spec with code ([0f49a2a](https://github.com/fangfufu/httpdirfs/commit/0f49a2ae74f24517f24559fac3142d6b51be4fc3))
+* **specs:** rewrite cache formulae backslash-free for KaTeX on GitHub ([10b2889](https://github.com/fangfufu/httpdirfs/commit/10b28893d48d8b78f70afeaf518e9a3918aae246))
+* **specs:** rewrite formulae backslash-free for KaTeX on GitHub ([2ef5776](https://github.com/fangfufu/httpdirfs/commit/2ef5776140c32ff5ab4ed050d11a04050c194e43))
+* sync README, USAGE, and cache spec with code ([995054d](https://github.com/fangfufu/httpdirfs/commit/995054da763cdd641e5833aa1488b93315c1b488))
+* synchronize cache docs with unified spec ([c129a07](https://github.com/fangfufu/httpdirfs/commit/c129a07534376169c48b32f07f7824c069af64e5))
+* trim architecture block from cache.c ([3503edc](https://github.com/fangfufu/httpdirfs/commit/3503edc844b17a229da3d81db6ccf60a75b551af))
+
+
+### Continuous Integration
+
+* **codeql:** allow manual runs and cover release-please branch ([131318f](https://github.com/fangfufu/httpdirfs/commit/131318fac3d3d13808d778fdc18e450041a1d808))
+* configure Google Release Please action ([24164c4](https://github.com/fangfufu/httpdirfs/commit/24164c41a27a5e004d9a0eebe2e972ba14b8c679))
+
+
+### Build System
+
+* consolidate on a single build/ Meson directory ([1c774ee](https://github.com/fangfufu/httpdirfs/commit/1c774eee0600bc3af619a42801fae423a3ad6c18))
+* define VERSION in config.h instead of Meson macro injection ([23f9e85](https://github.com/fangfufu/httpdirfs/commit/23f9e85d516411e76d58e427961efa0ea6e7b813))
+* stop ignoring docs/planning in .gitignore ([bdfb994](https://github.com/fangfufu/httpdirfs/commit/bdfb99422a8cb9e9303fb47c609b7a8e40a564f6))
+
+
+### Code Refactoring
+
+* **config:** fold defaults into Config_init ([c509779](https://github.com/fangfufu/httpdirfs/commit/c5097798257760c7c65cd0f95c8a51fafae5b3e0))
+* resolve remaining sonar findings in src ([cc11d81](https://github.com/fangfufu/httpdirfs/commit/cc11d81da5d1c3ba89f14d75524137cacc6ae1aa))
+* **transfer:** hoist unknown-size classification above html-is-directory branch ([08df8d7](https://github.com/fangfufu/httpdirfs/commit/08df8d774ee9679093a64d394ba4752f36b6f497))
+
 ## [1.3.3] - 2026-06-11
 
 ### Added
