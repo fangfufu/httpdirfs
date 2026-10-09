@@ -207,9 +207,21 @@ static void collect_gumbo_text(const GumboNode *node, char **buf, size_t *len,
         const char *t = node->v.text.text;
         if (t) {
             size_t tlen = strlen(t);
-            if (*len + tlen + 1 > *cap) {
-                *cap = (*cap == 0) ? 256 : ((*cap * 2) + tlen + 1);
-                *buf = (char *)REALLOC(*buf, *cap);
+            if (tlen > SIZE_MAX - *len - 1) {
+                return;
+            }
+            size_t needed = *len + tlen + 1;
+            if (needed > *cap) {
+                size_t new_cap = (*cap == 0) ? 256 : *cap;
+                while (new_cap < needed) {
+                    if (new_cap > SIZE_MAX / 2) {
+                        new_cap = needed;
+                        break;
+                    }
+                    new_cap *= 2;
+                }
+                *buf = (char *)REALLOC(*buf, new_cap);
+                *cap = new_cap;
             }
             memcpy(*buf + *len, t, tlen);
             *len += tlen;
