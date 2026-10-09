@@ -34,9 +34,9 @@ jobs:
         with:
           languages: c
       - name: Setup Meson
-        run: meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
+        run: meson setup build -Dbuildtype=${{ matrix.buildtype }}
       - name: Compile
-        run: meson compile -C builddir
+        run: meson compile -C build
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
         with:

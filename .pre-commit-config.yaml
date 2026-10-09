@@ -125,4 +125,4 @@ repos:
     rev: v1.3.5
     hooks:
       - id: clang-tidy
-        args: ["-p=builddir", "--warnings-as-errors=*"]
+        args: ["-p=build", "--warnings-as-errors=*"]

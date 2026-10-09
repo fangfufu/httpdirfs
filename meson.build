@@ -1,5 +1,4 @@
 project('httpdirfs', 'c',
-    version: '1.3.3', # x-release-please-version
     license: 'GPL-3.0-or-later',
     default_options: [
         'buildtype=release',
@@ -30,8 +29,7 @@ c_args = [
     '-pthread',
     '-D_GNU_SOURCE',
     '-fstack-protector-all',
-    '-D_FORTIFY_SOURCE=2',
-    '-DVERSION="' + meson.project_version() + '"'
+    '-D_FORTIFY_SOURCE=2'
 ]
 
 if get_option('debug')

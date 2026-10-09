@@ -55,8 +55,8 @@
         }
       ],
       "extra-files": [
-        "meson.build",
-        "USAGE.md"
+        "src/config.h",
+        "docs/usage.md"
       ]
     }
   }
