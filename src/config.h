@@ -28,6 +28,8 @@
  * \brief Configuration options and defaults header
  */
 
+#define VERSION "1.3.3" /* x-release-please-version */
+
 #include <limits.h>
 #include <sys/types.h>
 
