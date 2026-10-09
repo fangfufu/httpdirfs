@@ -164,6 +164,25 @@ int LinkHashSet_add(LinkHashSet *set, const char *linkname)
     return 1;
 }
 
+int LinkHashSet_contains(LinkHashSet *set, const char *linkname)
+{
+    if (!set || !linkname || set->capacity <= 0) {
+        return 0;
+    }
+    unsigned int hash = link_hash_str(linkname);
+    int bucket = hash & (set->capacity - 1);
+    for (int probe = 0; probe < set->capacity; probe++) {
+        int b = (bucket + probe) & (set->capacity - 1);
+        if (!set->buckets[b]) {
+            return 0;
+        }
+        if (link_linknames_equal(set->buckets[b], linkname)) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
 void LinkHashSet_free(LinkHashSet *set)
 {
     if (!set) {
@@ -205,15 +224,17 @@ static void collect_gumbo_text(const GumboNode *node, char **buf, size_t *len,
     }
 }
 
-char *extract_anchor_text(const GumboNode *node)
+/**
+ * \brief Clean a raw anchor string in place into a filesystem-friendly name.
+ *
+ * Collapses whitespace, replaces '/' with '_', drops non-printable
+ * characters, and trims leading/trailing whitespace and slashes.
+ * \param raw The raw string (ownership is taken; it is freed internally).
+ * \param len The initial length of \p raw.
+ * \return A newly allocated cleaned string (never NULL).
+ */
+static char *clean_anchor_string(char *raw, size_t len)
 {
-    if (!node) {
-        return STRDUP("");
-    }
-    char *raw = NULL;
-    size_t len = 0;
-    size_t cap = 0;
-    collect_gumbo_text(node, &raw, &len, &cap);
     if (!raw || len == 0) {
         FREE(raw);
         return STRDUP("");
@@ -277,6 +298,47 @@ char *extract_anchor_text(const GumboNode *node)
     char *result = STRDUP(raw);
     FREE(raw);
     return result;
+}
+
+char *extract_anchor_text(const GumboNode *node)
+{
+    if (!node) {
+        return STRDUP("");
+    }
+    char *raw = NULL;
+    size_t len = 0;
+    size_t cap = 0;
+    collect_gumbo_text(node, &raw, &len, &cap);
+    return clean_anchor_string(raw, len);
+}
+
+/**
+ * \brief Derive a naming anchor from an <img> alt attribute.
+ *
+ * The alt text is used only when it is non-empty after cleaning and is not
+ * shared by multiple images on the same page (a duplicated alt is treated as
+ * generic filler).
+ * \param node The GumboNode of an img element.
+ * \param alt_dups Set of alt strings that appear more than once on the page.
+ * \return Newly allocated cleaned anchor, or NULL for filename-only naming.
+ */
+static char *img_alt_anchor(const GumboNode *node, LinkHashSet *alt_dups)
+{
+    GumboAttribute *alt
+        = gumbo_get_attribute(&node->v.element.attributes, "alt");
+    if (!alt || !alt->value) {
+        return NULL;
+    }
+    char *cleaned = clean_anchor_string(STRDUP(alt->value), strlen(alt->value));
+    if (cleaned[0] == '\0') {
+        FREE(cleaned);
+        return NULL;
+    }
+    if (alt_dups && LinkHashSet_contains(alt_dups, cleaned)) {
+        FREE(cleaned);
+        return NULL;
+    }
+    return cleaned;
 }
 
 static int anchor_matches_segment(const char *anchor, const char *seg)
@@ -429,25 +491,32 @@ int is_html_content_type(const char *ct)
     return 0;
 }
 
-static void process_anchor_node(const char *url, const GumboNode *node,
-                                LinkTable *linktbl, LinkHashSet *set,
-                                LinkHashSet *target_url_set)
+/**
+ * \brief Resolve a raw reference and add it to the link table if new.
+ *
+ * Shared by every reference kind (anchors and media resource elements).
+ * \param url The page URL the reference is relative to.
+ * \param raw_ref The raw attribute value (href / src / data / srcset
+ * candidate).
+ * \param anchor Optional cleaned naming hint (anchor text or img alt).
+ * NULL or empty falls back to URL-derived naming.
+ */
+static void process_link_ref(const char *url, const char *raw_ref,
+                             const char *anchor, LinkTable *linktbl,
+                             LinkHashSet *set, LinkHashSet *target_url_set)
 {
-    GumboAttribute *href
-        = gumbo_get_attribute(&node->v.element.attributes, "href");
-    if (!href) {
+    if (!raw_ref || raw_ref[0] == '\0') {
         return;
     }
-    const char *raw_href = href->value;
 
-    if (CONFIG.ignore_anchors && raw_href[0] == '#') {
+    if (CONFIG.ignore_anchors && raw_ref[0] == '#') {
         /* Skip intra-page HTML anchor / fragment links when requested */
         return;
     }
 
     char target_url[PATH_MAX + 1];
     int target_url_resolved
-        = resolve_target_url(url, raw_href, target_url, sizeof(target_url));
+        = resolve_target_url(url, raw_ref, target_url, sizeof(target_url));
     if (!target_url_resolved || is_ancestor_head_link(linktbl, target_url)) {
         return;
     }
@@ -466,16 +535,14 @@ static void process_anchor_node(const char *url, const GumboNode *node,
         }
     }
 
-    /* Early duplicate target link removal (first anchor text wins) */
+    /* Early duplicate target link removal (first reference wins) */
     if (!target_url_set || LinkHashSet_add(target_url_set, target_url)) {
-        char *anchor = extract_anchor_text(node);
         char **segments = NULL;
         int num_segments = 0;
         extract_url_path_segments(target_url, &segments, &num_segments);
 
         char *linkname
             = generate_collision_free_name(set, anchor, segments, num_segments);
-        FREE(anchor);
         free_url_path_segments(segments, num_segments);
 
         if (linkname && linkname[0] != '\0') {
@@ -493,24 +560,219 @@ static void process_anchor_node(const char *url, const GumboNode *node,
 }
 
 /**
- * Recursively walk the HTML DOM tree to extract links into the link table.
+ * \brief Process every candidate of a srcset attribute value.
+ *
+ * Format: "url [descriptor] (, url [descriptor] ...)*" where the descriptor
+ * is a width ("480w") or scale ("2x") hint. Each URL becomes a link.
+ */
+static void process_srcset_ref(const char *url, const char *srcset,
+                               const char *anchor, LinkTable *linktbl,
+                               LinkHashSet *set, LinkHashSet *target_url_set)
+{
+    if (!srcset || *srcset == '\0') {
+        return;
+    }
+    char candidate[PATH_MAX + 1];
+    const char *p = srcset;
+    while (*p) {
+        while (*p && isspace((unsigned char)*p)) {
+            p++;
+        }
+        if (*p == '\0') {
+            break;
+        }
+        size_t n = 0;
+        while (*p && !isspace((unsigned char)*p) && *p != ','
+               && n + 1 < sizeof(candidate)) {
+            candidate[n++] = *p++;
+        }
+        candidate[n] = '\0';
+        if (n > 0) {
+            process_link_ref(url, candidate, anchor, linktbl, set,
+                             target_url_set);
+        }
+        /* Skip the width / scale descriptor up to the next candidate */
+        while (*p && *p != ',') {
+            p++;
+        }
+        if (*p == ',') {
+            p++;
+        }
+    }
+}
+
+/**
+ * \brief Process a single named attribute of an element as a link reference.
+ */
+static void process_element_attr(const char *url, const GumboElement *el,
+                                 const char *attr_name, const char *anchor,
+                                 LinkTable *linktbl, LinkHashSet *set,
+                                 LinkHashSet *target_url_set)
+{
+    GumboAttribute *attr = gumbo_get_attribute(&el->attributes, attr_name);
+    if (attr && attr->value) {
+        process_link_ref(url, attr->value, anchor, linktbl, set,
+                         target_url_set);
+    }
+}
+
+/**
+ * \brief Process the link-bearing attributes of a resource element.
+ *
+ * In addition to \p attr_name, a srcset attribute (img / source) is
+ * expanded into its individual candidates.
+ */
+static void process_resource_element(const char *url, const GumboElement *el,
+                                     const char *attr_name, const char *anchor,
+                                     LinkTable *linktbl, LinkHashSet *set,
+                                     LinkHashSet *target_url_set)
+{
+    process_element_attr(url, el, attr_name, anchor, linktbl, set,
+                         target_url_set);
+    if (el->tag == GUMBO_TAG_IMG || el->tag == GUMBO_TAG_SOURCE) {
+        GumboAttribute *srcset = gumbo_get_attribute(&el->attributes, "srcset");
+        if (srcset && srcset->value) {
+            process_srcset_ref(url, srcset->value, anchor, linktbl, set,
+                               target_url_set);
+        }
+    }
+}
+
+/**
+ * \brief Collect img alt strings that occur more than once on the page.
+ *
+ * A repeated alt text is treated as generic filler and must not be used as
+ * a naming anchor (it would produce colliding or misleading names).
+ */
+static void collect_duplicate_alts(GumboNode *node, LinkHashSet *alt_seen,
+                                   LinkHashSet *alt_dups)
+{
+    if (node->type != GUMBO_NODE_ELEMENT) {
+        return;
+    }
+    if (node->v.element.tag == GUMBO_TAG_IMG) {
+        GumboAttribute *alt
+            = gumbo_get_attribute(&node->v.element.attributes, "alt");
+        if (alt && alt->value) {
+            char *cleaned
+                = clean_anchor_string(STRDUP(alt->value), strlen(alt->value));
+            if (cleaned[0] != '\0' && !LinkHashSet_add(alt_seen, cleaned)) {
+                LinkHashSet_add(alt_dups, cleaned);
+            }
+            FREE(cleaned);
+        }
+    }
+    GumboVector *children = &node->v.element.children;
+    for (size_t i = 0; i < children->length; ++i) {
+        collect_duplicate_alts((GumboNode *)children->data[i], alt_seen,
+                               alt_dups);
+    }
+}
+
+/**
+ * \brief Process the link-bearing attributes of a non-anchor resource
+ * element (<area>, <img>, <video>, <script>, <link>, ...).
+ */
+static void process_resource_node(const char *url, const GumboNode *node,
+                                  const GumboElement *el, LinkTable *linktbl,
+                                  LinkHashSet *set, LinkHashSet *target_url_set,
+                                  LinkHashSet *alt_dups)
+{
+    GumboAttribute *attr = NULL;
+
+    switch (el->tag) {
+    case GUMBO_TAG_AREA:
+        attr = gumbo_get_attribute(&el->attributes, "href");
+        if (attr && attr->value) {
+            char *anchor = extract_anchor_text(node);
+            process_link_ref(url, attr->value, anchor, linktbl, set,
+                             target_url_set);
+            FREE(anchor);
+        }
+        break;
+    case GUMBO_TAG_IMG: {
+        char *anchor = img_alt_anchor(node, alt_dups);
+        process_resource_element(url, el, "src", anchor, linktbl, set,
+                                 target_url_set);
+        FREE(anchor);
+        break;
+    }
+    case GUMBO_TAG_SOURCE:
+    case GUMBO_TAG_VIDEO:
+    case GUMBO_TAG_AUDIO:
+        process_resource_element(url, el, "src", NULL, linktbl, set,
+                                 target_url_set);
+        break;
+    case GUMBO_TAG_SCRIPT:
+        process_element_attr(url, el, "src", NULL, linktbl, set,
+                             target_url_set);
+        break;
+    case GUMBO_TAG_LINK:
+        process_element_attr(url, el, "href", NULL, linktbl, set,
+                             target_url_set);
+        break;
+    case GUMBO_TAG_IFRAME:
+    case GUMBO_TAG_FRAME:
+        process_element_attr(url, el, "src", NULL, linktbl, set,
+                             target_url_set);
+        break;
+    case GUMBO_TAG_OBJECT:
+        process_element_attr(url, el, "data", NULL, linktbl, set,
+                             target_url_set);
+        break;
+    case GUMBO_TAG_EMBED:
+    case GUMBO_TAG_TRACK:
+        process_element_attr(url, el, "src", NULL, linktbl, set,
+                             target_url_set);
+        break;
+    case GUMBO_TAG_INPUT:
+        attr = gumbo_get_attribute(&el->attributes, "type");
+        if (attr && attr->value && strcasecmp(attr->value, "image") == 0) {
+            process_element_attr(url, el, "src", NULL, linktbl, set,
+                                 target_url_set);
+        }
+        break;
+    default:
+        break;
+    }
+}
+
+/**
+ * Recursively walk the HTML DOM tree to extract anchor links and media
+ * resource references into the link table.
  */
 static void HTML_to_LinkTable(const char *url, GumboNode *node,
                               LinkTable *linktbl, LinkHashSet *set,
-                              LinkHashSet *target_url_set)
+                              LinkHashSet *target_url_set,
+                              LinkHashSet *alt_dups)
 {
     if (node->type != GUMBO_NODE_ELEMENT) {
         return;
     }
 
-    if (node->v.element.tag == GUMBO_TAG_A) {
-        process_anchor_node(url, node, linktbl, set, target_url_set);
+    const GumboElement *el = &node->v.element;
+    GumboAttribute *attr = NULL;
+
+    /* Only <a href> hyperlinks are extracted in normal mode; media and
+     * asset references (img / video / script / ...) are materialized only
+     * under --website-mode. */
+    if (el->tag == GUMBO_TAG_A) {
+        attr = gumbo_get_attribute(&el->attributes, "href");
+        if (attr && attr->value) {
+            char *anchor = extract_anchor_text(node);
+            process_link_ref(url, attr->value, anchor, linktbl, set,
+                             target_url_set);
+            FREE(anchor);
+        }
+    } else if (CONFIG.website_mode) {
+        process_resource_node(url, node, el, linktbl, set, target_url_set,
+                              alt_dups);
     }
 
-    GumboVector *children = &node->v.element.children;
+    const GumboVector *children = &el->children;
     for (unsigned int i = 0; i < children->length; ++i) {
         HTML_to_LinkTable(url, (GumboNode *)children->data[i], linktbl, set,
-                          target_url_set);
+                          target_url_set, alt_dups);
     }
 }
 
@@ -520,8 +782,22 @@ void LinkTable_parse_html(LinkTable *linktbl, const char *url, const char *html)
     LinkHashSet *set = LinkHashSet_new(linktbl->size * 2);
     LinkHashSet *target_url_set = LinkHashSet_new(linktbl->size * 2);
 
-    HTML_to_LinkTable(url, output->root, linktbl, set, target_url_set);
+    /* First pass: find img alt texts that are reused on the page, so that
+     * duplicated alts are not used as naming anchors by any image. Only
+     * needed in --website-mode, where <img> references are extracted. */
+    LinkHashSet *alt_seen = NULL;
+    LinkHashSet *alt_dups = NULL;
+    if (CONFIG.website_mode) {
+        alt_seen = LinkHashSet_new(16);
+        alt_dups = LinkHashSet_new(16);
+        collect_duplicate_alts(output->root, alt_seen, alt_dups);
+    }
 
+    HTML_to_LinkTable(url, output->root, linktbl, set, target_url_set,
+                      alt_dups);
+
+    LinkHashSet_free(alt_dups);
+    LinkHashSet_free(alt_seen);
     LinkHashSet_free(target_url_set);
     LinkHashSet_free(set);
     gumbo_destroy_output(&kGumboDefaultOptions, output);

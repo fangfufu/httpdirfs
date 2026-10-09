@@ -19,7 +19,8 @@ lib_srcs = [
     'src/config.c',
     'src/transfer.c',
     'src/url.c',
-    'src/link_parser.c'
+    'src/link_parser.c',
+    'src/preload.c'
 ]
 
 c_args = [

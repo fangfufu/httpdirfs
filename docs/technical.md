@@ -44,7 +44,7 @@ Filenames must:
 - Must not contain '/' in the middle of the filename.
 - Must not end with '/'.
 
-Without the `--html-is-directory` flag, directories must:
+Without the `--website-mode` flag, directories must:
 
 - Consists of printable characters
 - Must not contain '/' in the middle of the directory name.

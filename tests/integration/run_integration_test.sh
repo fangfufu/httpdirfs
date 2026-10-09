@@ -98,11 +98,21 @@ cleanup() {
         do_unmount "${ADV_MOUNT_DIR}"
         sleep 1
     fi
+    if [[ -n "${PRELOAD_MOUNT_DIR:-}" ]] \
+        && mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+        do_unmount "${PRELOAD_MOUNT_DIR}"
+        sleep 1
+    fi
 
-    # Stop HTTP server
+    # Stop HTTP servers
     if [[ -n "${HTTP_PID:-}" ]] && kill -0 "${HTTP_PID}" 2>/dev/null; then
         kill "${HTTP_PID}" 2>/dev/null || true
         wait "${HTTP_PID}" 2>/dev/null || true
+    fi
+    if [[ -n "${PRELOAD_HTTP_PID:-}" ]] \
+        && kill -0 "${PRELOAD_HTTP_PID}" 2>/dev/null; then
+        kill "${PRELOAD_HTTP_PID}" 2>/dev/null || true
+        wait "${PRELOAD_HTTP_PID}" 2>/dev/null || true
     fi
 
     # Remove temp directories
@@ -1094,10 +1104,23 @@ with open('${ADV_TEST_DIR}/large_page', 'w') as f:
     f.write('</body></html>\n')
 "
 
+    # Media / asset resources referenced from the index page
+    python3 -c "
+with open('${ADV_TEST_DIR}/logo.png', 'wb') as f:
+    f.write(b'\x89PNG\r\n\x1a\n' + b'LOGO-BYTES')
+with open('${ADV_TEST_DIR}/movie.mp4', 'wb') as f:
+    f.write(b'\x00\x00\x00\x18ftypmp42' + b'MOVIE-BYTES')
+with open('${ADV_TEST_DIR}/style.css', 'wb') as f:
+    f.write(b'body { color: red; }')
+"
+
     # Root index for adv_test_dir
     cat > "${ADV_TEST_DIR}/index.html" <<EOF
 <!DOCTYPE html>
 <html>
+<head>
+<link rel="stylesheet" href="style.css">
+</head>
 <body>
 <a href="sub_page">Disc Subdir</a>
 <a href="sub_page">Duplicate Link to Subdir</a>
@@ -1106,18 +1129,21 @@ with open('${ADV_TEST_DIR}/large_page', 'w') as f:
 <a href="nested/file2.txt">My File</a>
 <a href="large_page">Large HTML Dir</a>
 <a href="http://localhost:${ACTUAL_PORT}/adv_test_dir/file1.txt">Cross File</a>
+<img src="logo.png" alt="Site Logo">
+<img src="data:image/png;base64,AAAA">
+<video src="movie.mp4"></video>
 </body>
 </html>
 EOF
 
     ADV_TEST_URL="${BASE_URL}adv_test_dir/"
 
-    # --- Test 8a: Mount with --html-is-directory and --allow-external-origin ---
-    log_info "Subgroup: --html-is-directory with --allow-external-origin"
+    # --- Test 8a: Mount with --website-mode and --allow-external-origin ---
+    log_info "Subgroup: --website-mode with --allow-external-origin"
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --allow-external-origin \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1129,14 +1155,14 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--html-is-directory --allow-external-origin) failed to mount"
+        fail "httpdirfs (--website-mode --allow-external-origin) failed to mount"
         kill "${ADV_PID}" 2>/dev/null || true
     else
         # Subdirectory promotion: sub_page has text/html content-type, should be a directory
         if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "html_is_directory: sub_page promoted to directory"
+            pass "website_mode: sub_page promoted to directory"
         else
-            fail "html_is_directory: sub_page was not promoted to directory"
+            fail "website_mode: sub_page was not promoted to directory"
         fi
 
         # Early deduplication: only one Disc Subdir-sub_page exists
@@ -1182,15 +1208,15 @@ EOF
 
         # Traversing promoted directory and reading nested file
         if [[ -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" ]]; then
-            pass "html_is_directory: promoted directory traversal and nested file present"
+            pass "website_mode: promoted directory traversal and nested file present"
             content=$(cat "${ADV_MOUNT_DIR}/Disc Subdir-sub_page/Nested File-nested_file.txt" 2>/dev/null || true)
             if [[ "${content}" == "nested file content" ]]; then
-                pass "html_is_directory: nested file content OK"
+                pass "website_mode: nested file content OK"
             else
-                fail "html_is_directory: nested file content mismatch"
+                fail "website_mode: nested file content mismatch"
             fi
         else
-            fail "html_is_directory: promoted directory contents missing"
+            fail "website_mode: promoted directory contents missing"
         fi
 
         # Cross-origin link present with --allow-external-origin
@@ -1206,6 +1232,38 @@ EOF
             fail "allow_external_origin: cross-origin link missing"
         fi
 
+        # Resource extraction: <img src> materialized with alt-based naming
+        if [[ -f "${ADV_MOUNT_DIR}/Site Logo-logo.png" ]]; then
+            pass "resource_parser: img src extracted (Site Logo-logo.png present)"
+            if cmp -s "${ADV_MOUNT_DIR}/Site Logo-logo.png" "${ADV_TEST_DIR}/logo.png"; then
+                pass "resource_parser: img content OK"
+            else
+                fail "resource_parser: img content mismatch"
+            fi
+        else
+            fail "resource_parser: img src not extracted"
+        fi
+
+        # Resource extraction: <video src> and <link rel=stylesheet> materialized
+        if [[ -f "${ADV_MOUNT_DIR}/movie.mp4" && -f "${ADV_MOUNT_DIR}/style.css" ]]; then
+            pass "resource_parser: video src and stylesheet extracted"
+            if cmp -s "${ADV_MOUNT_DIR}/movie.mp4" "${ADV_TEST_DIR}/movie.mp4"; then
+                pass "resource_parser: video content OK"
+            else
+                fail "resource_parser: video content mismatch"
+            fi
+        else
+            fail "resource_parser: video src and/or stylesheet not extracted"
+        fi
+
+        # data: URIs must not be materialized into the tree
+        data_entries=$(find "${ADV_MOUNT_DIR}" -maxdepth 1 -name "*data:image*" 2>/dev/null | wc -l)
+        if [[ "${data_entries}" -eq 0 ]]; then
+            pass "resource_parser: data: URI not materialized"
+        else
+            fail "resource_parser: data: URI was materialized"
+        fi
+
         do_unmount "${ADV_MOUNT_DIR}"
         wait "${ADV_PID}" 2>/dev/null || true
     fi
@@ -1215,7 +1273,7 @@ EOF
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
     SAME_ORIGIN_PID=$!
@@ -1226,7 +1284,7 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--html-is-directory) failed to mount"
+        fail "httpdirfs (--website-mode) failed to mount"
         kill "${SAME_ORIGIN_PID}" 2>/dev/null || true
     else
         if [[ ! -e "${ADV_MOUNT_DIR}/Cross File-file1.txt" ]]; then
@@ -1236,9 +1294,9 @@ EOF
         fi
 
         if [[ -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "html_is_directory: same-origin directory preserved"
+            pass "website_mode: same-origin directory preserved"
         else
-            fail "html_is_directory: same-origin directory missing"
+            fail "website_mode: same-origin directory missing"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"
@@ -1250,7 +1308,7 @@ EOF
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --max-html-size 1024 \
         "${ADV_TEST_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1262,7 +1320,7 @@ EOF
     done
 
     if ! mountpoint -q "${ADV_MOUNT_DIR}" 2>/dev/null; then
-        fail "httpdirfs (--html-is-directory --max-html-size) failed to mount"
+        fail "httpdirfs (--website-mode --max-html-size) failed to mount"
         kill "${MAX_SIZE_PID}" 2>/dev/null || true
     else
         # large_page exceeds 1024 bytes, so it is not promoted to a directory and remains a regular file
@@ -1318,7 +1376,7 @@ EOF
 
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --max-html-size 1024 \
         "${CHUNKED_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1437,10 +1495,10 @@ EOF
         fi
     }
 
-    # Flag on (--html-is-directory)
+    # Flag on (--website-mode)
     "${HTTPDIRFS_BIN}" \
         -f \
-        --html-is-directory \
+        --website-mode \
         --max-html-size 1024 \
         "${NOTYPE_URL}" \
         "${ADV_MOUNT_DIR}" &
@@ -1455,7 +1513,7 @@ EOF
         fail "httpdirfs (no-Content-Type) failed to mount"
         kill "${NOTYPE_PID}" 2>/dev/null || true
     else
-        check_notype "html-is-directory"
+        check_notype "website-mode"
         do_unmount "${ADV_MOUNT_DIR}"
         wait "${NOTYPE_PID}" 2>/dev/null || true
 
@@ -1483,8 +1541,8 @@ EOF
         fi
     fi
 
-    # --- Test 8d: Default mode without --html-is-directory ---
-    log_info "Subgroup: Default mode without --html-is-directory"
+    # --- Test 8d: Default mode without --website-mode ---
+    log_info "Subgroup: Default mode without --website-mode"
 
     "${HTTPDIRFS_BIN}" \
         -f \
@@ -1501,11 +1559,11 @@ EOF
         fail "httpdirfs (default mode) failed to mount"
         kill "${VANILLA_PID}" 2>/dev/null || true
     else
-        # Without --html-is-directory, sub_page is NOT promoted to a directory; it remains a regular file
+        # Without --website-mode, sub_page is NOT promoted to a directory; it remains a regular file
         if [[ ! -d "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" && -f "${ADV_MOUNT_DIR}/Disc Subdir-sub_page" ]]; then
-            pass "html_is_directory: sub_page not promoted to directory in default mode (correct)"
+            pass "website_mode: sub_page not promoted to directory in default mode (correct)"
         else
-            fail "html_is_directory: sub_page unexpectedly promoted or missing in default mode"
+            fail "website_mode: sub_page unexpectedly promoted or missing in default mode"
         fi
 
         # Anchor text and naming are universally applied
@@ -1513,6 +1571,14 @@ EOF
             pass "link_parser: naming applied in default mode"
         else
             fail "link_parser: naming unexpectedly missing in default mode"
+        fi
+
+        # Media / asset resources referenced from index.html must NOT be
+        # materialized without --website-mode (only <a href> hyperlinks show)
+        if [[ ! -e "${ADV_MOUNT_DIR}/Site Logo-logo.png" && ! -e "${ADV_MOUNT_DIR}/movie.mp4" && ! -e "${ADV_MOUNT_DIR}/style.css" ]]; then
+            pass "resource_parser: media/asset resources hidden in default mode (correct)"
+        else
+            fail "resource_parser: media/asset resources unexpectedly present in default mode"
         fi
 
         do_unmount "${ADV_MOUNT_DIR}"
@@ -1690,6 +1756,133 @@ for name, info in sorted(m.items()):
 
     done
 fi
+fi
+
+# ─── Progressive directory preload tests ────────────────────────────────────
+
+log_info "=== Progressive directory preload tests ==="
+
+PRELOAD_SERVE_DIR="${WORK_DIR}/preload_serve"
+PRELOAD_MOUNT_DIR="${WORK_DIR}/preload_mnt"
+PRELOAD_PORT_FILE="${WORK_DIR}/preload_port"
+PRELOAD_SUBDIRS=12
+mkdir -p "${PRELOAD_SERVE_DIR}" "${PRELOAD_MOUNT_DIR}"
+
+for i in $(seq 1 "${PRELOAD_SUBDIRS}"); do
+    mkdir -p "${PRELOAD_SERVE_DIR}/sub${i}"
+    echo "preload-${i}" > "${PRELOAD_SERVE_DIR}/sub${i}/f${i}.txt"
+done
+
+python3 "${SCRIPT_DIR}/range_http_server.py" \
+    "${PRELOAD_SERVE_DIR}" 0 "${PRELOAD_PORT_FILE}" &
+PRELOAD_HTTP_PID=$!
+
+for i in $(seq 1 10); do
+    if [[ -f "${PRELOAD_PORT_FILE}" ]]; then
+        break
+    fi
+    sleep 0.5
+done
+
+if [[ ! -f "${PRELOAD_PORT_FILE}" ]]; then
+    skip "Preload test: HTTP server did not start"
+else
+    PRELOAD_PORT="$(cat "${PRELOAD_PORT_FILE}")"
+    PRELOAD_URL="http://127.0.0.1:${PRELOAD_PORT}/"
+
+    # The preload worker pool is started before the FUSE session, so the
+    # mount must run in the foreground (-f); FUSE daemonization would
+    # terminate the workers.
+    "${HTTPDIRFS_BIN}" \
+        -f \
+        --progressive-directory-preload \
+        -o entry_timeout=0 \
+        "${PRELOAD_URL}" \
+        "${PRELOAD_MOUNT_DIR}" &
+    PRELOAD_HTTPDIRFS_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        if mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+        log_error "Preload mount failed."
+        skip "Preload tests (mount failed)"
+    else
+        # Poll until every subdirectory has been preloaded and unhidden.
+        visible=0
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            visible=$(ls "${PRELOAD_MOUNT_DIR}" 2>/dev/null | grep -c '^sub' || true)
+            if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+                break
+            fi
+            sleep 1
+        done
+
+        if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+            pass "Preload: all ${PRELOAD_SUBDIRS} subdirectories became visible"
+        else
+            fail "Preload: only ${visible}/${PRELOAD_SUBDIRS} subdirectories became visible"
+        fi
+
+        if [[ "$(cat "${PRELOAD_MOUNT_DIR}/sub1/f1.txt" 2>/dev/null)" == "preload-1" ]]; then
+            pass "Preload: preloaded subdirectory content readable"
+        else
+            fail "Preload: preloaded subdirectory content unreadable"
+        fi
+
+        do_unmount "${PRELOAD_MOUNT_DIR}"
+        wait "${PRELOAD_HTTPDIRFS_PID}" 2>/dev/null || true
+        log_info "Preload mount unmounted."
+    fi
+
+    # Daemon (background) mode: the worker pool is started from the FUSE
+    # init callback inside the daemon child (post daemonizing fork), so
+    # preloads must still complete without -f.
+    log_info "--- Preload test: daemon (background) mode ---"
+    "${HTTPDIRFS_BIN}" \
+        --progressive-directory-preload \
+        -o entry_timeout=0 \
+        "${PRELOAD_URL}" \
+        "${PRELOAD_MOUNT_DIR}" &
+    PRELOAD_DAEMON_ORIG_PID=$!
+
+    for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+        if mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! mountpoint -q "${PRELOAD_MOUNT_DIR}" 2>/dev/null; then
+        log_error "Preload daemon mount failed."
+        skip "Preload daemon-mode tests (mount failed)"
+    else
+        visible=0
+        for i in $(seq 1 "${MOUNT_TIMEOUT}"); do
+            visible=$(ls "${PRELOAD_MOUNT_DIR}" 2>/dev/null | grep -c '^sub' || true)
+            if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+                break
+            fi
+            sleep 1
+        done
+
+        if [[ "${visible}" -ge "${PRELOAD_SUBDIRS}" ]]; then
+            pass "Preload (daemon mode): all ${PRELOAD_SUBDIRS} subdirectories became visible"
+        else
+            fail "Preload (daemon mode): only ${visible}/${PRELOAD_SUBDIRS} subdirectories became visible"
+        fi
+
+        do_unmount "${PRELOAD_MOUNT_DIR}"
+        wait "${PRELOAD_DAEMON_ORIG_PID}" 2>/dev/null || true
+        log_info "Preload daemon mount unmounted."
+    fi
+
+    kill "${PRELOAD_HTTP_PID}" 2>/dev/null || true
+    wait "${PRELOAD_HTTP_PID}" 2>/dev/null || true
 fi
 
 

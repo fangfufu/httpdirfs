@@ -383,6 +383,38 @@ int resolve_target_url(const char *page_url, const char *raw_href,
         return 0;
     }
 
+    /* Reject non-http(s) URI schemes (data:, javascript:, blob:, mailto:,
+     * tel:, ...). They are not page resources, and resolving them against
+     * the page base URL would produce a bogus target. Per RFC 3986 a scheme
+     * is ALPHA [ALPHA DIGIT + - .]* followed by ':', appearing before any
+     * '/' in the reference. */
+    {
+        size_t scheme_len = 0;
+        while (scheme_len < href_len && raw_href[scheme_len] != '/'
+               && raw_href[scheme_len] != ':') {
+            scheme_len++;
+        }
+        if (scheme_len < href_len && raw_href[scheme_len] == ':') {
+            int valid_scheme
+                = scheme_len > 0 && isalpha((unsigned char)raw_href[0]);
+            for (size_t i = 1; valid_scheme && i < scheme_len; i++) {
+                unsigned char c = (unsigned char)raw_href[i];
+                if (!isalnum(c) && c != '+' && c != '-' && c != '.') {
+                    valid_scheme = 0;
+                }
+            }
+            if (valid_scheme) {
+                int allowed
+                    = (scheme_len == 4 && strncasecmp(raw_href, "http", 4) == 0)
+                      || (scheme_len == 5
+                          && strncasecmp(raw_href, "https", 5) == 0);
+                if (!allowed) {
+                    return 0;
+                }
+            }
+        }
+    }
+
     char resolved[PATH_MAX + 1];
     size_t resolved_len = 0;
 

@@ -121,9 +121,13 @@ typedef struct {
     int sonic_insecure;
     /*--------- Directory promotion & traversal related --------*/
     /** \brief Promote resources with Content-Type text/html to directories */
-    int html_is_directory;
+    int website_mode;
     /** \brief Maximum HTML size for directory listing promotion */
     off_t max_html_size;
+    /** \brief Hide directory entries from listings until their file count
+     *  is known, loading their listings in the background (NORMAL mode)
+     */
+    int progressive_dir_preload;
 } ConfigStruct;
 
 /**

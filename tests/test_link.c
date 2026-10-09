@@ -26,13 +26,22 @@
  * \brief Unit tests for link.c, including external-link helper functions
  */
 
+#include "../src/cache.h"
 #include "../src/config.h"
 #include "../src/link.h"
+#include "../src/network.h"
+#include "../src/preload.h"
 #include "../src/transfer.h"
 #include "../src/util.h"
 
+#include <dirent.h>
+#include <ftw.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <time.h>
+#include <unistd.h>
 #include <unity.h>
 
 void setUp(void)
@@ -43,12 +52,28 @@ void setUp(void)
 void tearDown(void)
 {
     CONFIG.allow_external_origin = 0;
-    CONFIG.html_is_directory = 0;
+    CONFIG.website_mode = 0;
     CONFIG.ignore_anchors = 0;
+    CONFIG.progressive_dir_preload = 0;
+    CONFIG.max_conns = 6;
+    CONFIG.mode = NORMAL;
     if (ROOT_LINK_TBL != NULL) {
         LinkTable_free(ROOT_LINK_TBL);
         ROOT_LINK_TBL = NULL;
     }
+}
+
+/* Build a bare link of the given type with a name and URL, added to tbl. */
+static Link *make_test_link(LinkTable *tbl, const char *name, int type,
+                            const char *url, int is_virtual)
+{
+    Link *link = CALLOC(1, sizeof(Link));
+    strncpy(link->linkname, name, NAME_MAX);
+    strncpy(link->f_url, url, PATH_MAX);
+    link->type = type;
+    link->is_virtual = is_virtual;
+    LinkTable_add(tbl, link);
+    return link;
 }
 
 /* ========================================================================= */
@@ -1225,8 +1250,8 @@ void test_Link_classify_response(void)
 {
     size_t out_len = 0;
 
-    // 1. Default mode (html_is_directory = 0)
-    CONFIG.html_is_directory = 0;
+    // 1. Default mode (website_mode = 0)
+    CONFIG.website_mode = 0;
     CONFIG.zero_len_is_dir = 0;
     TEST_ASSERT_EQUAL_INT(LINK_FILE,
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
@@ -1259,8 +1284,8 @@ void test_Link_classify_response(void)
                           Link_classify_response(LINK_UNINITIALISED_FILE, 200,
                                                  0, "text/html", &out_len));
 
-    // 2. HTML as directory mode (html_is_directory = 1)
-    CONFIG.html_is_directory = 1;
+    // 2. HTML as directory mode (website_mode = 1)
+    CONFIG.website_mode = 1;
     CONFIG.max_html_size = 2097152; // 2 MiB
 
     // HTML <= max_html_size -> LINK_DIR
@@ -1306,7 +1331,7 @@ void test_Link_classify_response(void)
                                                  "text/html", &out_len));
 
     // Reset config
-    CONFIG.html_is_directory = 0;
+    CONFIG.website_mode = 0;
     CONFIG.zero_len_is_dir = 0;
 }
 
@@ -1555,8 +1580,738 @@ void test_discard_ancestor_links_relative_parent(void)
     LinkTable_free(tbl_a);
 }
 
+/* ========================================================================= */
+/* Non-http(s) scheme rejection in resolve_target_url()                      */
+/* ========================================================================= */
+
+void test_resolve_target_url_non_http_schemes(void)
+{
+    char out[1024];
+    const char *page = "https://example.com/dir/";
+
+    TEST_ASSERT_EQUAL_INT(0,
+                          resolve_target_url(page, "data:image/png;base64,AAAA",
+                                             out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url(page, "javascript:alert(1)", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url(page, "mailto:foo@example.com",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url(page,
+                                                "blob:https://example.com/uuid",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        0, resolve_target_url(page, "tel:+123456", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(0, resolve_target_url(page, "FTP://example.com/f.iso",
+                                                out, sizeof(out)));
+
+    /* http(s) stays resolvable, scheme check is case-insensitive */
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url(page, "http://other.org/f.iso",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("http://other.org/f.iso", out);
+    TEST_ASSERT_EQUAL_INT(1, resolve_target_url(page, "HTTPS://other.org/f.iso",
+                                                out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("HTTPS://other.org/f.iso", out);
+
+    /* A colon after the first '/' is not a scheme */
+    TEST_ASSERT_EQUAL_INT(
+        1, resolve_target_url(page, "sub/file:copy.iso", out, sizeof(out)));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/sub/file:copy.iso", out);
+}
+
+/* ========================================================================= */
+/* Media resource extraction tests (img / srcset / video / css / ...)        */
+/* ========================================================================= */
+
+static const Link *find_link_by_url(LinkTable *tbl, const char *url)
+{
+    for (int i = 1; i < tbl->size; i++) {
+        if (strcmp(tbl->links[i]->f_url, url) == 0) {
+            return tbl->links[i];
+        }
+    }
+    return NULL;
+}
+
+void test_resource_img_basic(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"cat.png\" alt=\"My Cat\">"
+                         "</body></html>");
+
+    /* 1 head + 1 image link, named from the alt text */
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("My Cat-cat.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/cat.png",
+                             tbl->links[1]->f_url);
+    TEST_ASSERT_EQUAL_INT(LINK_UNINITIALISED_FILE, tbl->links[1]->type);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_img_no_alt_and_empty_alt(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"cat.png\">"
+                         "<img src=\"dog.png\" alt=\"   \">"
+                         "</body></html>");
+
+    /* Without usable alt text the names fall back to the URL filename */
+    TEST_ASSERT_EQUAL_INT(3, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("cat.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("dog.png", tbl->links[2]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_img_duplicate_alt_falls_back(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    /* alt "Image" is reused -> generic filler, both fall back to filenames */
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"a.png\" alt=\"Image\">"
+                         "<img src=\"b.png\" alt=\"Image\">"
+                         "</body></html>");
+
+    TEST_ASSERT_EQUAL_INT(3, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("a.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("b.png", tbl->links[2]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_img_unique_anchors(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    /* Distinct alt texts are used as naming anchors */
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"a.png\" alt=\"First\">"
+                         "<img src=\"b.png\" alt=\"Second\">"
+                         "</body></html>");
+
+    TEST_ASSERT_EQUAL_INT(3, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("First-a.png", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("Second-b.png", tbl->links[2]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_srcset_candidates(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img srcset=\"small.jpg 480w, large.jpg 1024w, "
+                         "https://example.com/abs/extra.jpg 2x\">"
+                         "</body></html>");
+
+    /* 1 head + 3 srcset candidates (descriptors stripped) */
+    TEST_ASSERT_EQUAL_INT(4, tbl->size);
+    const Link *l1 = find_link_by_url(tbl, "https://example.com/dir/small.jpg");
+    TEST_ASSERT_NOT_NULL(l1);
+    TEST_ASSERT_EQUAL_STRING("small.jpg", l1->linkname);
+    const Link *l2 = find_link_by_url(tbl, "https://example.com/dir/large.jpg");
+    TEST_ASSERT_NOT_NULL(l2);
+    TEST_ASSERT_EQUAL_STRING("large.jpg", l2->linkname);
+    const Link *l3 = find_link_by_url(tbl, "https://example.com/abs/extra.jpg");
+    TEST_ASSERT_NOT_NULL(l3);
+    TEST_ASSERT_EQUAL_STRING("extra.jpg", l3->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_media_and_asset_tags(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(
+        tbl, "https://example.com/dir/",
+        "<html><head>"
+        "<link rel=\"stylesheet\" href=\"style.css\">"
+        "<link rel=\"icon\" href=\"favicon.ico\">"
+        "<script src=\"app.js\"></script>"
+        "</head><body>"
+        "<video src=\"movie.mp4\"></video>"
+        "<audio src=\"song.mp3\"></audio>"
+        "<source src=\"alt.webm\">"
+        "<iframe src=\"frame.html\"></iframe>"
+        "<object data=\"plugin.swf\"></object>"
+        "<embed src=\"widget.swf\">"
+        "<track src=\"subs.vtt\">"
+        "<input type=\"image\" src=\"button.png\">"
+        "<map name=\"m\"><area href=\"area_target.html\" shape=\"rect\"></map>"
+        /* Not resource references: must not be extracted */
+        "<input type=\"text\" src=\"ignored.png\">"
+        "<form action=\"form_target.html\"></form>"
+        "</body></html>");
+
+    const char *expected[] = {
+        "https://example.com/dir/style.css",
+        "https://example.com/dir/favicon.ico",
+        "https://example.com/dir/app.js",
+        "https://example.com/dir/movie.mp4",
+        "https://example.com/dir/song.mp3",
+        "https://example.com/dir/alt.webm",
+        "https://example.com/dir/frame.html",
+        "https://example.com/dir/plugin.swf",
+        "https://example.com/dir/widget.swf",
+        "https://example.com/dir/subs.vtt",
+        "https://example.com/dir/button.png",
+        "https://example.com/dir/area_target.html",
+    };
+    for (size_t i = 0; i < sizeof(expected) / sizeof(expected[0]); i++) {
+        TEST_ASSERT_NOT_NULL(find_link_by_url(tbl, expected[i]));
+    }
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/ignored.png"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/form_target.html"));
+
+    /* 1 head + 12 extracted resources */
+    TEST_ASSERT_EQUAL_INT(13, tbl->size);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_dedup_shared_with_anchor(void)
+{
+    CONFIG.website_mode = 1;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    /* Same target via <a> and <img>: one entry, first anchor text wins */
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<a href=\"cat.png\">The Cat</a>"
+                         "<img src=\"cat.png\" alt=\"Also Cat\">"
+                         "</body></html>");
+
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("The Cat-cat.png", tbl->links[1]->linkname);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_non_http_schemes_skipped(void)
+{
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"data:image/png;base64,AAAA\">"
+                         "<a href=\"mailto:foo@example.com\">Mail</a>"
+                         "<a href=\"javascript:doit()\">JS</a>"
+                         "</body></html>");
+
+    /* Only the head link remains */
+    TEST_ASSERT_EQUAL_INT(1, tbl->size);
+
+    LinkTable_free(tbl);
+}
+
+void test_resource_cross_origin_filtered(void)
+{
+    CONFIG.website_mode = 1;
+    CONFIG.allow_external_origin = 0;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"https://other.example/img.png\">"
+                         "</body></html>");
+    TEST_ASSERT_EQUAL_INT(1, tbl->size);
+    LinkTable_free(tbl);
+
+    CONFIG.allow_external_origin = 1;
+    tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/",
+                         "<html><body>"
+                         "<img src=\"https://other.example/img.png\">"
+                         "</body></html>");
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("img.png", tbl->links[1]->linkname);
+    LinkTable_free(tbl);
+}
+
+void test_resource_extraction_requires_website_mode(void)
+{
+    const char *html = "<html><head>"
+                       "<link rel=\"stylesheet\" href=\"style.css\">"
+                       "</head><body>"
+                       "<a href=\"page.html\">The Page</a>"
+                       "<img src=\"cat.png\" alt=\"My Cat\">"
+                       "<video src=\"movie.mp4\"></video>"
+                       "<map name=\"m\"><area href=\"area_target.html\" "
+                       "shape=\"rect\"></map>"
+                       "</body></html>";
+
+    /* Normal mode: only <a href> hyperlinks are extracted */
+    CONFIG.website_mode = 0;
+    LinkTable *tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/", html);
+    TEST_ASSERT_EQUAL_INT(2, tbl->size);
+    TEST_ASSERT_EQUAL_STRING("The Page-page.html", tbl->links[1]->linkname);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/dir/page.html",
+                             tbl->links[1]->f_url);
+    TEST_ASSERT_NULL(find_link_by_url(tbl, "https://example.com/dir/cat.png"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/movie.mp4"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/style.css"));
+    TEST_ASSERT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/area_target.html"));
+    LinkTable_free(tbl);
+
+    /* Website mode: anchors and media resources are all extracted */
+    CONFIG.website_mode = 1;
+    tbl = LinkTable_alloc("https://example.com/dir/");
+    LinkTable_parse_html(tbl, "https://example.com/dir/", html);
+    TEST_ASSERT_EQUAL_INT(6, tbl->size);
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/page.html"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/cat.png"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/movie.mp4"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/style.css"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(tbl, "https://example.com/dir/area_target.html"));
+    LinkTable_free(tbl);
+}
+
+/* ========================================================================= */
+/* Progressive directory preload tests                                       */
+/* ========================================================================= */
+
+void test_Link_should_list_matrix(void)
+{
+    Link link = {0};
+
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(NULL));
+
+    link.type = LINK_FILE;
+    link.hidden = 0;
+    TEST_ASSERT_EQUAL_INT(1, Link_should_list(&link));
+
+    link.type = LINK_DIR;
+    TEST_ASSERT_EQUAL_INT(1, Link_should_list(&link));
+
+    link.type = LINK_DIR;
+    link.hidden = 1;
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(&link));
+
+    link.type = LINK_INVALID;
+    link.hidden = 0;
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(&link));
+
+    link.type = LINK_INVALID;
+    link.hidden = 1;
+    TEST_ASSERT_EQUAL_INT(0, Link_should_list(&link));
+}
+
+void test_preload_directories_noop_when_disabled(void)
+{
+    CONFIG.progressive_dir_preload = 0;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://localhost/sub/", 0);
+
+    Link_preload_directories(tbl);
+
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_NULL(dir->next_table);
+    TEST_ASSERT_EQUAL_INT(0, Preload_queue_depth());
+    LinkTable_free(tbl);
+}
+
+void test_preload_directories_noop_in_single_mode(void)
+{
+    CONFIG.progressive_dir_preload = 1;
+    CONFIG.mode = SINGLE;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://localhost/sub/", 0);
+
+    Link_preload_directories(tbl);
+
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(0, Preload_queue_depth());
+    LinkTable_free(tbl);
+}
+
+void test_preload_directories_noop_on_failed_table(void)
+{
+    CONFIG.progressive_dir_preload = 1;
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://localhost/sub/", 0);
+    tbl->index_time = 0; /* a failed load is never swept */
+
+    Link_preload_directories(tbl);
+
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(0, Preload_queue_depth());
+    LinkTable_free(tbl);
+}
+
+void test_preload_directories_sweep_and_worker(void)
+{
+    CONFIG.progressive_dir_preload = 1;
+    CONFIG.max_conns = 1;
+
+    LinkTable *tbl = LinkTable_alloc("http://localhost/");
+    Link *file = make_test_link(tbl, "file.txt", LINK_FILE,
+                                "http://localhost/file.txt", 0);
+    Link *vdir = make_test_link(tbl, ".httpdirfs", LINK_DIR,
+                                "http://localhost/.httpdirfs/", 1);
+    /* Port 1 on loopback refuses connections instantly: the worker's load
+     * fails fast, exercises the "unhide anyway" policy, and attaches nothing.
+     */
+    Link *dir
+        = make_test_link(tbl, "sub", LINK_DIR, "http://127.0.0.1:1/sub/", 0);
+
+    int baseline_depth = Preload_queue_depth();
+    Link_preload_directories(tbl);
+    /* Spawn the worker (in the real binary this happens from the FUSE
+     * init callback, after any daemonizing fork). */
+    Preload_start();
+
+    /* Only the plain directory was hidden and enqueued */
+    TEST_ASSERT_EQUAL_INT(0, file->hidden);
+    TEST_ASSERT_EQUAL_INT(0, vdir->hidden);
+    TEST_ASSERT_EQUAL_INT(1, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(baseline_depth + 1, Preload_queue_depth());
+    /* The queue-lifetime reference is held until the worker finishes */
+    TEST_ASSERT_EQUAL_INT(1, tbl->refcount);
+
+    /* Wait for the worker to process the item (5 s deadline) */
+    for (int i = 0; i < 5000 && dir->hidden; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    /* The failed load attached no table */
+    TEST_ASSERT_NULL(dir->next_table);
+
+    /* Queue drained and the queue-lifetime reference released */
+    for (int i = 0; i < 5000 && Preload_queue_depth() > baseline_depth; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(baseline_depth, Preload_queue_depth());
+    for (int i = 0; i < 5000 && tbl->refcount != 0; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(0, tbl->refcount);
+
+    LinkTable_free(tbl);
+}
+
+void test_LinkTable_load_and_attach_existing_table(void)
+{
+    LinkTable *root = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(root, "sub", LINK_DIR, "http://localhost/sub/", 0);
+
+    LinkTable *sub = LinkTable_alloc("http://localhost/sub/");
+    dir->next_table = sub;
+    sub->parent_tbl = root;
+    sub->parent_link = dir;
+    root->refcount++; /* the attachment's parent reference */
+
+    int created_new = -1;
+    LinkTable *got = LinkTable_load_and_attach(dir, &created_new);
+
+    /* The live table is returned as-is with one caller reference, no load */
+    TEST_ASSERT_EQUAL_PTR(sub, got);
+    TEST_ASSERT_EQUAL_INT(0, created_new);
+    TEST_ASSERT_EQUAL_INT(1, sub->refcount);
+
+    /* Releasing the caller ref leaves sub attached with refcount 0 (it is
+     * not orphaned, so it stays alive until releasedir or the root free) */
+    LinkTable_unref(got);
+    TEST_ASSERT_EQUAL_INT(0, sub->refcount);
+    LinkTable_free(root);
+}
+
+void test_LinkTable_load_and_attach_null_link(void)
+{
+    int created_new = -1;
+    TEST_ASSERT_NULL(LinkTable_load_and_attach(NULL, &created_new));
+    TEST_ASSERT_EQUAL_INT(0, created_new);
+    TEST_ASSERT_NULL(LinkTable_load_and_attach(NULL, NULL));
+}
+
+void test_LinkTable_load_and_attach_failure_not_attached(void)
+{
+    LinkTable *root = LinkTable_alloc("http://localhost/");
+    Link *dir
+        = make_test_link(root, "sub", LINK_DIR, "http://127.0.0.1:1/sub/", 0);
+
+    int created_new = -1;
+    LinkTable *got = LinkTable_load_and_attach(dir, &created_new);
+
+    /* A failed listing is never attached; the link keeps no table, keeps its
+     * directory type (a failed load is not an invalidation), and the next
+     * access retries the download.
+     */
+    TEST_ASSERT_NULL(got);
+    TEST_ASSERT_EQUAL_INT(0, created_new);
+    TEST_ASSERT_NULL(dir->next_table);
+    TEST_ASSERT_EQUAL_INT(LINK_DIR, dir->type);
+
+    LinkTable_free(root);
+}
+
+/* Recursively remove a temp cache directory (and its contents). */
+static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
+                   struct FTW *ftwbuf)
+{
+    (void)sb;
+    (void)typeflag;
+    (void)ftwbuf;
+    return remove(fpath);
+}
+
+static void cleanup_temp_dir(const char *tmp_cache_dir)
+{
+    char filepath[512];
+    DIR *dir = opendir(tmp_cache_dir);
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (!strcmp(entry->d_name, ".") || !strcmp(entry->d_name, "..")) {
+                continue;
+            }
+            snprintf(filepath, sizeof(filepath), "%s/%s", tmp_cache_dir,
+                     entry->d_name);
+            nftw(filepath, ntfw_cb, 32, FTW_DEPTH | FTW_PHYS);
+        }
+        closedir(dir);
+    }
+    (void)rmdir(tmp_cache_dir);
+}
+
+static void setup_temp_cache_dir(const char *tmp_cache_dir)
+{
+    cleanup_temp_dir(tmp_cache_dir);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tmp_cache_dir, S_IRWXU));
+}
+
+void test_LinkTable_try_load_cached_cache_system_off(void)
+{
+    /* The cache system is not initialised in this test binary unless a
+     * later test turns it on; run this first so the off path is covered. */
+    TEST_ASSERT_EQUAL_INT(0, CACHE_SYSTEM_INIT);
+    LinkTable *parent = LinkTable_alloc("https://example.com/");
+    TEST_ASSERT_NULL(
+        LinkTable_try_load_cached("https://example.com/sub/", parent));
+    LinkTable_free(parent);
+}
+
+void test_LinkTable_try_load_cached_miss(void)
+{
+    char tmp_cache_dir[] = "./test_try_load_cached_miss_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("https://example.com/");
+
+    LinkTable *parent = LinkTable_alloc("https://example.com/");
+    /* No container written: a miss returns NULL, the caller downloads */
+    TEST_ASSERT_NULL(
+        LinkTable_try_load_cached("https://example.com/missing/", parent));
+
+    LinkTable_free(parent);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_LinkTable_try_load_cached_hit(void)
+{
+    char tmp_cache_dir[] = "./test_try_load_cached_hit_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("http://127.0.0.1:1/");
+
+    /* Loopback port 1 refuses instantly: the fill's HEAD probes fail fast
+     * without touching the network. */
+    const char *url = "http://127.0.0.1:1/sub/";
+    const char *html = "<html><body><a href=\"inner.html\">inner.html</a>"
+                       "<a href=\"file.txt\">file.txt</a></body></html>";
+    const char *headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    LinkTable *parent = LinkTable_alloc("http://127.0.0.1:1/");
+    LinkTable *got = LinkTable_try_load_cached(url, parent);
+
+    /* A fresh container yields a fully populated table */
+    TEST_ASSERT_NOT_NULL(got);
+    TEST_ASSERT_TRUE(got->index_time > 0);
+    TEST_ASSERT_EQUAL_PTR(parent, got->parent_tbl);
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(got, "http://127.0.0.1:1/sub/inner.html"));
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(got, "http://127.0.0.1:1/sub/file.txt"));
+
+    LinkTable_free(got);
+    LinkTable_free(parent);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_LinkTable_try_load_cached_expired(void)
+{
+    char tmp_cache_dir[] = "./test_try_load_cached_expired_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("https://example.com/");
+
+    const char *url = "https://example.com/expired/";
+    const char *html = "<html><body></body></html>";
+    const char *headers = "HTTP/1.1 200 OK\r\n\r\n";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    /* Tamper with the container header to simulate an old download */
+    char *cache_key = string_to_cache_path(url);
+    TEST_ASSERT_NOT_NULL(cache_key);
+    char full_path[PATH_MAX];
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
+    FILE *f = fopen(full_path, "r+");
+    TEST_ASSERT_NOT_NULL(f);
+    if (f == NULL) {
+        return;
+    }
+    CacheHeader hdr;
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+    hdr.cache_time = (int64_t)time(NULL) - CONFIG.refresh_timeout - 10;
+    TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+    TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                          (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+    fclose(f);
+
+    LinkTable *parent = LinkTable_alloc("https://example.com/");
+    /* An expired container is a miss: the caller downloads */
+    TEST_ASSERT_NULL(LinkTable_try_load_cached(url, parent));
+
+    LinkTable_free(parent);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    FREE(cache_key);
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_preload_worker_cached_listing(void)
+{
+    char tmp_cache_dir[] = "./test_preload_cached_listing_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("http://127.0.0.1:1/");
+
+    CONFIG.progressive_dir_preload = 1;
+
+    /*
+     * Port 1 on loopback refuses connections instantly: if the worker took
+     * the download path the fetch would fail and attach nothing, so a
+     * populated table proves the listing came from the container cache.
+     */
+    const char *sub_url = "http://127.0.0.1:1/sub/";
+    const char *html
+        = "<html><body><a href=\"inner.html\">inner.html</a></body></html>";
+    const char *headers = "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\n\r\n";
+    TEST_ASSERT_EQUAL_INT(0, CacheContainer_write(sub_url, html, strlen(html),
+                                                  headers, strlen(headers)));
+
+    LinkTable *tbl = LinkTable_alloc("http://127.0.0.1:1/");
+    Link *dir = make_test_link(tbl, "sub", LINK_DIR, sub_url, 0);
+
+    int baseline_depth = Preload_queue_depth();
+    Link_preload_directories(tbl);
+    Preload_start();
+
+    TEST_ASSERT_EQUAL_INT(1, dir->hidden);
+    TEST_ASSERT_EQUAL_INT(baseline_depth + 1, Preload_queue_depth());
+    TEST_ASSERT_EQUAL_INT(1, tbl->refcount);
+
+    for (int i = 0; i < 5000 && dir->hidden; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(0, dir->hidden);
+    TEST_ASSERT_NOT_NULL(dir->next_table);
+    TEST_ASSERT_NOT_NULL(
+        find_link_by_url(dir->next_table, "http://127.0.0.1:1/sub/inner.html"));
+
+    for (int i = 0; i < 5000 && Preload_queue_depth() > baseline_depth; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(baseline_depth, Preload_queue_depth());
+    /*
+     * hidden == 0 is only set after the attach, so once it is visible the
+     * queue-lifetime reference (the one taken at enqueue) is the only
+     * release still pending: the refcount settles at 1, the attach
+     * reference that roots the attached child table in its parent, exactly
+     * as on the synchronous load path.
+     */
+    for (int i = 0; i < 5000 && tbl->refcount != 1; i++) {
+        usleep(1000);
+    }
+    TEST_ASSERT_EQUAL_INT(1, tbl->refcount);
+
+    LinkTable_free(tbl);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
+void test_transfer_abort_nonblocking(void)
+{
+    TEST_ASSERT_EQUAL_INT(-1, transfer_abort_nonblocking(NULL));
+
+    CURL *curl = curl_easy_init();
+    TEST_ASSERT_NOT_NULL(curl);
+    TEST_ASSERT_EQUAL_INT(1, transfer_abort_nonblocking(curl));
+
+    curl_easy_setopt(curl, CURLOPT_URL, "http://127.0.0.1:1/");
+    TEST_ASSERT_EQUAL_INT(0, transfer_nonblocking(curl));
+    TEST_ASSERT_EQUAL_INT(0, transfer_abort_nonblocking(curl));
+    TEST_ASSERT_EQUAL_INT(1, transfer_abort_nonblocking(curl));
+    curl_easy_cleanup(curl);
+}
+
 int main(void)
 {
+    /*
+     * The preload tests drive the worker's asynchronous fetch through the
+     * shared curl multi handle, which requires the network sub-system to be
+     * initialised.
+     */
+    NetworkSystem_init();
+
     UNITY_BEGIN();
 
     /* is_external_url */
@@ -1636,6 +2391,37 @@ int main(void)
     RUN_TEST(test_is_ancestor_head_link_hierarchy);
     RUN_TEST(test_discard_ancestor_links_in_parse_html);
     RUN_TEST(test_discard_ancestor_links_relative_parent);
+
+    /* Non-http(s) scheme rejection */
+    RUN_TEST(test_resolve_target_url_non_http_schemes);
+
+    /* Media resource extraction */
+    RUN_TEST(test_resource_img_basic);
+    RUN_TEST(test_resource_img_no_alt_and_empty_alt);
+    RUN_TEST(test_resource_img_duplicate_alt_falls_back);
+    RUN_TEST(test_resource_img_unique_anchors);
+    RUN_TEST(test_resource_srcset_candidates);
+    RUN_TEST(test_resource_media_and_asset_tags);
+    RUN_TEST(test_resource_dedup_shared_with_anchor);
+    RUN_TEST(test_resource_non_http_schemes_skipped);
+    RUN_TEST(test_resource_cross_origin_filtered);
+    RUN_TEST(test_resource_extraction_requires_website_mode);
+
+    /* Progressive directory preload */
+    RUN_TEST(test_Link_should_list_matrix);
+    RUN_TEST(test_preload_directories_noop_when_disabled);
+    RUN_TEST(test_preload_directories_noop_in_single_mode);
+    RUN_TEST(test_preload_directories_noop_on_failed_table);
+    RUN_TEST(test_preload_directories_sweep_and_worker);
+    RUN_TEST(test_LinkTable_try_load_cached_cache_system_off);
+    RUN_TEST(test_LinkTable_try_load_cached_miss);
+    RUN_TEST(test_LinkTable_try_load_cached_hit);
+    RUN_TEST(test_LinkTable_try_load_cached_expired);
+    RUN_TEST(test_preload_worker_cached_listing);
+    RUN_TEST(test_transfer_abort_nonblocking);
+    RUN_TEST(test_LinkTable_load_and_attach_existing_table);
+    RUN_TEST(test_LinkTable_load_and_attach_null_link);
+    RUN_TEST(test_LinkTable_load_and_attach_failure_not_attached);
 
     return UNITY_END();
 }

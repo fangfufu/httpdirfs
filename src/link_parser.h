@@ -67,6 +67,14 @@ LinkHashSet *LinkHashSet_new(int capacity);
 int LinkHashSet_add(LinkHashSet *set, const char *linkname);
 
 /**
+ * \brief Check whether a link name is present in the LinkHashSet.
+ * \param set The LinkHashSet to probe.
+ * \param linkname The link name string to look for.
+ * \return 1 if the name is present, 0 otherwise.
+ */
+int LinkHashSet_contains(LinkHashSet *set, const char *linkname);
+
+/**
  * \brief Free all memory allocated for a LinkHashSet.
  * \param set The LinkHashSet to deallocate.
  */

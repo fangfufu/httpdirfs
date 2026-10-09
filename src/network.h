@@ -53,8 +53,11 @@ void NetworkSystem_init(void);
 /** \brief blocking file transfer */
 void transfer_blocking(CURL *curl);
 
-/** \brief non blocking file transfer */
-void transfer_nonblocking(CURL *curl);
+/**
+ * \brief add a curl handle to the multi interface without waiting for it
+ * \return 0 on success, -1 if the handle could not be added
+ */
+int transfer_nonblocking(CURL *curl);
 
 /**
  * \brief Re-add a curl handle to the multi interface
@@ -65,6 +68,15 @@ void transfer_nonblocking(CURL *curl);
  * \return 0 on success, -1 if curl_multi_add_handle() failed
  */
 int transfer_requeue_locked(CURL *curl);
+
+/**
+ * \brief Remove a nonblocking curl handle from the multi interface
+ * \details Removes the handle from curl_multi and active_handles under
+ * transfer_lock.
+ * \return 0 if the handle was active and removed, 1 if it was not found,
+ * -1 on invalid argument
+ */
+int transfer_abort_nonblocking(CURL *curl);
 
 /**
  * \brief check if a HTTP response code corresponds to a temporary failure

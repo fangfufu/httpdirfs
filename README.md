@@ -8,7 +8,7 @@
 
 HTTPDirFS is a filesystem that allows you to mount arbitrary websites using the
 FUSE framework. It comes with a cache system, and Airsonic / Subsonic server
-support
+support.
 
 HTTPDirFS parses HTML directory listings using the Gumbo HTML5 parser. It
 extracts descriptive filenames from anchor text (`<a>`), resolves name
@@ -58,55 +58,54 @@ properly.
 The full usage flags and more details on how to use this program can be found in
 the [usage](docs/usage.md) page.
 
-### Mounting non-directory listing websites.
+### Progressive directory preloading
+
+When browsing a large directory listing, HTTPDirFS can hide subdirectory entries
+from the listing until their contents have been preloaded in the background
+using a background worker. This can be enabled with
+`--progressive-directory-preload`. This avoids the flood of read requests when a
+file browser tries to calculate the number of files in the subdirectories.
+
+```
+./httpdirfs -f --progressive-directory-preload https://example.com/files/ mnt
+```
+
+### Mounting generic websites
 
 There are plenty websites that are not directory listing. You can still
-technically mount them with the `--html-is-directory` flag.
+technically mount them with the `--website-mode` flag.
 
 By default, resources whose URLs do not end with a trailing slash (`/`) are
-treated as regular files. When `--html-is-directory` is enabled, HTTPDirFS
-inspects the HTTP `Content-Type` response header of linked resources during link
+treated as regular files. When `--website-mode` is enabled, HTTPDirFS inspects
+the HTTP `Content-Type` response header of linked resources during link
 initialization. Any resource returning `Content-Type: text/html` (with a size
 within `--max-html-size`) is promoted to a virtual directory, allowing you to
 browse into it as a subdirectory. Non-HTML resources remain regular files.
 
-> [!WARNING]
-> If you mount a non-directory listing website that had not been previously
-> cached, and you decide to browse it using a graphical file browser, the file
-> browser will likely to respond very slowly, as if it has hung up. This is
-> because most graphical file browsers tend to read into every subdirectory
-> within. This causes massive amount of HTTP requests.
-
-### Single file mode
-
-If you just want to access a single file, you can specify `--single-file-mode`.
-This effectively creates a virtual directory that contains one single file. This
-operating mode is similar to the unmaintained
-[httpfs](http://httpfs.sourceforge.net/).
-
-e.g.
+> [!TIP]
+> If you mount a generic website that had not been previously cached, and you
+> plan to browse the mounted website using a graphical file browser, you
+> probably want to use the progressive directory preloading mode described in
+> the section above. This avoids the graphical file browser to issue an
+> excessive amount of read request while trying to calculate the number of files
+> in each sub directory.
 
 ```
-./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
+./httpdirfs -f --website-mode --progressive-directory-preload $URL $MOUNT_POINT
 ```
 
-This can be useful if the web server does not present a HTTP directory listing.
-
-### Airsonic / Subsonic server support
-
-The Airsonic / Subsonic server support is dedicated the my Debian package
-maintainer Jerome Charaoui.You can mount the music collection on your Airsonic /
-Subsonic server (\*sonic), and browse them using your favourite file browser.
-For more information on how to use it, please refer to the
-[usage](USAGE.md#airsonic--subsonic-mounting-options) page.
+This moves the burst of subdirectory listing requests to a background worker and
+hides entries until their listings are ready, which largely mitigates the
+slowdown described above.
 
 ### The cache system
 
 > [!WARNING]
-> HTTPDirFS 1.4.x contains a breaking change to the format of the cache system.
-> Please delete your existing cache with `--cache-clear` or remove
-> `~/.cache/httpdirfs` (this is the default location) before using HTTPDirFS
-> 1.4.x.
+> Versions of HTTPDirFS above 1.3.3 contains a breaking change to the format of
+> the cache system. Please delete your existing cache with `--cache-clear` or
+> remove `~/.cache/httpdirfs` (the default location) before using any version of
+> HTTPDirFS above 1.3.3. The breaking change was introduced in
+> [87653b9](https://github.com/fangfufu/httpdirfs/commit/87653b9b5914cd6aeccf654852e10ff421078305).
 
 You can cache the files you have accessed on your storage device by using the
 `--cache` flag. The files it caches persist across sessions. You can clear the
@@ -131,6 +130,29 @@ supports it. Otherwise your local storage device will get heavy I/O from cache
 file creation. For a list of filesystem that supports sparse allocation, please
 refer to
 [Wikipedia](https://en.wikipedia.org/wiki/Comparison_of_file_systems#Allocation_and_layout_policies).
+
+### Single file mode
+
+If you just want to access a single file, you can specify `--single-file-mode`.
+This effectively creates a virtual directory that contains one single file. This
+operating mode is similar to the unmaintained
+[httpfs](http://httpfs.sourceforge.net/).
+
+e.g.
+
+```
+./httpdirfs -f --cache --single-file-mode https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-11.0.0-amd64-netinst.iso mnt
+```
+
+This can be useful if the web server does not present a HTTP directory listing.
+
+### Airsonic / Subsonic server support
+
+The Airsonic / Subsonic server support is dedicated to my Debian package
+maintainer Jerome Charaoui. You can mount the music collection on your Airsonic
+/ Subsonic server (\*sonic), and browse them using your favourite file browser.
+For more information on how to use it, please refer to the
+[usage](docs/usage.md#airsonic--subsonic-mounting-options) page.
 
 ### Configuration file support
 

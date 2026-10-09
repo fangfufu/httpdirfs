@@ -32,6 +32,7 @@
 #include "config.h"
 #include "link.h"
 #include "log.h"
+#include "preload.h"
 #include "transfer.h"
 
 /* clang-format off */
@@ -56,6 +57,16 @@ static void *fs_init(struct fuse_conn_info *conn, struct fuse_config *cfg)
 {
     (void)conn;
     (void)cfg;
+    /*
+     * Start the preload worker here, not in main(): the init callback runs
+     * in the process that will serve the mount, which in FUSE daemon
+     * (background) mode is the child created by the daemonizing fork. Any
+     * thread spawned in main() would be killed by that fork, and preloads
+     * enqueued before the fork are picked up by the worker spawned here.
+     */
+    if (CONFIG.progressive_dir_preload && CONFIG.mode == NORMAL) {
+        Preload_start();
+    }
     return NULL;
 }
 
@@ -237,7 +248,7 @@ static int fs_readdir(const char *path, void *buf, fuse_fill_dir_t dir_add,
     /* We skip the head link */
     for (int i = 1; i < linktbl->size; i++) {
         Link *link = linktbl->links[i];
-        if (link->type != LINK_INVALID) {
+        if (Link_should_list(link)) {
             dir_add(buf, link->linkname, NULL, 0, 0);
         }
     }
