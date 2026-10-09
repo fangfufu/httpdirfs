@@ -187,14 +187,13 @@ followed by variable-length metadata sections and page-aligned payload data:
 +-------------------------------------------------------------------------+
 ```
 
-Section offsets are computed by `container_compute_layout()`:
+Section offsets are computed by `container_compute_layout()`, where $u$ =
+`url_len`, $L$ = `http_header_len`, $n$ = `segbc`, $O$ = `http_header_offset`,
+$B$ = `bitmap_offset`, and $S$ = `header_size`:
 
-$$\\text{http_header_offset} = 64 + \\text{url_len} + 1$$
-
-$$\\text{bitmap_offset} = \\text{http_header_offset} + \\text{http_header_len}$$
-
-$$\\text{header_size} = \\lceil (64 + \\text{url_len} + 1 +
-\\text{http_header_len} + \\text{segbc}) / 4096 \\rceil \\times 4096$$
+- $O = 64 + u + 1$
+- $B = O + L$
+- $S = ⌈(64 + u + 1 + L + n) / 4096⌉ × 4096$
 
 #### Field Specifications
 
@@ -210,7 +209,7 @@ $$\\text{header_size} = \\lceil (64 + \\text{url_len} + 1 +
 | `remote_mtime`    | `int64_t`  | 8            | Upstream `Last-Modified` timestamp (POSIX seconds, or `0`)                                                                                              |
 | `content_length`  | `int64_t`  | 8            | Total payload size in bytes (from `Content-Length`; target URL length for redirect pointers)                                                            |
 | `blksz`           | `int32_t`  | 4            | Download segment block size (default 8 MiB; `0` for HEAD-only; redirect status code for redirect pointers)                                              |
-| `segbc`           | `int32_t`  | 4            | Segment count in bitmap: $\\lceil \\text{content_length} / \\text{blksz} \\rceil$ (`0` for HEAD-only / redirect)                                        |
+| `segbc`           | `int32_t`  | 4            | Segment count in bitmap: ⌈content_length / blksz⌉ (`0` for HEAD-only / redirect)                                                                        |
 | `reserved`        | `uint8_t`  | 4            | Reserved for future use (must be set to zero)                                                                                                           |
 | `head_cache_time` | `int64_t`  | 8            | Local POSIX timestamp of the last `HEAD` metadata refresh; `0` for containers written before this field existed, in which case readers use `cache_time` |
 
@@ -361,7 +360,7 @@ Normalization algorithm:
 1. **Case Normalization:**
 
    - The scheme (`http`, `https`) and host components are converted to lowercase
-     (`HTTP://EXAMPLE.COM` $\\to$ `http://example.com`).
+     (`HTTP://EXAMPLE.COM` → `http://example.com`).
 
 1. **Default Port Removal:**
 
@@ -373,8 +372,7 @@ Normalization algorithm:
 
    - Relative path segments (`.` and `..`) are resolved per RFC 3986 Section
      5.2.4.
-   - Consecutive adjacent slashes in path segments (`//` $\\to$ `/`) are
-     collapsed.
+   - Consecutive adjacent slashes in path segments (`//` → `/`) are collapsed.
    - **Trailing Slash Preservation:** Trailing slashes are strictly preserved
      (e.g., `/archive/` is never collapsed to `/archive`) because trailing
      slashes distinguish directory listings from regular files.
@@ -383,7 +381,7 @@ Normalization algorithm:
 
    - Unreserved characters (`[A-Za-z0-9-_.~]`) are decoded.
    - Reserved percent-encoded bytes are normalized to uppercase hex digits (e.g.
-     `%2f` $\\to$ `%2F`).
+     `%2f` → `%2F`).
 
 1. **Implementation Standard:**
 
@@ -426,9 +424,8 @@ All freshness checks are deterministic functions of the container header and
 
 1. Resolves the container path (canonical key, no pointer pre-resolution;
    redirect pointers are followed during the read, depth ≤ 5).
-1. Fresh iff $\\text{time(NULL)} - \\text{head_stamp} \\le
-   \\text{refresh_timeout}$, where $\\text{head_stamp} =
-   \\text{head_cache_time}$ when non-zero, else `cache_time`.
+1. Fresh iff `time(NULL)` − `head_stamp` ≤ `refresh_timeout`, where `head_stamp`
+   is `head_cache_time` when non-zero, else `cache_time`.
 1. On a hit, returns `content_length`, `remote_mtime`, `link_type` (`IS_DIR` ⇒
    `LINK_DIR`, else `LINK_FILE`), `http_resp = 200`, and the `Content-Type`
    parsed from the stored raw headers.
@@ -453,8 +450,7 @@ All freshness checks are deterministic functions of the container header and
 1. **Key match:** the stored source URL is canonicalized and must equal the
    requested canonical key (a non-canonical stored `f_url` does not invalidate a
    valid container).
-1. **Freshness:** $\\text{time(NULL)} - \\text{cache_time} \\le
-   \\text{refresh_timeout}$.
+1. **Freshness:** `time(NULL)` − `cache_time` ≤ `refresh_timeout`.
 1. On success, returns the payload, the raw HTTP headers, the container
    `cache_time` (used as the loaded table's `index_time`), and the resolved
    source URL (the base for relative link resolution).
@@ -472,8 +468,7 @@ Two validation stages guard `Cache_open()`:
 - `IS_SPARSE` containers are accepted **regardless of age** — their
   already-downloaded segments are re-validated against the live link in the next
   stage.
-- Non-sparse (complete) containers must satisfy $\\text{age} \\le
-  \\text{refresh_timeout}$.
+- Non-sparse (complete) containers must satisfy `age` ≤ `refresh_timeout`.
 
 **`Container_read(cf)`** (full validation):
 
@@ -487,12 +482,12 @@ Two validation stages guard `Cache_open()`:
    the live `content_length`, the remote object has not changed and the
    container is valid **regardless of age** — downloaded segments are never
    re-downloaded.
-1. Otherwise, age-based invalidation: $\\text{time(NULL)} - \\text{cache_time} >
-   \\text{refresh_timeout}$ ⇒ stale.
+1. Otherwise, age-based invalidation: `time(NULL)` − `cache_time` >
+   `refresh_timeout` ⇒ stale.
 1. If both `remote_mtime` values are known and differ ⇒ stale.
 1. If the stored `content_length` differs from the live value ⇒ stale.
-1. `segbc` must equal $⌈\\text{content_length}/\\text{blksz}⌉$ (computed from
-   the header, not the link).
+1. `segbc` must equal ⌈content_length / blksz⌉ (computed from the header, not
+   the link).
 1. Loads the segment bitmap into memory.
 
 A stale or corrupt container is deleted and a fresh one created (Section 6.4).
