@@ -50,19 +50,19 @@ By default, the project is configured with a release build configuration
 with the `debug` build type:
 
 ```bash
-meson setup builddir --buildtype=debug
+meson setup build --buildtype=debug
 ```
 
 Or, if the build directory has already been configured, you can reconfigure it:
 
 ```bash
-meson configure builddir --buildtype=debug
+meson configure build --buildtype=debug
 ```
 
 Then compile the project:
 
 ```bash
-meson compile -C builddir
+meson compile -C build
 ```
 
 When building with the `debug` build type, the `DEBUG` macro is automatically
@@ -113,10 +113,10 @@ pre-commit run --all-files
 
 > [!IMPORTANT]
 > The `clang-tidy` hook requires `compile_commands.json` to be present in the
-> `builddir`. If you haven't configured the project yet, run:
+> `build`. If you haven't configured the project yet, run:
 >
 > ```bash
-> meson setup builddir
+> meson setup build
 > ```
 
 > [!IMPORTANT]
@@ -165,8 +165,8 @@ We support three test suites configured and managed via Meson:
 To speed up local development feedback, only the fast tests are executed by
 default.
 
-- **Command**: Running a plain `meson test -C builddir` or triggering the
-  default local `git commit` hook.
+- **Command**: Running a plain `meson test -C build` or triggering the default
+  local `git commit` hook.
 - **Behavior**: Runs the `unit_test` and `integration_short` suites. The
   `integration_long` suite is explicitly excluded by default via the default
   test setup in `tests/meson.build`.
@@ -177,13 +177,13 @@ The GitHub Actions workflow (`build.yml`) validates the entire test suite on
 every pull request and push to the master branch using GCC and Clang
 configurations:
 
-- **Unit tests step**: `meson test -C builddir --no-suite integration --verbose`
+- **Unit tests step**: `meson test -C build --no-suite integration --verbose`
   (runs only the `unit_test` suite)
 - **Integration tests (short) step**:
-  `meson test -C builddir --suite integration_short --verbose` (runs fast
+  `meson test -C build --suite integration_short --verbose` (runs fast
   integration tests)
 - **Integration tests (long) step**:
-  `meson test -C builddir --suite integration_long --verbose` (runs
+  `meson test -C build --suite integration_long --verbose` (runs
   resource-intensive integration tests)
 
 ##### 3. Required Pre-Push Validation
@@ -215,7 +215,7 @@ ______________________________________________________________________
 Before running tests, ensure that the build directory is configured:
 
 ```bash
-meson setup builddir
+meson setup build
 ```
 
 ##### Run Unit Tests Individually
@@ -223,28 +223,28 @@ meson setup builddir
 If you want to run only the unit tests:
 
 ```bash
-meson test -C builddir --suite unit_test
+meson test -C build --suite unit_test
 ```
 
 You can also execute specific unit tests by target name:
 
 ```bash
-meson test -C builddir test_util
-meson test -C builddir test_cache
-meson test -C builddir test_config
-meson test -C builddir test_link
+meson test -C build test_util
+meson test -C build test_cache
+meson test -C build test_config
+meson test -C build test_link
 ```
 
 ##### Run Short Integration Tests Individually
 
 ```bash
-meson test -C builddir --suite integration_short
+meson test -C build --suite integration_short
 ```
 
 ##### Run Long Integration Tests Individually
 
 ```bash
-meson test -C builddir --suite integration_long
+meson test -C build --suite integration_long
 ```
 
 ##### Verbose Output and Debugging
@@ -254,11 +254,11 @@ results, use the following options:
 
 - **Print logs on failure only:**
   ```bash
-  meson test -C builddir --print-errorlogs
+  meson test -C build --print-errorlogs
   ```
 - **Verbose output (all stdout/stderr):**
   ```bash
-  meson test -C builddir -v
+  meson test -C build -v
   ```
 
 #### Integration Tests Runner Prerequisites
@@ -276,10 +276,10 @@ to the compiled `httpdirfs` binary and the desired mode flag:
 
 ```bash
 # Run short integration tests
-./tests/integration/run_integration_test.sh --short builddir/httpdirfs
+./tests/integration/run_integration_test.sh --short build/httpdirfs
 
 # Run long integration tests
-./tests/integration/run_integration_test.sh --long builddir/httpdirfs
+./tests/integration/run_integration_test.sh --long build/httpdirfs
 ```
 
 ______________________________________________________________________

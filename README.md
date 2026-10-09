@@ -213,8 +213,8 @@ You can then compile the program similar to how you compile a typical program
 that uses the Meson build system:
 
 ```
-meson setup builddir
-cd builddir
+meson setup build
+cd build
 meson compile
 ```
 
@@ -254,8 +254,8 @@ To compile the program, you might need to set the `PKG_CONFIG_PATH` so that
 
 ```
 export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig:$(brew --prefix)/lib/pkgconfig:$PKG_CONFIG_PATH"
-meson setup builddir
-cd builddir
+meson setup build
+cd build
 meson compile
 ```
 

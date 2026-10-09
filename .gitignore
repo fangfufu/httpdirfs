@@ -11,7 +11,6 @@
 
 # Build directories
 /build/
-/builddir/
 /.pre-commit-builds/
 
 # Meson subprojects (ignore cloned sources but keep wrap files tracked)

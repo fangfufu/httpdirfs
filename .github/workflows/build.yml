@@ -30,17 +30,17 @@ jobs:
           BREW_PREFIX=$(brew --prefix)
           export PKG_CONFIG_PATH="$OPENSSL_PREFIX/lib/pkgconfig"
           export PKG_CONFIG_PATH="$BREW_PREFIX/lib/pkgconfig:$PKG_CONFIG_PATH"
-          meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
+          meson setup build -Dbuildtype=${{ matrix.buildtype }}
       - name: Compile
-        run: meson compile -C builddir
+        run: meson compile -C build
       - name: Unit tests
-        run: meson test -C builddir --no-suite integration --verbose
+        run: meson test -C build --no-suite integration --verbose
       - name: Upload Meson logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: meson-logs-mac-${{ matrix.buildtype }}
-          path: builddir/meson-logs/
+          path: build/meson-logs/
   build-ubuntu:
     name: Build (Ubuntu, ${{ matrix.compiler }}, ${{ matrix.buildtype }})
     runs-on: ubuntu-latest
@@ -69,18 +69,18 @@ jobs:
       - name: Setup Meson
         run: |
           export CC=${{ matrix.compiler }}
-          meson setup builddir -Dbuildtype=${{ matrix.buildtype }}
+          meson setup build -Dbuildtype=${{ matrix.buildtype }}
       - name: Compile
-        run: meson compile -C builddir
+        run: meson compile -C build
       - name: Unit tests
-        run: meson test -C builddir --no-suite integration --verbose
+        run: meson test -C build --no-suite integration --verbose
       - name: Integration tests (short)
-        run: meson test -C builddir --suite integration_short --verbose
+        run: meson test -C build --suite integration_short --verbose
       - name: Integration tests (long)
-        run: meson test -C builddir --suite integration_long --verbose
+        run: meson test -C build --suite integration_long --verbose
       - name: Upload Meson logs
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: meson-logs-ubuntu-${{ matrix.compiler }}-${{ matrix.buildtype }}
-          path: builddir/meson-logs/
+          path: build/meson-logs/
