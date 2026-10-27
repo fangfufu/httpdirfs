@@ -286,6 +286,55 @@ static const char *cache_key_source(const Link *link)
     return link->f_url;
 }
 
+/**
+ * \brief Read and validate the target URL of a redirect container
+ * \details A redirect container stores its target URL at offset
+ * `header_size` with length `content_length` (see
+ * CacheContainer_write_redirect()). Both values come straight from the
+ * on-disk header, so they must be range-checked before being used as an
+ * allocation size or as an fread() count: a corrupt header could otherwise
+ * request a huge or zero-length allocation followed by an oversized read.
+ * \param[in] fp Open container file; the read position is not preserved.
+ * \param[in] hdr Header already read from fp (magic/version checked by the
+ * caller).
+ * \param[in] fn Cache-relative file name, used for log messages.
+ * \return NUL-terminated target URL, or NULL if the record is corrupt.
+ * \note The caller must free the returned string with FREE().
+ */
+static char *container_read_redirect_target(FILE *fp, const CacheHeader *hdr,
+                                            const char *fn)
+{
+    const char *fn_display = fn ? fn : "(unknown)";
+
+    if (!fp || !hdr) {
+        lprintf(error, "cannot read redirect container %s\n", fn_display);
+        return NULL;
+    }
+    if (hdr->content_length <= 0 || hdr->content_length > PATH_MAX) {
+        lprintf(error, "corruption: invalid redirect length %jd in %s\n",
+                (intmax_t)hdr->content_length, fn_display);
+        return NULL;
+    }
+    if (hdr->header_size < CACHE_PAGE_SIZE
+        || hdr->header_size % CACHE_PAGE_SIZE != 0) {
+        lprintf(error, "corruption: invalid header_size %u in %s\n",
+                hdr->header_size, fn_display);
+        return NULL;
+    }
+    if (fseeko(fp, (off_t)hdr->header_size, SEEK_SET) != 0) {
+        lprintf(error, "fseeko(): %s\n", strerror(errno));
+        return NULL;
+    }
+    char *target_url = CALLOC((size_t)hdr->content_length + 1, sizeof(char));
+    if (fread(target_url, 1, (size_t)hdr->content_length, fp)
+        != (size_t)hdr->content_length) {
+        lprintf(error, "error reading redirect target from %s\n", fn_display);
+        FREE(target_url);
+        return NULL;
+    }
+    return target_url;
+}
+
 static char *resolve_redirect_fn(const char *fn, int depth)
 {
     if (!fn || depth > 5 || !CACHE_DIR) {
@@ -307,18 +356,11 @@ static char *resolve_redirect_fn(const char *fn, int depth)
         fclose(fp);
         return STRDUP(fn);
     }
-    if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) != 0) {
-        fclose(fp);
-        return STRDUP(fn);
-    }
-    char *target_url = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
-    if (fread(target_url, 1, (size_t)hdr.content_length, fp)
-        != (size_t)hdr.content_length) {
-        FREE(target_url);
-        fclose(fp);
-        return STRDUP(fn);
-    }
+    char *target_url = container_read_redirect_target(fp, &hdr, fn);
     fclose(fp);
+    if (!target_url) {
+        return STRDUP(fn);
+    }
 
     char *target_fn = url_to_cache_path(target_url);
     FREE(target_url);
@@ -2056,24 +2098,19 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
     } else if (hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION) {
         lprintf(error, "not a valid cache container: %s\n", fn);
     } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
-        if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {
-            char *target_url
-                = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
-            if (fread(target_url, 1, (size_t)hdr.content_length, fp)
-                == (size_t)hdr.content_length) {
-                fclose(fp);
-                fp = NULL;
-                FREE(full_path);
-                FREE(fn);
-                FREE(canon_url);
-                res = CacheContainer_read_internal(
-                    target_url, out_payload, out_payload_len, out_http_header,
-                    out_http_header_len, out_cache_time, out_resolved_url,
-                    depth + 1);
-                FREE(target_url);
-                return res;
-            }
+        char *target_url = container_read_redirect_target(fp, &hdr, fn);
+        if (target_url) {
+            fclose(fp);
+            fp = NULL;
+            FREE(full_path);
+            FREE(fn);
+            FREE(canon_url);
+            res = CacheContainer_read_internal(
+                target_url, out_payload, out_payload_len, out_http_header,
+                out_http_header_len, out_cache_time, out_resolved_url,
+                depth + 1);
             FREE(target_url);
+            return res;
         }
     } else if (hdr.flags & CACHE_FLAG_IS_HEAD) {
         lprintf(debug,
@@ -2430,16 +2467,12 @@ static int CacheContainer_read_head_internal(const char *url,
                 url, (intmax_t)age, CONFIG.refresh_timeout);
             res = 0;
         } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
-            if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {
-                char *target_url
-                    = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
-                if (fread(target_url, 1, (size_t)hdr.content_length, fp)
-                    == (size_t)hdr.content_length) {
-                    fclose(fp);
-                    fp = NULL;
-                    res = CacheContainer_read_head_internal(
-                        target_url, stat_out, depth + 1);
-                }
+            char *target_url = container_read_redirect_target(fp, &hdr, fn);
+            if (target_url) {
+                fclose(fp);
+                fp = NULL;
+                res = CacheContainer_read_head_internal(target_url, stat_out,
+                                                        depth + 1);
                 FREE(target_url);
             }
         } else if (hdr.flags

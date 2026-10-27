@@ -1381,6 +1381,70 @@ void test_container_redirect_pointer(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_container_redirect_corrupt_length(void)
+{
+    char tmp_cache_dir[] = "./test_container_redirect_corrupt_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("https://example.com/");
+
+    const char *source_url = "https://example.com/corrupt_redirect";
+    const char *target_url = "https://example.com/corrupt_redirect/";
+
+    char *cache_key = url_to_cache_path(source_url);
+    TEST_ASSERT_NOT_NULL(cache_key);
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
+
+    const int64_t bad_lengths[] = {-1, (int64_t)PATH_MAX + 1};
+    for (size_t i = 0; i < sizeof(bad_lengths) / sizeof(bad_lengths[0]); i++) {
+        TEST_ASSERT_EQUAL_INT(
+            0, CacheContainer_write_redirect(source_url, target_url, 301));
+
+        FILE *f = fopen(full_path, "r+");
+        TEST_ASSERT_NOT_NULL(f);
+        if (f == NULL) {
+            return;
+        }
+        CacheHeader hdr;
+        TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                              (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+        TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_REDIRECT);
+        hdr.content_length = bad_lengths[i];
+        TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+        TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                              (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+        TEST_ASSERT_EQUAL_INT(0, fflush(f));
+        fclose(f);
+
+        /*
+         * The HEAD path treats the corrupt pointer as absent; the payload
+         * path treats it as corruption and deletes it. Neither may trust the
+         * length as an allocation size or read count.
+         */
+        CacheStat cs;
+        TEST_ASSERT_EQUAL_INT(0, CacheContainer_read_head(source_url, &cs));
+
+        char *out_payload = NULL;
+        size_t out_len = 0;
+        char *out_hdr = NULL;
+        size_t out_hdr_len = 0;
+        TEST_ASSERT_EQUAL_INT(-1, CacheContainer_read(source_url, &out_payload,
+                                                      &out_len, &out_hdr,
+                                                      &out_hdr_len));
+        TEST_ASSERT_NULL(out_payload);
+        TEST_ASSERT_NULL(out_hdr);
+        TEST_ASSERT_EQUAL_INT(-1, access(full_path, F_OK));
+    }
+
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    FREE(cache_key);
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 void test_container_head_and_html_expiration(void)
 {
     char tmp_cache_dir[] = "./test_container_expire_dir";
@@ -1505,6 +1569,7 @@ int main(void)
     RUN_TEST(test_container_head_write_read);
     RUN_TEST(test_container_head_to_data_promotion);
     RUN_TEST(test_container_redirect_pointer);
+    RUN_TEST(test_container_redirect_corrupt_length);
     RUN_TEST(test_container_html_parse_on_the_fly);
     RUN_TEST(test_container_timestamps);
     RUN_TEST(test_container_head_and_html_expiration);

@@ -326,6 +326,12 @@ Depending on its flags, a container file exists in one of four distinct states:
    - Written atomically to a temporary file, then renamed into place.
    - **On-disk size:** `header_size + content_length` (typically
      `4096 + content_length` bytes).
+   - Readers validate the stored geometry before using it: `content_length` must
+     be in `(0, PATH_MAX]` and `header_size` must be page-aligned and at least
+     one page, so a corrupt header cannot trigger a bad allocation or an
+     oversized read. A redirect pointer that fails validation is treated as
+     corrupt (it is deleted on the payload-read path and ignored by the HEAD and
+     key-resolution paths).
 
 ______________________________________________________________________
 
