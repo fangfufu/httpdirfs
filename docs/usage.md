@@ -74,6 +74,9 @@ HTTPDirFS options:
                             origins), or the custom location specified with
                             --cache-location if that option is given (the order
                             of the two options does not matter). Then exit.
+                            Refuses to run if the resulting root is not
+                            absolute, is the filesystem root, or is an
+                            ancestor of $HOME or the current directory.
         --cache-clear-host  Delete only the cache of a single server host,
                             given as a full URL or a bare host (both the http
                             and https origin directories are then removed).

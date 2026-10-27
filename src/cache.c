@@ -207,9 +207,131 @@ static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
     return remove(fpath);
 }
 
+/**
+ * \brief Test whether \p ancestor is \p path or one of its parent directories
+ * \details Both arguments must be absolute canonical paths. The comparison is
+ * done on whole path components, so "/home/user" is an ancestor of
+ * "/home/user/file" but not of "/home/username".
+ */
+static int path_is_ancestor_or_equal(const char *ancestor, const char *path)
+{
+    size_t len = strlen(ancestor);
+    if (len == 0 || strncmp(ancestor, path, len) != 0) {
+        return 0;
+    }
+    if (path[len] == '\0') {
+        return 1;
+    }
+    return ancestor[len - 1] == '/' || path[len] == '/';
+}
+
+/**
+ * \brief Test whether a path contains a ".." component
+ * \details Used only for roots that realpath() cannot resolve; existing paths
+ * are normalised by realpath() instead.
+ */
+static int path_has_parent_component(const char *path)
+{
+    const char *p = path;
+    while (*p) {
+        while (*p == '/') {
+            p++;
+        }
+        const char *start = p;
+        while (*p && *p != '/') {
+            p++;
+        }
+        if (p - start == 2 && start[0] == '.' && start[1] == '.') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * \brief Test whether clearing \p canon_root would remove a protected path
+ * \details \p protected_path is canonicalised with realpath() and compared
+ * against \p canon_root, which must already be canonical. Returns 0 when
+ * \p protected_path is NULL, empty, or cannot be resolved.
+ */
+static int root_contains_path(const char *canon_root,
+                              const char *protected_path)
+{
+    if (!protected_path || !protected_path[0]) {
+        return 0;
+    }
+    char *canon_protected = REALPATH(protected_path, NULL);
+    if (!canon_protected) {
+        return 0;
+    }
+    int contained = path_is_ancestor_or_equal(canon_root, canon_protected);
+    FREE(canon_protected);
+    return contained;
+}
+
+int CacheSystem_root_is_clearable(const char *root)
+{
+    if (!root || !root[0] || root[0] != '/') {
+        return 0;
+    }
+
+    /*
+     * Canonicalise the root so trailing slashes and "." / ".." components
+     * cannot be used to slip past the comparisons below. If the root does
+     * not exist yet there is nothing to delete; fall back to a lexical
+     * normalisation. The fallback cannot resolve "..", so reject roots that
+     * still contain such a component.
+     */
+    char *canon_root = REALPATH(root, NULL);
+    if (!canon_root) {
+        if (path_has_parent_component(root)) {
+            return 0;
+        }
+        canon_root = STRDUP(root);
+        if (!canon_root) {
+            return 0;
+        }
+        size_t len = strlen(canon_root);
+        while (len > 1 && canon_root[len - 1] == '/') {
+            canon_root[--len] = '\0';
+        }
+    }
+
+    /* Reject the filesystem root, even when spelled with extra slashes. */
+    int clearable = canon_root[strspn(canon_root, "/")] != '\0';
+
+    /*
+     * Never clear the user's home directory, the current working directory,
+     * or any ancestor of either: --cache-clear is recursive and such a root
+     * would destroy unrelated data.
+     */
+    if (clearable) {
+        clearable = !root_contains_path(canon_root, getenv("HOME"));
+    }
+    if (clearable) {
+        char *cwd = REALPATH("./", NULL);
+        if (cwd) {
+            clearable = !path_is_ancestor_or_equal(canon_root, cwd);
+            FREE(cwd);
+        }
+    }
+
+    FREE(canon_root);
+    return clearable;
+}
+
 void CacheSystem_clear(void)
 {
     char *cache_del = CacheSystem_get_cache_root();
+    if (!CacheSystem_root_is_clearable(cache_del)) {
+        lprintf(error,
+                "refusing to clear cache root %s: it is not absolute, is the "
+                "filesystem root, or is an ancestor of $HOME or the current "
+                "directory\n",
+                cache_del ? cache_del : "(null)");
+        FREE(cache_del);
+        exit(EXIT_FAILURE);
+    }
     nftw(cache_del, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
     FREE(cache_del);
     exit(EXIT_SUCCESS);
@@ -221,6 +343,18 @@ int CacheSystem_delete_host(const char *arg)
         lprintf(error, "--cache-clear-host requires a URL or host\n");
         return -1;
     }
+
+    char *cache_root = CacheSystem_get_cache_root();
+    if (!CacheSystem_root_is_clearable(cache_root)) {
+        lprintf(error,
+                "refusing to clear host cache under %s: it is not absolute, "
+                "is the filesystem root, or is an ancestor of $HOME or the "
+                "current directory\n",
+                cache_root ? cache_root : "(null)");
+        FREE(cache_root);
+        return -1;
+    }
+    FREE(cache_root);
 
     static const char *schemes[2] = {"https", "http"};
     int found = 0;

@@ -246,6 +246,17 @@ void CacheSystem_init(const char *url);
 void CacheSystem_cleanup(void);
 
 /**
+ * \brief Test whether a cache root is safe to delete recursively
+ * \details Returns 0 for NULL, the empty string, non-absolute roots, the
+ * filesystem root, and any root that is equal to or an ancestor of $HOME or
+ * the current working directory (after realpath() normalisation, so trailing
+ * slashes and ".." cannot bypass the check). Used to guard the recursive
+ * deletes performed by --cache-clear and --cache-clear-host.
+ * \return 1 if the root may be cleared, 0 otherwise
+ */
+int CacheSystem_root_is_clearable(const char *root);
+
+/**
  * \brief clear the content of the cache directory
  */
 void CacheSystem_clear(void);

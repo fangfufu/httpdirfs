@@ -873,6 +873,12 @@ Surgical eviction of a single server's cached data:
 1. **Bare Host Argument:** If the argument lacks a scheme (e.g. `example.com`),
    both `https%3A%2F%2F<host>` and `http%3A%2F%2F<host>` directories are
    targeted.
+1. **Safety check:** the cache root (from `--cache-location`, or the default
+   root) is rejected if it is empty, non-absolute, the filesystem root, or equal
+   to / an ancestor of `$HOME` or the current working directory (compared after
+   `realpath()`, so trailing slashes and `..` do not bypass the check). A
+   rejected root makes HTTPDirFS exit with `EXIT_FAILURE` without deleting
+   anything.
 1. The matching directory tree is recursively deleted via `nftw()` with
    `FTW_DEPTH | FTW_PHYS | FTW_MOUNT`.
 1. HTTPDirFS exits with `EXIT_SUCCESS` immediately after deletion (or
@@ -881,6 +887,12 @@ Surgical eviction of a single server's cached data:
 ### 8.2 Global Cache Clearing (`--cache-clear`)
 
 1. Resolves the cache root (default or overridden by `--cache-location`).
+1. **Safety check:** the root is rejected — and HTTPDirFS exits with
+   `EXIT_FAILURE` without deleting anything — if it is empty, non-absolute, the
+   filesystem root, or equal to / an ancestor of `$HOME` or the current working
+   directory (compared after `realpath()`, so trailing slashes and `..` do not
+   bypass the check). This guards the recursive delete against a misconfigured
+   `--cache-location`.
 1. Recursively removes all origin folders and `CACHEDIR.TAG` via `nftw()`.
 1. Exits immediately with `EXIT_SUCCESS`.
 
