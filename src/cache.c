@@ -597,10 +597,6 @@ static int Container_read(Cache *cf)
         return EBADMSG;
     }
 
-    if (hdr.blksz != CONFIG.data_blksz) {
-        lprintf(warning, "Warning: cached blksz != CONFIG.data_blksz\n");
-    }
-
     /*
      * Read back the canonical source URL and verify it matches the live
      * link. A mismatch means a (theoretically impossible) hash collision
@@ -678,6 +674,20 @@ static int Container_read(Cache *cf)
                 hdr.segbc, (long)max_segbc);
         return EBADMSG;
     }
+
+    /*
+     * The container's segment geometry is authoritative: the segment bitmap
+     * and the on-disk payload were laid out using hdr.blksz when the
+     * container was created. Using CONFIG.data_blksz here instead would make
+     * segment lookups address the wrong byte ranges and silently serve zero
+     * bytes for segments that are marked as present. CONFIG.data_blksz only
+     * applies to containers created from now on.
+     */
+    if (hdr.blksz != CONFIG.data_blksz) {
+        lprintf(info, "using cached segment size %d for %s (configured: %d)\n",
+                hdr.blksz, cf->path, CONFIG.data_blksz);
+    }
+    cf->blksz = hdr.blksz;
 
     /*
      * Remember the section offsets, then skip to the bitmap and load it.

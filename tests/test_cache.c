@@ -660,6 +660,62 @@ void test_container_file_create_open(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_container_blksz_geometry_authoritative(void)
+{
+    char tmp_cache_dir[] = "./test_container_blksz_geometry_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    int old_data_blksz = CONFIG.data_blksz;
+    CONFIG.cache_dir = tmp_cache_dir;
+
+    LinkTable *table = LinkTable_alloc("https://example.com/");
+    Link *link = CALLOC(1, sizeof(Link));
+    link->type = LINK_FILE;
+    link->content_length = (size_t)1 << 20;
+    link->time = 1000000;
+    link->parent_table = table;
+    strncpy(link->linkname, "geometry.bin", NAME_MAX);
+    snprintf(link->f_url, PATH_MAX, "https://example.com/geometry.bin");
+    LinkTable_add(table, link);
+
+    LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
+    ROOT_LINK_TBL = table;
+
+    /*
+     * Create a container with a 4 KiB segment size: 1 MiB requires 256
+     * segments, so the geometry differs unambiguously from the 8 MiB default.
+     */
+    CONFIG.data_blksz = 4096;
+    CacheSystem_init("https://example.com/");
+    TEST_ASSERT_EQUAL_INT(0, Cache_create("geometry.bin"));
+
+    Cache *cf = Cache_open("geometry.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+    TEST_ASSERT_EQUAL_INT(4096, cf->blksz);
+    TEST_ASSERT_EQUAL_INT(256, (int)cf->segbc);
+    Cache_close(cf);
+
+    /*
+     * Reopen with a different --dl-seg-size. The segment bitmap and payload
+     * were laid out with the container's blksz, so the container must win;
+     * otherwise segment lookups would address the wrong byte ranges.
+     */
+    CONFIG.data_blksz = 8192;
+    cf = Cache_open("geometry.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+    TEST_ASSERT_EQUAL_INT(4096, cf->blksz);
+    TEST_ASSERT_EQUAL_INT(256, (int)cf->segbc);
+    Cache_close(cf);
+
+    ROOT_LINK_TBL = old_root_link_tbl;
+    LinkTable_free(table);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    CONFIG.data_blksz = old_data_blksz;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 void test_container_html_parse_on_the_fly(void)
 {
     char tmp_cache_dir[] = "./test_container_html_dir";
@@ -1445,6 +1501,7 @@ int main(void)
     RUN_TEST(test_Cache_free_active_downloads_with_waiters);
     RUN_TEST(test_cache_path_derivation);
     RUN_TEST(test_container_file_create_open);
+    RUN_TEST(test_container_blksz_geometry_authoritative);
     RUN_TEST(test_container_head_write_read);
     RUN_TEST(test_container_head_to_data_promotion);
     RUN_TEST(test_container_redirect_pointer);

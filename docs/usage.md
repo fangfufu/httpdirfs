@@ -86,8 +86,9 @@ HTTPDirFS options:
         --capath            Certificate authority directory for the server
          --dl-seg-size       Set cache download segment size, in bytes
                              (K/M/G suffix supported, default: 8M, minimum:
-                             1M). Note: this setting is ignored if previously
-                             cached data is found for the requested file.
+                             1M). Note: existing cache files keep the segment
+                             size they were created with; this setting only
+                             applies to newly created cache files.
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
                             libcurl is allowed to make. (default: 6)

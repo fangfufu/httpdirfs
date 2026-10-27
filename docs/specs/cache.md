@@ -488,6 +488,12 @@ Two validation stages guard `Cache_open()`:
 1. If the stored `content_length` differs from the live value ⇒ stale.
 1. `segbc` must equal ⌈content_length / blksz⌉ (computed from the header, not
    the link).
+1. The container's stored `blksz` is authoritative: `cf->blksz` is set from the
+   header, because the bitmap and the sparse payload were laid out with that
+   segment size. `CONFIG.data_blksz` (`--dl-seg-size`) only applies to
+   containers created from now on; reopening an existing container with a
+   different configured size logs an informational message and keeps the
+   container's geometry.
 1. Loads the segment bitmap into memory.
 
 A stale or corrupt container is deleted and a fresh one created (Section 6.4).
