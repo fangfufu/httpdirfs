@@ -74,6 +74,9 @@ HTTPDirFS options:
                             origins), or the custom location specified with
                             --cache-location if that option is given (the order
                             of the two options does not matter). Then exit.
+                            Refuses to run if the resulting root is not
+                            absolute, is the filesystem root, or is an
+                            ancestor of $HOME or the current directory.
         --cache-clear-host  Delete only the cache of a single server host,
                             given as a full URL or a bare host (both the http
                             and https origin directories are then removed).
@@ -86,8 +89,9 @@ HTTPDirFS options:
         --capath            Certificate authority directory for the server
          --dl-seg-size       Set cache download segment size, in bytes
                              (K/M/G suffix supported, default: 8M, minimum:
-                             1M). Note: this setting is ignored if previously
-                             cached data is found for the requested file.
+                             1M). Note: existing cache files keep the segment
+                             size they were created with; this setting only
+                             applies to newly created cache files.
         --http-header       Set one or more HTTP headers
         --max-conns         Set maximum number of network connections that
                             libcurl is allowed to make. (default: 6)

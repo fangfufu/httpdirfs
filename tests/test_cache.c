@@ -660,6 +660,62 @@ void test_container_file_create_open(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_container_blksz_geometry_authoritative(void)
+{
+    char tmp_cache_dir[] = "./test_container_blksz_geometry_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    int old_data_blksz = CONFIG.data_blksz;
+    CONFIG.cache_dir = tmp_cache_dir;
+
+    LinkTable *table = LinkTable_alloc("https://example.com/");
+    Link *link = CALLOC(1, sizeof(Link));
+    link->type = LINK_FILE;
+    link->content_length = (size_t)1 << 20;
+    link->time = 1000000;
+    link->parent_table = table;
+    strncpy(link->linkname, "geometry.bin", NAME_MAX);
+    snprintf(link->f_url, PATH_MAX, "https://example.com/geometry.bin");
+    LinkTable_add(table, link);
+
+    LinkTable *old_root_link_tbl = ROOT_LINK_TBL;
+    ROOT_LINK_TBL = table;
+
+    /*
+     * Create a container with a 4 KiB segment size: 1 MiB requires 256
+     * segments, so the geometry differs unambiguously from the 8 MiB default.
+     */
+    CONFIG.data_blksz = 4096;
+    CacheSystem_init("https://example.com/");
+    TEST_ASSERT_EQUAL_INT(0, Cache_create("geometry.bin"));
+
+    Cache *cf = Cache_open("geometry.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+    TEST_ASSERT_EQUAL_INT(4096, cf->blksz);
+    TEST_ASSERT_EQUAL_INT(256, (int)cf->segbc);
+    Cache_close(cf);
+
+    /*
+     * Reopen with a different --dl-seg-size. The segment bitmap and payload
+     * were laid out with the container's blksz, so the container must win;
+     * otherwise segment lookups would address the wrong byte ranges.
+     */
+    CONFIG.data_blksz = 8192;
+    cf = Cache_open("geometry.bin");
+    TEST_ASSERT_NOT_NULL(cf);
+    TEST_ASSERT_EQUAL_INT(4096, cf->blksz);
+    TEST_ASSERT_EQUAL_INT(256, (int)cf->segbc);
+    Cache_close(cf);
+
+    ROOT_LINK_TBL = old_root_link_tbl;
+    LinkTable_free(table);
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    CONFIG.data_blksz = old_data_blksz;
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 void test_container_html_parse_on_the_fly(void)
 {
     char tmp_cache_dir[] = "./test_container_html_dir";
@@ -1094,6 +1150,109 @@ void test_cache_clear_host(void)
     FREE(tmp_xdg_cache);
 }
 
+void test_CacheSystem_root_is_clearable(void)
+{
+    char tmp_home[] = "./test_cache_root_clearable_home";
+    char tmp_sibling[] = "./test_cache_root_clearable_home_extra";
+    setup_temp_cache_dir(tmp_home);
+    cleanup_temp_dir(tmp_sibling);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(tmp_sibling, S_IRWXU));
+
+    char *cwd = REALPATH("./", NULL);
+    TEST_ASSERT_NOT_NULL(cwd);
+    char *abs_home = REALPATH(tmp_home, NULL);
+    TEST_ASSERT_NOT_NULL(abs_home);
+    char *abs_sibling = REALPATH(tmp_sibling, NULL);
+    TEST_ASSERT_NOT_NULL(abs_sibling);
+
+    char *child = path_append(abs_home, "child");
+    TEST_ASSERT_NOT_NULL(child);
+    TEST_ASSERT_EQUAL_INT(0, mkdir(child, S_IRWXU));
+
+    /* Point HOME at a directory we control so the test is self-contained. */
+    char *old_home = NULL;
+    const char *home = getenv("HOME");
+    if (home) {
+        old_home = STRDUP(home);
+    }
+    setenv("HOME", abs_home, 1);
+
+    /* Invalid or dangerous roots must be rejected. */
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(NULL));
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(""));
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable("."));
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(tmp_home));
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable("/"));
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(cwd));
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(abs_home));
+
+    /* Trailing slashes and ".." components must not bypass the checks. */
+    char with_slash[PATH_MAX + 2];
+    snprintf(with_slash, sizeof(with_slash), "%s/", cwd);
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(with_slash));
+    snprintf(with_slash, sizeof(with_slash), "%s/", abs_home);
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(with_slash));
+
+    char *cwd_parent = path_append(cwd, "..");
+    TEST_ASSERT_NOT_NULL(cwd_parent);
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(cwd_parent));
+    FREE(cwd_parent);
+
+    char *home_parent = path_append(abs_home, "..");
+    TEST_ASSERT_NOT_NULL(home_parent);
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(home_parent));
+    FREE(home_parent);
+
+    /*
+     * A root that realpath() cannot resolve must not hide ".." components
+     * from the guard.
+     */
+    char *unresolved_parent = path_append(cwd, "missing/../..");
+    TEST_ASSERT_NOT_NULL(unresolved_parent);
+    TEST_ASSERT_EQUAL_INT(0, CacheSystem_root_is_clearable(unresolved_parent));
+    FREE(unresolved_parent);
+
+    /* A plain non-existent absolute root has nothing to delete. */
+    char tmp_missing[] = "./test_cache_root_clearable_missing";
+    cleanup_temp_dir(tmp_missing);
+    char *abs_missing = path_append(cwd, "test_cache_root_clearable_missing");
+    TEST_ASSERT_NOT_NULL(abs_missing);
+    TEST_ASSERT_EQUAL_INT(1, CacheSystem_root_is_clearable(abs_missing));
+    FREE(abs_missing);
+
+    /* A cache-like descendant is clearable. */
+    TEST_ASSERT_EQUAL_INT(1, CacheSystem_root_is_clearable(child));
+    snprintf(with_slash, sizeof(with_slash), "%s/", child);
+    TEST_ASSERT_EQUAL_INT(1, CacheSystem_root_is_clearable(with_slash));
+
+    /*
+     * A sibling whose name shares a prefix with the protected directory is
+     * not an ancestor, so the path-component boundary check must accept it.
+     */
+    TEST_ASSERT_EQUAL_INT(1, CacheSystem_root_is_clearable(abs_sibling));
+
+    /*
+     * Reverse case: the root is a string prefix of the protected path
+     * ($HOME) but not a path-component ancestor of it.
+     */
+    setenv("HOME", abs_sibling, 1);
+    TEST_ASSERT_EQUAL_INT(1, CacheSystem_root_is_clearable(abs_home));
+
+    if (old_home) {
+        setenv("HOME", old_home, 1);
+        FREE(old_home);
+    } else {
+        unsetenv("HOME");
+    }
+
+    FREE(child);
+    FREE(abs_sibling);
+    FREE(abs_home);
+    FREE(cwd);
+    cleanup_temp_dir(tmp_home);
+    cleanup_temp_dir(tmp_sibling);
+}
+
 void test_container_head_write_read(void)
 {
     char tmp_cache_dir[] = "./test_container_head_dir";
@@ -1325,6 +1484,70 @@ void test_container_redirect_pointer(void)
     cleanup_temp_dir(tmp_cache_dir);
 }
 
+void test_container_redirect_corrupt_length(void)
+{
+    char tmp_cache_dir[] = "./test_container_redirect_corrupt_dir";
+    setup_temp_cache_dir(tmp_cache_dir);
+
+    char *old_cache_dir = CONFIG.cache_dir;
+    CONFIG.cache_dir = tmp_cache_dir;
+    CacheSystem_init("https://example.com/");
+
+    const char *source_url = "https://example.com/corrupt_redirect";
+    const char *target_url = "https://example.com/corrupt_redirect/";
+
+    char *cache_key = url_to_cache_path(source_url);
+    TEST_ASSERT_NOT_NULL(cache_key);
+    char full_path[512];
+    snprintf(full_path, sizeof(full_path), "%s/%s", CACHE_DIR, cache_key);
+
+    const int64_t bad_lengths[] = {-1, (int64_t)PATH_MAX + 1};
+    for (size_t i = 0; i < sizeof(bad_lengths) / sizeof(bad_lengths[0]); i++) {
+        TEST_ASSERT_EQUAL_INT(
+            0, CacheContainer_write_redirect(source_url, target_url, 301));
+
+        FILE *f = fopen(full_path, "r+");
+        TEST_ASSERT_NOT_NULL(f);
+        if (f == NULL) {
+            return;
+        }
+        CacheHeader hdr;
+        TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                              (int)fread(&hdr, 1, CACHE_HEADER_SIZE, f));
+        TEST_ASSERT_TRUE(hdr.flags & CACHE_FLAG_IS_REDIRECT);
+        hdr.content_length = bad_lengths[i];
+        TEST_ASSERT_EQUAL_INT(0, fseek(f, 0, SEEK_SET));
+        TEST_ASSERT_EQUAL_INT(CACHE_HEADER_SIZE,
+                              (int)fwrite(&hdr, 1, CACHE_HEADER_SIZE, f));
+        TEST_ASSERT_EQUAL_INT(0, fflush(f));
+        fclose(f);
+
+        /*
+         * The HEAD path treats the corrupt pointer as absent; the payload
+         * path treats it as corruption and deletes it. Neither may trust the
+         * length as an allocation size or read count.
+         */
+        CacheStat cs;
+        TEST_ASSERT_EQUAL_INT(0, CacheContainer_read_head(source_url, &cs));
+
+        char *out_payload = NULL;
+        size_t out_len = 0;
+        char *out_hdr = NULL;
+        size_t out_hdr_len = 0;
+        TEST_ASSERT_EQUAL_INT(-1, CacheContainer_read(source_url, &out_payload,
+                                                      &out_len, &out_hdr,
+                                                      &out_hdr_len));
+        TEST_ASSERT_NULL(out_payload);
+        TEST_ASSERT_NULL(out_hdr);
+        TEST_ASSERT_EQUAL_INT(-1, access(full_path, F_OK));
+    }
+
+    CacheSystem_cleanup();
+    CONFIG.cache_dir = old_cache_dir;
+    FREE(cache_key);
+    cleanup_temp_dir(tmp_cache_dir);
+}
+
 void test_container_head_and_html_expiration(void)
 {
     char tmp_cache_dir[] = "./test_container_expire_dir";
@@ -1445,13 +1668,16 @@ int main(void)
     RUN_TEST(test_Cache_free_active_downloads_with_waiters);
     RUN_TEST(test_cache_path_derivation);
     RUN_TEST(test_container_file_create_open);
+    RUN_TEST(test_container_blksz_geometry_authoritative);
     RUN_TEST(test_container_head_write_read);
     RUN_TEST(test_container_head_to_data_promotion);
     RUN_TEST(test_container_redirect_pointer);
+    RUN_TEST(test_container_redirect_corrupt_length);
     RUN_TEST(test_container_html_parse_on_the_fly);
     RUN_TEST(test_container_timestamps);
     RUN_TEST(test_container_head_and_html_expiration);
     RUN_TEST(test_container_file_then_dir);
     RUN_TEST(test_cache_clear_host);
+    RUN_TEST(test_CacheSystem_root_is_clearable);
     return UNITY_END();
 }

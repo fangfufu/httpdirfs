@@ -326,6 +326,12 @@ Depending on its flags, a container file exists in one of four distinct states:
    - Written atomically to a temporary file, then renamed into place.
    - **On-disk size:** `header_size + content_length` (typically
      `4096 + content_length` bytes).
+   - Readers validate the stored geometry before using it: `content_length` must
+     be in `(0, PATH_MAX]` and `header_size` must be page-aligned and at least
+     one page, so a corrupt header cannot trigger a bad allocation or an
+     oversized read. A redirect pointer that fails validation is treated as
+     corrupt (it is deleted on the payload-read path and ignored by the HEAD and
+     key-resolution paths).
 
 ______________________________________________________________________
 
@@ -488,6 +494,12 @@ Two validation stages guard `Cache_open()`:
 1. If the stored `content_length` differs from the live value ⇒ stale.
 1. `segbc` must equal ⌈content_length / blksz⌉ (computed from the header, not
    the link).
+1. The container's stored `blksz` is authoritative: `cf->blksz` is set from the
+   header, because the bitmap and the sparse payload were laid out with that
+   segment size. `CONFIG.data_blksz` (`--dl-seg-size`) only applies to
+   containers created from now on; reopening an existing container with a
+   different configured size logs an informational message and keeps the
+   container's geometry.
 1. Loads the segment bitmap into memory.
 
 A stale or corrupt container is deleted and a fresh one created (Section 6.4).
@@ -861,6 +873,12 @@ Surgical eviction of a single server's cached data:
 1. **Bare Host Argument:** If the argument lacks a scheme (e.g. `example.com`),
    both `https%3A%2F%2F<host>` and `http%3A%2F%2F<host>` directories are
    targeted.
+1. **Safety check:** the cache root (from `--cache-location`, or the default
+   root) is rejected if it is empty, non-absolute, the filesystem root, or equal
+   to / an ancestor of `$HOME` or the current working directory (compared after
+   `realpath()`, so trailing slashes and `..` do not bypass the check). A
+   rejected root makes HTTPDirFS exit with `EXIT_FAILURE` without deleting
+   anything.
 1. The matching directory tree is recursively deleted via `nftw()` with
    `FTW_DEPTH | FTW_PHYS | FTW_MOUNT`.
 1. HTTPDirFS exits with `EXIT_SUCCESS` immediately after deletion (or
@@ -869,6 +887,12 @@ Surgical eviction of a single server's cached data:
 ### 8.2 Global Cache Clearing (`--cache-clear`)
 
 1. Resolves the cache root (default or overridden by `--cache-location`).
+1. **Safety check:** the root is rejected — and HTTPDirFS exits with
+   `EXIT_FAILURE` without deleting anything — if it is empty, non-absolute, the
+   filesystem root, or equal to / an ancestor of `$HOME` or the current working
+   directory (compared after `realpath()`, so trailing slashes and `..` do not
+   bypass the check). This guards the recursive delete against a misconfigured
+   `--cache-location`.
 1. Recursively removes all origin folders and `CACHEDIR.TAG` via `nftw()`.
 1. Exits immediately with `EXIT_SUCCESS`.
 

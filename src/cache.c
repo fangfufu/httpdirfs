@@ -207,9 +207,131 @@ static int ntfw_cb(const char *fpath, const struct stat *sb, int typeflag,
     return remove(fpath);
 }
 
+/**
+ * \brief Test whether \p ancestor is \p path or one of its parent directories
+ * \details Both arguments must be absolute canonical paths. The comparison is
+ * done on whole path components, so "/home/user" is an ancestor of
+ * "/home/user/file" but not of "/home/username".
+ */
+static int path_is_ancestor_or_equal(const char *ancestor, const char *path)
+{
+    size_t len = strlen(ancestor);
+    if (len == 0 || strncmp(ancestor, path, len) != 0) {
+        return 0;
+    }
+    if (path[len] == '\0') {
+        return 1;
+    }
+    return ancestor[len - 1] == '/' || path[len] == '/';
+}
+
+/**
+ * \brief Test whether a path contains a ".." component
+ * \details Used only for roots that realpath() cannot resolve; existing paths
+ * are normalised by realpath() instead.
+ */
+static int path_has_parent_component(const char *path)
+{
+    const char *p = path;
+    while (*p) {
+        while (*p == '/') {
+            p++;
+        }
+        const char *start = p;
+        while (*p && *p != '/') {
+            p++;
+        }
+        if (p - start == 2 && start[0] == '.' && start[1] == '.') {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/**
+ * \brief Test whether clearing \p canon_root would remove a protected path
+ * \details \p protected_path is canonicalised with realpath() and compared
+ * against \p canon_root, which must already be canonical. Returns 0 when
+ * \p protected_path is NULL, empty, or cannot be resolved.
+ */
+static int root_contains_path(const char *canon_root,
+                              const char *protected_path)
+{
+    if (!protected_path || !protected_path[0]) {
+        return 0;
+    }
+    char *canon_protected = REALPATH(protected_path, NULL);
+    if (!canon_protected) {
+        return 0;
+    }
+    int contained = path_is_ancestor_or_equal(canon_root, canon_protected);
+    FREE(canon_protected);
+    return contained;
+}
+
+int CacheSystem_root_is_clearable(const char *root)
+{
+    if (!root || !root[0] || root[0] != '/') {
+        return 0;
+    }
+
+    /*
+     * Canonicalise the root so trailing slashes and "." / ".." components
+     * cannot be used to slip past the comparisons below. If the root does
+     * not exist yet there is nothing to delete; fall back to a lexical
+     * normalisation. The fallback cannot resolve "..", so reject roots that
+     * still contain such a component.
+     */
+    char *canon_root = REALPATH(root, NULL);
+    if (!canon_root) {
+        if (path_has_parent_component(root)) {
+            return 0;
+        }
+        canon_root = STRDUP(root);
+        if (!canon_root) {
+            return 0;
+        }
+        size_t len = strlen(canon_root);
+        while (len > 1 && canon_root[len - 1] == '/') {
+            canon_root[--len] = '\0';
+        }
+    }
+
+    /* Reject the filesystem root, even when spelled with extra slashes. */
+    int clearable = canon_root[strspn(canon_root, "/")] != '\0';
+
+    /*
+     * Never clear the user's home directory, the current working directory,
+     * or any ancestor of either: --cache-clear is recursive and such a root
+     * would destroy unrelated data.
+     */
+    if (clearable) {
+        clearable = !root_contains_path(canon_root, getenv("HOME"));
+    }
+    if (clearable) {
+        char *cwd = REALPATH("./", NULL);
+        if (cwd) {
+            clearable = !path_is_ancestor_or_equal(canon_root, cwd);
+            FREE(cwd);
+        }
+    }
+
+    FREE(canon_root);
+    return clearable;
+}
+
 void CacheSystem_clear(void)
 {
     char *cache_del = CacheSystem_get_cache_root();
+    if (!CacheSystem_root_is_clearable(cache_del)) {
+        lprintf(error,
+                "refusing to clear cache root %s: it is not absolute, is the "
+                "filesystem root, or is an ancestor of $HOME or the current "
+                "directory\n",
+                cache_del ? cache_del : "(null)");
+        FREE(cache_del);
+        exit(EXIT_FAILURE);
+    }
     nftw(cache_del, ntfw_cb, 64, FTW_DEPTH | FTW_PHYS | FTW_MOUNT);
     FREE(cache_del);
     exit(EXIT_SUCCESS);
@@ -221,6 +343,18 @@ int CacheSystem_delete_host(const char *arg)
         lprintf(error, "--cache-clear-host requires a URL or host\n");
         return -1;
     }
+
+    char *cache_root = CacheSystem_get_cache_root();
+    if (!CacheSystem_root_is_clearable(cache_root)) {
+        lprintf(error,
+                "refusing to clear host cache under %s: it is not absolute, "
+                "is the filesystem root, or is an ancestor of $HOME or the "
+                "current directory\n",
+                cache_root ? cache_root : "(null)");
+        FREE(cache_root);
+        return -1;
+    }
+    FREE(cache_root);
 
     static const char *schemes[2] = {"https", "http"};
     int found = 0;
@@ -286,6 +420,55 @@ static const char *cache_key_source(const Link *link)
     return link->f_url;
 }
 
+/**
+ * \brief Read and validate the target URL of a redirect container
+ * \details A redirect container stores its target URL at offset
+ * `header_size` with length `content_length` (see
+ * CacheContainer_write_redirect()). Both values come straight from the
+ * on-disk header, so they must be range-checked before being used as an
+ * allocation size or as an fread() count: a corrupt header could otherwise
+ * request a huge or zero-length allocation followed by an oversized read.
+ * \param[in] fp Open container file; the read position is not preserved.
+ * \param[in] hdr Header already read from fp (magic/version checked by the
+ * caller).
+ * \param[in] fn Cache-relative file name, used for log messages.
+ * \return NUL-terminated target URL, or NULL if the record is corrupt.
+ * \note The caller must free the returned string with FREE().
+ */
+static char *container_read_redirect_target(FILE *fp, const CacheHeader *hdr,
+                                            const char *fn)
+{
+    const char *fn_display = fn ? fn : "(unknown)";
+
+    if (!fp || !hdr) {
+        lprintf(error, "cannot read redirect container %s\n", fn_display);
+        return NULL;
+    }
+    if (hdr->content_length <= 0 || hdr->content_length > PATH_MAX) {
+        lprintf(error, "corruption: invalid redirect length %jd in %s\n",
+                (intmax_t)hdr->content_length, fn_display);
+        return NULL;
+    }
+    if (hdr->header_size < CACHE_PAGE_SIZE
+        || hdr->header_size % CACHE_PAGE_SIZE != 0) {
+        lprintf(error, "corruption: invalid header_size %u in %s\n",
+                hdr->header_size, fn_display);
+        return NULL;
+    }
+    if (fseeko(fp, (off_t)hdr->header_size, SEEK_SET) != 0) {
+        lprintf(error, "fseeko(): %s\n", strerror(errno));
+        return NULL;
+    }
+    char *target_url = CALLOC((size_t)hdr->content_length + 1, sizeof(char));
+    if (fread(target_url, 1, (size_t)hdr->content_length, fp)
+        != (size_t)hdr->content_length) {
+        lprintf(error, "error reading redirect target from %s\n", fn_display);
+        FREE(target_url);
+        return NULL;
+    }
+    return target_url;
+}
+
 static char *resolve_redirect_fn(const char *fn, int depth)
 {
     if (!fn || depth > 5 || !CACHE_DIR) {
@@ -307,18 +490,11 @@ static char *resolve_redirect_fn(const char *fn, int depth)
         fclose(fp);
         return STRDUP(fn);
     }
-    if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) != 0) {
-        fclose(fp);
-        return STRDUP(fn);
-    }
-    char *target_url = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
-    if (fread(target_url, 1, (size_t)hdr.content_length, fp)
-        != (size_t)hdr.content_length) {
-        FREE(target_url);
-        fclose(fp);
-        return STRDUP(fn);
-    }
+    char *target_url = container_read_redirect_target(fp, &hdr, fn);
     fclose(fp);
+    if (!target_url) {
+        return STRDUP(fn);
+    }
 
     char *target_fn = url_to_cache_path(target_url);
     FREE(target_url);
@@ -597,10 +773,6 @@ static int Container_read(Cache *cf)
         return EBADMSG;
     }
 
-    if (hdr.blksz != CONFIG.data_blksz) {
-        lprintf(warning, "Warning: cached blksz != CONFIG.data_blksz\n");
-    }
-
     /*
      * Read back the canonical source URL and verify it matches the live
      * link. A mismatch means a (theoretically impossible) hash collision
@@ -678,6 +850,20 @@ static int Container_read(Cache *cf)
                 hdr.segbc, (long)max_segbc);
         return EBADMSG;
     }
+
+    /*
+     * The container's segment geometry is authoritative: the segment bitmap
+     * and the on-disk payload were laid out using hdr.blksz when the
+     * container was created. Using CONFIG.data_blksz here instead would make
+     * segment lookups address the wrong byte ranges and silently serve zero
+     * bytes for segments that are marked as present. CONFIG.data_blksz only
+     * applies to containers created from now on.
+     */
+    if (hdr.blksz != CONFIG.data_blksz) {
+        lprintf(info, "using cached segment size %d for %s (configured: %d)\n",
+                hdr.blksz, cf->path, CONFIG.data_blksz);
+    }
+    cf->blksz = hdr.blksz;
 
     /*
      * Remember the section offsets, then skip to the bitmap and load it.
@@ -2046,24 +2232,19 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
     } else if (hdr.magic != CACHE_MAGIC || hdr.version != CACHE_VERSION) {
         lprintf(error, "not a valid cache container: %s\n", fn);
     } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
-        if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {
-            char *target_url
-                = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
-            if (fread(target_url, 1, (size_t)hdr.content_length, fp)
-                == (size_t)hdr.content_length) {
-                fclose(fp);
-                fp = NULL;
-                FREE(full_path);
-                FREE(fn);
-                FREE(canon_url);
-                res = CacheContainer_read_internal(
-                    target_url, out_payload, out_payload_len, out_http_header,
-                    out_http_header_len, out_cache_time, out_resolved_url,
-                    depth + 1);
-                FREE(target_url);
-                return res;
-            }
+        char *target_url = container_read_redirect_target(fp, &hdr, fn);
+        if (target_url) {
+            fclose(fp);
+            fp = NULL;
+            FREE(full_path);
+            FREE(fn);
+            FREE(canon_url);
+            res = CacheContainer_read_internal(
+                target_url, out_payload, out_payload_len, out_http_header,
+                out_http_header_len, out_cache_time, out_resolved_url,
+                depth + 1);
             FREE(target_url);
+            return res;
         }
     } else if (hdr.flags & CACHE_FLAG_IS_HEAD) {
         lprintf(debug,
@@ -2420,16 +2601,12 @@ static int CacheContainer_read_head_internal(const char *url,
                 url, (intmax_t)age, CONFIG.refresh_timeout);
             res = 0;
         } else if (hdr.flags & CACHE_FLAG_IS_REDIRECT) {
-            if (fseeko(fp, (off_t)hdr.header_size, SEEK_SET) == 0) {
-                char *target_url
-                    = CALLOC((size_t)hdr.content_length + 1, sizeof(char));
-                if (fread(target_url, 1, (size_t)hdr.content_length, fp)
-                    == (size_t)hdr.content_length) {
-                    fclose(fp);
-                    fp = NULL;
-                    res = CacheContainer_read_head_internal(
-                        target_url, stat_out, depth + 1);
-                }
+            char *target_url = container_read_redirect_target(fp, &hdr, fn);
+            if (target_url) {
+                fclose(fp);
+                fp = NULL;
+                res = CacheContainer_read_head_internal(target_url, stat_out,
+                                                        depth + 1);
                 FREE(target_url);
             }
         } else if (hdr.flags
