@@ -122,7 +122,7 @@ repos:
         files: \.(c|h|py|sh)$
         stages: [manual]
   - repo: https://github.com/pocc/pre-commit-hooks
-    rev: v1.3.5
+    rev: v1.5.0
     hooks:
       - id: clang-tidy
         args: ["-p=build", "--warnings-as-errors=*"]
