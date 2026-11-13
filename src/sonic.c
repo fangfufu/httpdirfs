@@ -413,8 +413,14 @@ static LinkTable *sonic_url_to_LinkTable(const char *url,
     }
 
     if (XML_Parse(parser, xml.data, xml.curr_size, 1) == XML_STATUS_ERROR) {
-        lprintf(error, "Parse error at line %lu: %s\n",
-                XML_GetCurrentLineNumber(parser),
+#if XML_MAJOR_VERSION > 2 || (XML_MAJOR_VERSION == 2 && XML_MINOR_VERSION >= 8)
+        unsigned long line_num
+            = (unsigned long)XML_GetCurrentLineNumber64(parser);
+#else
+        unsigned long line_num
+            = (unsigned long)XML_GetCurrentLineNumber(parser);
+#endif
+        lprintf(error, "Parse error at line %lu: %s\n", line_num,
                 XML_ErrorString(XML_GetErrorCode(parser)));
     }
 
