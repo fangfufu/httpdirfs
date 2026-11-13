@@ -46,6 +46,12 @@ void add_arg(char ***fuse_argv_ptr, int *fuse_argc, char *opt_string);
 static void print_long_help(void);
 static int parse_arg_list(int argc, char **argv, char ***fuse_argv,
                           int *fuse_argc);
+static inline int is_ascii_space(unsigned char c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v'
+           || c == '\f';
+}
+
 void parse_config_file(char ***argv, int *argc);
 
 static char *config_path = NULL;
@@ -281,12 +287,12 @@ void parse_config_file(char ***argv, int *argc)
         while (getline(&buf, &buf_len, config) != -1) {
             // Remove trailing whitespace
             size_t len = strlen(buf);
-            while (len > 0 && isspace((unsigned char)buf[len - 1])) {
+            while (len > 0 && is_ascii_space((unsigned char)buf[len - 1])) {
                 buf[--len] = '\0';
             }
 
             char *line = buf;
-            while (*line && isspace((unsigned char)*line)) {
+            while (*line && is_ascii_space((unsigned char)*line)) {
                 line++;
             }
 
@@ -302,7 +308,7 @@ void parse_config_file(char ***argv, int *argc)
                      * whitespace
                      */
                     char *value = space + 1;
-                    while (*value && isspace((unsigned char)*value)) {
+                    while (*value && is_ascii_space((unsigned char)*value)) {
                         value++;
                     }
                     if (*value != '\0') {

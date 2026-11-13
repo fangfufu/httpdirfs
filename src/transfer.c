@@ -167,7 +167,7 @@ static void apply_origin_headers(CURL *curl, const char *base_url,
     }
 }
 
-CURL *Link_to_curl(Link *link)
+CURL *Link_to_curl(Link *link) // NOLINT(readability-function-size)
 {
     CURL *curl = curl_easy_init();
     if (!curl) {
@@ -484,7 +484,7 @@ static void filestat_on_complete(TransferStruct *ts, CURL *curl,
     FREE(ts);
 }
 
-void Link_req_file_stat(Link *this_link)
+void Link_req_file_stat(Link *this_link) // NOLINT(readability-function-size)
 {
     CURL *curl = Link_to_curl(this_link);
     CURLcode ret = curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);

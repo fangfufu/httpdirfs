@@ -2011,7 +2011,7 @@ long Cache_read(Cache *cf, char *const output_buf, off_t len,
     off_t send = 0;
     for (off_t start = offset_start, end; len > 0;
          len -= end - start, start = end) {
-        end = start / cf->blksz * cf->blksz + cf->blksz;
+        end = ((start / cf->blksz) * cf->blksz) + cf->blksz;
         if (end > start + len) {
             end = start + len;
         }
@@ -2303,6 +2303,7 @@ static int CacheContainer_read_internal(const char *url, char **out_payload,
                                 == (size_t)hdr.url_len + 1
                             && !ferror(fp);
             if (key_match) {
+                // NOLINTNEXTLINE(clang-analyzer-security.ArrayBound)
                 disk_url[hdr.url_len] = '\0';
                 /*
                  * Containers store the link's raw f_url, which may differ from

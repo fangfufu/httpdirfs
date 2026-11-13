@@ -140,7 +140,7 @@ static int parse_origin(const char *url, size_t origin_len, char *scheme,
         int p_val = 0;
         for (const char *p = port_colon + 1; p < origin_end; p++) {
             if (*p >= '0' && *p <= '9') {
-                p_val = p_val * 10 + (*p - '0');
+                p_val = (p_val * 10) + (*p - '0');
             } else {
                 return -1; // invalid character in port
             }
@@ -271,7 +271,7 @@ static void normalize_url_path(char *url)
     if (!url) {
         return;
     }
-    const char *scheme_sep = strstr(url, "://");
+    char *scheme_sep = strstr(url, "://");
     if (!scheme_sep) {
         return;
     }
